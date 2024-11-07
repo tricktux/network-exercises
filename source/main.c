@@ -62,7 +62,7 @@ int main(int argc, char const* argv[])
   }
 
   struct epoll_event ev, events[MAX_EVENTS];
-  int listen_sock, conn_sock, nfds, epollfd;
+  int conn_sock, nfds, epollfd;
 
   epollfd = epoll_create1(0);
   if (epollfd == -1) {
@@ -73,10 +73,9 @@ int main(int argc, char const* argv[])
   ev.events = EPOLLIN;
   ev.data.fd = listen_fd;
   if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) {
-    fprintf(stderr, "epoll_ctl: listen_sock\n");
+    fprintf(stderr, "epoll_ctl: listen_fd\n");
     exit(EXIT_FAILURE);
   }
-
 
   int n;
   socklen_t addrlen;
@@ -90,9 +89,8 @@ int main(int argc, char const* argv[])
     }
 
     for (n = 0; n < nfds; ++n) {
-      if (events[n].data.fd == listen_sock) {
-        conn_sock = accept(listen_sock,
-                           (struct sockaddr *) &addr, &addrlen);
+      if (events[n].data.fd == listen_fd) {
+        conn_sock = accept(listen_fd, (struct sockaddr*)&addr, &addrlen);
         if (conn_sock == -1) {
           fprintf(stderr, "accept\n");
           exit(EXIT_FAILURE);
