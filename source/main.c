@@ -6,9 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/epoll.h>
 #include <unistd.h>
 
 #define MAX_NUM_CON 10
@@ -98,11 +98,9 @@ int main(int argc, char const* argv[])
           exit(EXIT_FAILURE);
         }
         fcntl(conn_sock, F_SETFL, O_NONBLOCK);
-        /*setnonblocking(conn_sock);*/
         ev.events = EPOLLIN;
         ev.data.fd = conn_sock;
-        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock,
-                      &ev) == -1) {
+        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {
           perror("epoll_ctl: conn_sock");
           exit(EXIT_FAILURE);
         }
