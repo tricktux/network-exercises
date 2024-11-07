@@ -14,7 +14,7 @@ include(Catch)
 add_executable(network-exercises_test source/network-exercises_test.cpp)
 target_link_libraries(
     network-exercises_test PRIVATE
-    network-exercises_lib
+    # network-exercises_lib
     Catch2::Catch2WithMain
 )
 target_compile_features(network-exercises_test PRIVATE cxx_std_11)
