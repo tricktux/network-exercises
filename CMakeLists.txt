@@ -5,8 +5,8 @@ include(cmake/prelude.cmake)
 project(
     network-exercises
     VERSION 0.1.0
-    DESCRIPTION "Solve projects network-programming-exercises"
-    HOMEPAGE_URL "https://example.com/"
+    DESCRIPTION "Solution for protohackers server programming exercises"
+    HOMEPAGE_URL "https://github.com/tricktux/network-exercises"
     LANGUAGES C
 )
 
