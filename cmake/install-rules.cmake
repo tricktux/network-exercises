@@ -1,5 +1,5 @@
 install(
-    TARGETS network-exercises-exe
+    TARGETS smoke-test
     RUNTIME COMPONENT network-exercises_Runtime
 )
 

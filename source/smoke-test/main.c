@@ -8,21 +8,51 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include "log.h"
+
+#define LOG_FILE "/tmp/network-exercises-smoke-test.log"
+#define LOG_FILE_MODE "w"
+#define LOG_LEVEL 0  // TRACE
 
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define BUF_SIZE 1024
 #define PORT "7"
 
+int init_logs(FILE* fd)
+{
+  if ((fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
+    printf("Cannot open log file\n");
+    exit(EXIT_FAILURE);
+  }
+
+  if (log_add_fp(fd, LOG_LEVEL) == -1) {
+    printf("Failed to initalize log file\n");
+    return -2;
+  }
+
+  log_set_level(LOG_LEVEL);
+
+  return 0;
+}
+
+// Create accept function
+// Create read and send back function
+// How do I know the client finished sending back the data
+
 int main(int argc, char const* argv[])
 {
+  FILE* log_fd;
   int listen_fd, s;
   struct addrinfo hints;
   struct addrinfo *result, *rp;
+
+  if (init_logs(log_fd) != 0)
+    exit(EXIT_FAILURE);
 
   // getaddrinfo
   memset(&hints, 0, sizeof(hints));
@@ -104,9 +134,12 @@ int main(int argc, char const* argv[])
           perror("epoll_ctl: conn_sock");
           exit(EXIT_FAILURE);
         }
-      } else {
-        /*do_use_fd(events[n].data.fd);*/
+        continue;
       }
+
+      // There's data to read
+      // Read and send back
+      /*do_use_fd(events[n].data.fd);*/
     }
   }
   printf("Hello world\n");
