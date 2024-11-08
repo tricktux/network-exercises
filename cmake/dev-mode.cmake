@@ -7,10 +7,10 @@ endif()
 
 add_custom_target(
     run-exe
-    COMMAND network-exercises_exe
+    COMMAND network-exercises-exe
     VERBATIM
 )
-add_dependencies(run-exe network-exercises_exe)
+add_dependencies(run-exe network-exercises-exe)
 
 option(BUILD_MCSS_DOCS "Build documentation using Doxygen and m.css" OFF)
 if(BUILD_MCSS_DOCS)

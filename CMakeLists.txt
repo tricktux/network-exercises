@@ -14,12 +14,19 @@ include(cmake/variables.cmake)
 
 # ---- Declare executable ----
 
-add_executable(network-exercises_exe source/main.c)
-add_executable(network-exercises::exe ALIAS network-exercises_exe)
+add_executable(network-exercises-exe 
+    source/main.c
+    source/log/log.c
+)
+add_executable(network-exercises::exe ALIAS network-exercises-exe)
 
-set_property(TARGET network-exercises_exe PROPERTY OUTPUT_NAME network-exercises)
+set_property(TARGET network-exercises-exe PROPERTY OUTPUT_NAME network-exercises)
 
-target_compile_features(network-exercises_exe PRIVATE c_std_23)
+target_compile_features(network-exercises-exe PRIVATE c_std_23)
+
+target_include_directories(network-exercises-exe PRIVATE 
+    "${PROJECT_SOURCE_DIR}/source/log"
+)
 
 # ---- Install rules ----
 

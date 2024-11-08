@@ -1,5 +1,5 @@
 install(
-    TARGETS network-exercises_exe
+    TARGETS network-exercises-exe
     RUNTIME COMPONENT network-exercises_Runtime
 )
 
