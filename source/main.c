@@ -11,6 +11,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "log.h"
+
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define BUF_SIZE 1024
