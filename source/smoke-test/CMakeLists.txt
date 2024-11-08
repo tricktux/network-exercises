@@ -8,6 +8,8 @@ add_executable(network-exercises::smoke-test ALIAS smoke-test)
 
 set_property(TARGET smoke-test PROPERTY OUTPUT_NAME smoke-test)
 
+target_compile_definitions(smoke-test PUBLIC LOG_USE_COLOR=1)
+
 target_compile_features(smoke-test PRIVATE c_std_23)
 
 target_include_directories(smoke-test PRIVATE 

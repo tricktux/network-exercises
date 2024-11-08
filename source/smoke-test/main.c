@@ -70,18 +70,25 @@ int main(int argc, char const* argv[])
     exit(EXIT_FAILURE);
   }
 
+  log_trace("main (%d): passed getaddrinfo", __LINE__);
   for (rp = result; rp != NULL; rp = rp->ai_next) {
+
+    log_trace("main results loop(%d): trying with addrinfo '%d'", __LINE__, rp - result);
+
     listen_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
     if (listen_fd == -1)
       continue;
 
-    if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0)
+    if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+      log_trace("main results loop(%d): we binded baby!!!", __LINE__);
       break; /* Success */
+    }
 
     close(listen_fd);
   }
 
   freeaddrinfo(result); /* No longer needed */
+  log_trace("main (%d): freeaddrinfo", __LINE__);
 
   if (rp == NULL) { /* No address succeeded */
     fprintf(stderr, "Could not bind\n");
@@ -92,6 +99,7 @@ int main(int argc, char const* argv[])
     fprintf(stderr, "listen failed\n");
     exit(EXIT_FAILURE);
   }
+  log_trace("main (%d): listening...", __LINE__);
 
   struct epoll_event ev, events[MAX_EVENTS];
   int conn_sock, nfds, epollfd;
@@ -101,6 +109,7 @@ int main(int argc, char const* argv[])
     fprintf(stderr, "epoll_create1 failed\n");
     exit(EXIT_FAILURE);
   }
+  log_trace("main (%d): epoll created...", __LINE__);
 
   ev.events = EPOLLIN;
   ev.data.fd = listen_fd;
@@ -108,12 +117,14 @@ int main(int argc, char const* argv[])
     fprintf(stderr, "epoll_ctl: listen_fd\n");
     exit(EXIT_FAILURE);
   }
+  log_trace("main (%d): epoll listening...", __LINE__);
 
   int n;
   socklen_t addrlen;
   struct sockaddr_storage addr;
 
   for (;;) {
+    log_trace("main (%d): epoll listening...", __LINE__);
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
     if (nfds == -1) {
       fprintf(stderr, "epoll_wait\n");
