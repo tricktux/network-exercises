@@ -112,7 +112,7 @@ int main()
   }
   log_trace("main: epoll created...");
 
-  ev.events = EPOLLIN;
+  ev.events = EPOLLIN | EPOLLRDHUP;
   ev.data.fd = listen_fd;
   if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) {
     fprintf(stderr, "epoll_ctl: listen_fd\n");
@@ -124,6 +124,7 @@ int main()
   socklen_t addrlen;
   struct sockaddr_storage addr;
 
+  char buf[4096];
   for (;;) {
     log_trace("main: epoll listening...");
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -132,7 +133,7 @@ int main()
       exit(EXIT_FAILURE);
     }
 
-    log_trace("main: epoll got '%d' POLLIN events", nfds);
+    log_trace("main: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
       if (events[n].data.fd == listen_fd) {
         log_trace("main: epoll got a 'listen' event");
@@ -151,10 +152,52 @@ int main()
         continue;
       }
 
-      log_trace("main: handling listen event on fd '%d'", events[n].data.fd);
-      // There's data to read
-      // Read and send back
-      /*do_use_fd(events[n].data.fd);*/
+      int fd = events[n].data.fd;
+      if ((events[n].events & EPOLLIN) == 0) {
+        log_trace("main: handling close event on fd '%d'", fd);
+        close(fd);
+        if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+          perror("epoll_ctl: fd");
+          exit(EXIT_FAILURE);
+        }
+        continue;
+      }
+      log_trace("main: handling POLLIN event on fd '%d'", fd);
+      // read while there's data here
+      // maybe not, we'll get notified again
+      int nbytes;
+      for (;;) {
+        nbytes = recv(fd, buf, sizeof buf, 0);
+        if (nbytes == 0) {
+          log_trace("main: handling close while reading on fd '%d'", fd);
+          close(fd);
+          if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+            perror("epoll_ctl: read(fd)");
+            exit(EXIT_FAILURE);
+          }
+          continue;
+        }
+
+        if (nbytes == -1) {
+          if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+            break; // We are done reading from this socket
+          }
+
+          log_trace("main: handling error while recv on fd '%d'", fd);
+          close(fd);
+          if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+            perror("epoll_ctl: read(fd)");
+            exit(EXIT_FAILURE);
+          }
+          break;
+        }
+
+        // Check for EOF?
+        // Code a sendall function
+        // There's data to read
+        // Read and send back
+        /*do_use_fd(events[n].data.fd);*/
+      }
     }
   }
   printf("Hello world\n");
