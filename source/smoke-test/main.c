@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 
 #include <fcntl.h>
+#include <stdarg.h>
 #include <netdb.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -131,8 +132,10 @@ int main(int argc, char const* argv[])
       exit(EXIT_FAILURE);
     }
 
+    log_trace("main (%d): epoll got '%d' POLLIN events", __LINE__, nfds);
     for (n = 0; n < nfds; ++n) {
       if (events[n].data.fd == listen_fd) {
+        log_trace("main (%d): epoll got a 'listen' event", __LINE__);
         conn_sock = accept(listen_fd, (struct sockaddr*)&addr, &addrlen);
         if (conn_sock == -1) {
           fprintf(stderr, "accept\n");
@@ -148,6 +151,7 @@ int main(int argc, char const* argv[])
         continue;
       }
 
+      log_trace("main (%d): handling listen event on fd '%d'", __LINE__, events[n].data.fd);
       // There's data to read
       // Read and send back
       /*do_use_fd(events[n].data.fd);*/
