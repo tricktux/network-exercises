@@ -45,9 +45,9 @@ int init_logs(FILE* fd)
 // Create read and send back function
 // How do I know the client finished sending back the data
 
-int main(int argc, char const* argv[])
+int main()
 {
-  FILE* log_fd;
+  FILE* log_fd = NULL;
   int listen_fd, s;
   struct addrinfo hints;
   struct addrinfo *result, *rp;
