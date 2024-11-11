@@ -20,6 +20,13 @@
  * IN THE SOFTWARE.
  */
 
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <time.h>
+#include <sys/time.h>
+#include <string.h>
+
 #include "log.h"
 
 #define MAX_CALLBACKS 32
@@ -49,32 +56,62 @@ static const char *level_colors[] = {
 };
 #endif
 
+static void format_timestamp(char *buf, size_t buf_size) {
+  struct timeval tv;
+  struct tm *tm_info;
+
+  gettimeofday(&tv, NULL);
+  tm_info = localtime(&tv.tv_sec);
+
+  strftime(buf, buf_size, "%Y-%m-%d %H:%M:%S", tm_info);
+
+  char microsec[8];
+  snprintf(microsec, sizeof(microsec), ".%06ld", tv.tv_usec);
+  strncat(buf, microsec, buf_size - strlen(buf) - 1);
+}
+
 
 static void stdout_callback(log_Event *ev) {
-  char buf[16];
-  buf[strftime(buf, sizeof(buf), "%H:%M:%S", ev->time)] = '\0';
+  char buf[32]; // Increased buffer size for higher resolution timestamp
+  format_timestamp(buf, sizeof(buf));
+
+  char *filename = strrchr(ev->file, '/');
+  filename = filename ? filename + 1 : ev->file;
+
 #ifdef LOG_USE_COLOR
-  fprintf(
-    ev->udata, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
-    buf, level_colors[ev->level], level_strings[ev->level],
-    ev->file, ev->line);
+  fprintf(ev->udata,
+          "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
+          buf,
+          level_colors[ev->level],
+          level_strings[ev->level],
+          filename,
+          ev->line);
 #else
-  fprintf(
-    ev->udata, "%s %-5s %s:%d: ",
-    buf, level_strings[ev->level], ev->file, ev->line);
+  fprintf(ev->udata,
+          "%s %-5s %s:%d: ",
+          buf,
+          level_strings[ev->level],
+          filename,
+          ev->line);
 #endif
   vfprintf(ev->udata, ev->fmt, ev->ap);
   fprintf(ev->udata, "\n");
   fflush(ev->udata);
 }
 
-
 static void file_callback(log_Event *ev) {
-  char buf[64];
-  buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
-  fprintf(
-    ev->udata, "%s %-5s %s:%d: ",
-    buf, level_strings[ev->level], ev->file, ev->line);
+  char buf[64]; // Increased buffer size for higher resolution timestamp
+  format_timestamp(buf, sizeof(buf));
+
+  char *filename = strrchr(ev->file, '/');
+  filename = filename ? filename + 1 : ev->file;
+
+  fprintf(ev->udata,
+          "%s %-5s %s:%d: ",
+          buf,
+          level_strings[ev->level],
+          filename,
+          ev->line);
   vfprintf(ev->udata, ev->fmt, ev->ap);
   fprintf(ev->udata, "\n");
   fflush(ev->udata);
