@@ -56,18 +56,22 @@ static const char *level_colors[] = {
 };
 #endif
 
-static void format_timestamp(char *buf, size_t buf_size) {
+inline static void format_timestamp(char *buf, size_t buf_size) {
   struct timeval tv;
-  struct tm *tm_info;
+  struct tm tm_info;  // Avoid the indirection cost of using a pointer
 
   gettimeofday(&tv, NULL);
-  tm_info = localtime(&tv.tv_sec);
+  localtime_r(&tv.tv_sec, &tm_info);  // Use `localtime_r` for reentrant and
+                                      // potentially faster behavior
 
-  strftime(buf, buf_size, "%Y-%m-%d %H:%M:%S", tm_info);
+  size_t date_len = strftime(buf, buf_size, "%Y-%m-%d %H:%M:%S", &tm_info);
+  // If strftime failed to format string, return early.
+  if (date_len == 0) return;
 
-  char microsec[8];
-  snprintf(microsec, sizeof(microsec), ".%06ld", tv.tv_usec);
-  strncat(buf, microsec, buf_size - strlen(buf) - 1);
+  // snprintf is likely fine in one go if checked correctly
+  if (date_len < buf_size) {
+    snprintf(buf + date_len, buf_size - date_len, ".%06ld", tv.tv_usec);
+  }
 }
 
 
