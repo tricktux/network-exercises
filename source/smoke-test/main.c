@@ -71,17 +71,17 @@ int main(int argc, char const* argv[])
     exit(EXIT_FAILURE);
   }
 
-  log_trace("main (%d): passed getaddrinfo", __LINE__);
+  log_trace("main: passed getaddrinfo");
   for (rp = result; rp != NULL; rp = rp->ai_next) {
 
-    log_trace("main results loop(%d): trying with addrinfo '%d'", __LINE__, rp - result);
+    log_trace("main results loop: trying with addrinfo '%d'", rp - result);
 
     listen_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
     if (listen_fd == -1)
       continue;
 
     if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      log_trace("main results loop(%d): we binded baby!!!", __LINE__);
+      log_trace("main results loop: we binded baby!!!");
       break; /* Success */
     }
 
@@ -89,7 +89,7 @@ int main(int argc, char const* argv[])
   }
 
   freeaddrinfo(result); /* No longer needed */
-  log_trace("main (%d): freeaddrinfo", __LINE__);
+  log_trace("main: freeaddrinfo");
 
   if (rp == NULL) { /* No address succeeded */
     fprintf(stderr, "Could not bind\n");
@@ -100,7 +100,7 @@ int main(int argc, char const* argv[])
     fprintf(stderr, "listen failed\n");
     exit(EXIT_FAILURE);
   }
-  log_trace("main (%d): listening...", __LINE__);
+  log_trace("main: listening...");
 
   struct epoll_event ev, events[MAX_EVENTS];
   int conn_sock, nfds, epollfd;
@@ -110,7 +110,7 @@ int main(int argc, char const* argv[])
     fprintf(stderr, "epoll_create1 failed\n");
     exit(EXIT_FAILURE);
   }
-  log_trace("main (%d): epoll created...", __LINE__);
+  log_trace("main: epoll created...");
 
   ev.events = EPOLLIN;
   ev.data.fd = listen_fd;
@@ -118,24 +118,24 @@ int main(int argc, char const* argv[])
     fprintf(stderr, "epoll_ctl: listen_fd\n");
     exit(EXIT_FAILURE);
   }
-  log_trace("main (%d): epoll listening...", __LINE__);
+  log_trace("main: epoll listening...");
 
   int n;
   socklen_t addrlen;
   struct sockaddr_storage addr;
 
   for (;;) {
-    log_trace("main (%d): epoll listening...", __LINE__);
+    log_trace("main: epoll listening...");
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
     if (nfds == -1) {
       fprintf(stderr, "epoll_wait\n");
       exit(EXIT_FAILURE);
     }
 
-    log_trace("main (%d): epoll got '%d' POLLIN events", __LINE__, nfds);
+    log_trace("main: epoll got '%d' POLLIN events", nfds);
     for (n = 0; n < nfds; ++n) {
       if (events[n].data.fd == listen_fd) {
-        log_trace("main (%d): epoll got a 'listen' event", __LINE__);
+        log_trace("main: epoll got a 'listen' event");
         conn_sock = accept(listen_fd, (struct sockaddr*)&addr, &addrlen);
         if (conn_sock == -1) {
           fprintf(stderr, "accept\n");
@@ -151,7 +151,7 @@ int main(int argc, char const* argv[])
         continue;
       }
 
-      log_trace("main (%d): handling listen event on fd '%d'", __LINE__, events[n].data.fd);
+      log_trace("main: handling listen event on fd '%d'", events[n].data.fd);
       // There's data to read
       // Read and send back
       /*do_use_fd(events[n].data.fd);*/
