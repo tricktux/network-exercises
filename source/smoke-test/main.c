@@ -24,7 +24,7 @@
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define BUF_SIZE 1024
-#define PORT "8888"
+#define PORT "18888"
 
 int init_logs(FILE* fd)
 {
@@ -132,7 +132,7 @@ int main()
   }
 
   if (listen(listen_fd, MAX_NUM_CON) == -1) {
-    fprintf(stderr, "listen failed\n");
+    perror("listen failed\n");
     exit(EXIT_FAILURE);
   }
   log_trace("main: listening...");
@@ -142,7 +142,7 @@ int main()
 
   epollfd = epoll_create1(0);
   if (epollfd == -1) {
-    fprintf(stderr, "epoll_create1 failed\n");
+    perror("epoll_create1 failed\n");
     exit(EXIT_FAILURE);
   }
   log_trace("main: epoll created...");
@@ -150,10 +150,9 @@ int main()
   ev.events = EPOLLIN | EPOLLRDHUP;
   ev.data.fd = listen_fd;
   if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) {
-    fprintf(stderr, "epoll_ctl: listen_fd\n");
+    perror("epoll_ctl: listen_fd\n");
     exit(EXIT_FAILURE);
   }
-  log_trace("main: epoll listening...");
 
   int n;
   socklen_t addrlen;
@@ -161,20 +160,20 @@ int main()
 
   char buf[4096];
   for (;;) {
-    log_trace("main: epoll listening...");
+    log_trace("main epoll loop: epoll listening...");
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
     if (nfds == -1) {
-      fprintf(stderr, "epoll_wait\n");
+      perror("epoll_wait\n");
       exit(EXIT_FAILURE);
     }
 
-    log_trace("main: epoll got '%d' events", nfds);
+    log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
       if (events[n].data.fd == listen_fd) {
-        log_info("main: epoll got a 'listen' event");
+        log_info("main epoll loop: got a 'listen' event");
         conn_sock = accept(listen_fd, (struct sockaddr*)&addr, &addrlen);
         if (conn_sock == -1) {
-          fprintf(stderr, "accept\n");
+          perror("accept\n");
           exit(EXIT_FAILURE);
         }
         fcntl(conn_sock, F_SETFL, O_NONBLOCK);
@@ -199,7 +198,7 @@ int main()
         }
         continue;
       }
-      log_trace("main: handling POLLIN event on fd '%d'", fd);
+      log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
       // read while there's data here
       // maybe not, we'll get notified again
       ssize_t nbytes;
@@ -228,6 +227,7 @@ int main()
           }
           break;
         }
+        log_trace("main epoll loop: read '%d' bytes from fd '%d'", nbytes, fd);
 
         if (sendall(fd, buf, &nbytes) != 0) {
           log_error("main: failed to sendall on fd '%d'", fd);
