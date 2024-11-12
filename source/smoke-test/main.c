@@ -3,8 +3,8 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdarg.h>
 #include <netdb.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,7 +47,8 @@ int init_logs(FILE* fd)
 // Create read and send back function
 // How do I know the client finished sending back the data
 
-int sendall(int sfd, char *buf, ssize_t *len) {
+int sendall(int sfd, char* buf, ssize_t* len)
+{
   assert(sfd != 0);
   assert(buf != NULL);
   assert(*len > 0);
@@ -55,8 +56,8 @@ int sendall(int sfd, char *buf, ssize_t *len) {
   ssize_t nbytes_sent = 0;
   ssize_t total_to_send = *len, total_sent = 0;
 
-  for (; nbytes_sent < total_to_send; ) {
-    nbytes_sent = send(sfd, buf, (size_t) total_to_send, 0);
+  for (; nbytes_sent < total_to_send;) {
+    nbytes_sent = send(sfd, buf, (size_t)total_to_send, 0);
     if (nbytes_sent == -1) {
       int err = errno;
       *len = total_sent;
@@ -68,15 +69,15 @@ int sendall(int sfd, char *buf, ssize_t *len) {
     buf += nbytes_sent;
     total_sent += nbytes_sent;
     log_trace(
-        "sendall: in the loop nbytes_sent: '%d', total_to_send: '%u', total_sent: '%u'",
+        "sendall: in the loop nbytes_sent: '%d', total_to_send: '%u', "
+        "total_sent: '%u'",
         nbytes_sent,
         total_to_send,
         total_sent);
   }
 
   *len = total_sent;
-  log_trace(
-    "sendall: done: len = '%u'", *len);
+  log_trace("sendall: done: len = '%u'", *len);
   return 0;
 }
 
@@ -108,7 +109,6 @@ int main()
 
   log_trace("main: passed getaddrinfo");
   for (rp = result; rp != NULL; rp = rp->ai_next) {
-
     log_trace("main results loop: trying with addrinfo '%d'", rp - result);
 
     listen_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
@@ -217,7 +217,7 @@ int main()
 
         if (nbytes == -1) {
           if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-            break; // We are done reading from this socket
+            break;  // We are done reading from this socket
           }
 
           log_trace("main: handling error while recv on fd '%d'", fd);
