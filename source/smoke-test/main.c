@@ -1,5 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 
+#include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <netdb.h>
@@ -22,7 +24,7 @@
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define BUF_SIZE 1024
-#define PORT "7"
+#define PORT "8888"
 
 int init_logs(FILE* fd)
 {
@@ -44,6 +46,39 @@ int init_logs(FILE* fd)
 // Create accept function
 // Create read and send back function
 // How do I know the client finished sending back the data
+
+int sendall(int sfd, char *buf, ssize_t *len) {
+  assert(sfd != 0);
+  assert(buf != NULL);
+  assert(*len > 0);
+
+  ssize_t nbytes_sent = 0;
+  ssize_t total_to_send = *len, total_sent = 0;
+
+  for (; nbytes_sent < total_to_send; ) {
+    nbytes_sent = send(sfd, buf, (size_t) total_to_send, 0);
+    if (nbytes_sent == -1) {
+      int err = errno;
+      *len = total_sent;
+      log_error("sendall: send failed, '%d'", err);
+      return err;
+    }
+
+    total_to_send -= nbytes_sent;
+    buf += nbytes_sent;
+    total_sent += nbytes_sent;
+    log_trace(
+        "sendall: in the loop nbytes_sent: '%d', total_to_send: '%u', total_sent: '%u'",
+        nbytes_sent,
+        total_to_send,
+        total_sent);
+  }
+
+  *len = total_sent;
+  log_trace(
+    "sendall: done: len = '%u'", *len);
+  return 0;
+}
 
 int main()
 {
@@ -81,7 +116,7 @@ int main()
       continue;
 
     if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      log_trace("main results loop: we binded baby!!!");
+      log_info("main results loop: we binded baby!!!");
       break; /* Success */
     }
 
@@ -136,14 +171,16 @@ int main()
     log_trace("main: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
       if (events[n].data.fd == listen_fd) {
-        log_trace("main: epoll got a 'listen' event");
+        log_info("main: epoll got a 'listen' event");
         conn_sock = accept(listen_fd, (struct sockaddr*)&addr, &addrlen);
         if (conn_sock == -1) {
           fprintf(stderr, "accept\n");
           exit(EXIT_FAILURE);
         }
         fcntl(conn_sock, F_SETFL, O_NONBLOCK);
-        ev.events = EPOLLIN;
+        // Doing edge-level trigger
+        // We take care of handling all reads and send below
+        ev.events = EPOLLIN | EPOLLET;
         ev.data.fd = conn_sock;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {
           perror("epoll_ctl: conn_sock");
@@ -154,7 +191,7 @@ int main()
 
       int fd = events[n].data.fd;
       if ((events[n].events & EPOLLIN) == 0) {
-        log_trace("main: handling close event on fd '%d'", fd);
+        log_warn("main: handling close event on fd '%d'", fd);
         close(fd);
         if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
           perror("epoll_ctl: fd");
@@ -165,17 +202,17 @@ int main()
       log_trace("main: handling POLLIN event on fd '%d'", fd);
       // read while there's data here
       // maybe not, we'll get notified again
-      int nbytes;
+      ssize_t nbytes;
       for (;;) {
         nbytes = recv(fd, buf, sizeof buf, 0);
         if (nbytes == 0) {
-          log_trace("main: handling close while reading on fd '%d'", fd);
+          log_warn("main: handling close while reading on fd '%d'", fd);
           close(fd);
           if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
             perror("epoll_ctl: read(fd)");
             exit(EXIT_FAILURE);
           }
-          continue;
+          break;
         }
 
         if (nbytes == -1) {
@@ -192,11 +229,15 @@ int main()
           break;
         }
 
-        // Check for EOF?
-        // Code a sendall function
-        // There's data to read
-        // Read and send back
-        /*do_use_fd(events[n].data.fd);*/
+        if (sendall(fd, buf, &nbytes) != 0) {
+          log_error("main: failed to sendall on fd '%d'", fd);
+          close(fd);
+          if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+            perror("epoll_ctl: sendall(fd)");
+            exit(EXIT_FAILURE);
+          }
+        }
+        break;
       }
     }
   }
