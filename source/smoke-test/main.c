@@ -191,11 +191,11 @@ int main()
       int fd = events[n].data.fd;
       if ((events[n].events & EPOLLIN) == 0) {
         log_warn("main: handling close event on fd '%d'", fd);
-        close(fd);
         if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
           perror("epoll_ctl: fd");
           exit(EXIT_FAILURE);
         }
+        close(fd);
         continue;
       }
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
@@ -206,11 +206,11 @@ int main()
         nbytes = recv(fd, buf, sizeof buf, 0);
         if (nbytes == 0) {
           log_warn("main: handling close while reading on fd '%d'", fd);
-          close(fd);
           if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
             perror("epoll_ctl: read(fd)");
             exit(EXIT_FAILURE);
           }
+          close(fd);
           break;
         }
 
@@ -220,22 +220,22 @@ int main()
           }
 
           log_trace("main: handling error while recv on fd '%d'", fd);
-          close(fd);
           if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
             perror("epoll_ctl: read(fd)");
             exit(EXIT_FAILURE);
           }
+          close(fd);
           break;
         }
         log_trace("main epoll loop: read '%d' bytes from fd '%d'", nbytes, fd);
 
         if (sendall(fd, buf, &nbytes) != 0) {
           log_error("main: failed to sendall on fd '%d'", fd);
-          close(fd);
           if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
             perror("epoll_ctl: sendall(fd)");
             exit(EXIT_FAILURE);
           }
+          close(fd);
         }
         break;
       }
