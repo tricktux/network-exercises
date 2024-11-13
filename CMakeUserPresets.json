@@ -28,6 +28,13 @@
       "inherits": ["ci-sanitize"],
       "cacheVariables": {
       }
+    },
+    {
+      "name": "ci-linux-local",
+      "binaryDir": "${sourceDir}/build/ci-linux-local",
+      "inherits": ["ci-ubuntu"],
+      "cacheVariables": {
+      }
     }
   ],
   "buildPresets": [
@@ -44,6 +51,11 @@
     {
       "name": "sanitize",
       "configurePreset": "sanitize",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ci-linux-local",
+      "configurePreset": "ci-linux-local",
       "configuration": "Debug"
     }
   ],
