@@ -21,6 +21,13 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "sanitize",
+      "binaryDir": "${sourceDir}/build/sanitize",
+      "inherits": ["ci-sanitize"],
+      "cacheVariables": {
+      }
     }
   ],
   "buildPresets": [
@@ -33,6 +40,11 @@
       "name": "release",
       "configurePreset": "release",
       "configuration": "Release"
+    },
+    {
+      "name": "sanitize",
+      "configurePreset": "sanitize",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [

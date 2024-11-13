@@ -20,6 +20,6 @@ debug:
 	ln -sf build/dev/compile_commands.json .
 
 sanitize:
-	cmake --preset=release
-	cmake --build --preset=release
+	cmake --preset=sanitize
+	cmake --build --preset=sanitize
 	ln -sf build/dev/compile_commands.json .
