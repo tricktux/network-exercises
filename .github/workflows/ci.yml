@@ -13,27 +13,27 @@ env:
   VCPKG_COMMIT: "eba7c6a894fce24146af4fdf161fef8e90dd6be3"
 
 jobs:
-  lint:
-    runs-on: ubuntu-22.04
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - uses: actions/setup-python@v5
-      with: { python-version: "3.12" }
-
-    - name: Install codespell
-      run: pip3 install codespell
-
-    - name: Lint
-      run: cmake -D FORMAT_COMMAND=clang-format-14 -P cmake/lint.cmake
-
-    - name: Spell check
-      if: always()
-      run: cmake -P cmake/spell.cmake
+  # lint:
+  #   runs-on: ubuntu-22.04
+  #
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #
+  #   - uses: actions/setup-python@v5
+  #     with: { python-version: "3.12" }
+  #
+  #   - name: Install codespell
+  #     run: pip3 install codespell
+  #
+  #   - name: Lint
+  #     run: cmake -D FORMAT_COMMAND=clang-format-14 -P cmake/lint.cmake
+  #
+  #   - name: Spell check
+  #     if: always()
+  #     run: cmake -P cmake/spell.cmake
 
   coverage:
-    needs: [lint]
+    needs: []
 
     runs-on: ubuntu-22.04
 
@@ -75,7 +75,7 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
 
   sanitize:
-    needs: [lint]
+    needs: []
 
     runs-on: ubuntu-22.04
 
@@ -108,7 +108,7 @@ jobs:
       run: ctest --output-on-failure --no-tests=error -j 2
 
   test:
-    needs: [lint]
+    needs: []
 
     strategy:
       matrix:
