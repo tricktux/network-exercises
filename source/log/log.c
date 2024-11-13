@@ -79,7 +79,7 @@ static void stdout_callback(log_Event *ev) {
   char buf[32]; // Increased buffer size for higher resolution timestamp
   format_timestamp(buf, sizeof(buf));
 
-  char *filename = strrchr(ev->file, '/');
+  const char *filename = strrchr(ev->file, '/');
   filename = filename ? filename + 1 : ev->file;
 
 #ifdef LOG_USE_COLOR
@@ -107,7 +107,7 @@ static void file_callback(log_Event *ev) {
   char buf[64]; // Increased buffer size for higher resolution timestamp
   format_timestamp(buf, sizeof(buf));
 
-  char *filename = strrchr(ev->file, '/');
+  const char *filename = strrchr(ev->file, '/');
   filename = filename ? filename + 1 : ev->file;
 
   fprintf(ev->udata,
