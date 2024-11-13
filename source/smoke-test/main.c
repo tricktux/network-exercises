@@ -34,7 +34,7 @@ int init_logs(FILE* fd)
   }
 
   if (log_add_fp(fd, LOG_LEVEL) == -1) {
-    printf("Failed to initalize log file\n");
+    printf("Failed to initialize log file\n");
     return -2;
   }
 
