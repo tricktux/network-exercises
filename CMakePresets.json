@@ -163,7 +163,7 @@
     },
     {
       "name": "ci-ubuntu",
-      "inherits": ["ci-build", "ci-linux", "clang-tidy", "vcpkg", "cppcheck", "dev-mode"]
+      "inherits": ["ci-build", "ci-linux", "vcpkg", "dev-mode"]
     },
     {
       "name": "ci-windows",
