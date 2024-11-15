@@ -87,6 +87,17 @@
       }
     },
     {
+      "name": "ci-linux-ninja-clang",
+      "inherits": ["flags-gcc-clang", "ci-std"],
+      "generator": "Ninja",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
       "name": "ci-linux",
       "inherits": ["flags-gcc-clang", "ci-std"],
       "generator": "Unix Makefiles",

@@ -9,7 +9,7 @@
     {
       "name": "dev",
       "binaryDir": "${sourceDir}/build/dev",
-      "inherits": ["dev-mode", "vcpkg", "ci-linux"],
+      "inherits": ["dev-mode", "vcpkg", "ci-linux-ninja-clang"],
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
@@ -17,7 +17,7 @@
     {
       "name": "release",
       "binaryDir": "${sourceDir}/build/release",
-      "inherits": ["vcpkg", "ci-linux"],
+      "inherits": ["vcpkg", "ci-linux-ninja-clang"],
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
