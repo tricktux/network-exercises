@@ -19,6 +19,11 @@ release:
 	cmake --build --preset=release
 	ln -sf build/dev/compile_commands.json .
 
+zig_release:
+	cmake --preset=zig-release
+	cmake --build --preset=zig-release
+	ln -sf build/dev/compile_commands.json .
+
 sanitize:
 	cmake --preset=sanitize
 	cmake --build --preset=sanitize

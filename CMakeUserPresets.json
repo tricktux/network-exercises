@@ -23,6 +23,14 @@
       }
     },
     {
+      "name": "zig-release",
+      "binaryDir": "${sourceDir}/build/zig-release",
+      "inherits": ["vcpkg", "ci-linux-ninja-zig"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "sanitize",
       "binaryDir": "${sourceDir}/build/sanitize",
       "inherits": ["ci-sanitize"],
@@ -46,6 +54,11 @@
     {
       "name": "release",
       "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "zig-release",
+      "configurePreset": "zig-release",
       "configuration": "Release"
     },
     {

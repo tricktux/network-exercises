@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.21)
 
 include(cmake/prelude.cmake)
 
+if (ZIG)
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/zig-toolchain.cmake")
+endif()
+
 project(
     network-exercises
     VERSION 0.1.0
