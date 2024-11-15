@@ -14,7 +14,7 @@ debug:
 	cmake --build --preset=dev
 	ln -sf build/dev/compile_commands.json .
 
-debug:
+release:
 	cmake --preset=release
 	cmake --build --preset=release
 	ln -sf build/dev/compile_commands.json .
