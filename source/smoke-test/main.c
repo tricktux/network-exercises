@@ -192,11 +192,10 @@ int main()
       int fd = events[n].data.fd;
       if ((events[n].events & EPOLLIN) == 0) {
         log_warn("main: handling close event on fd '%d'", fd);
-        if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+        if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
           perror("epoll_ctl: fd");
           exit(EXIT_FAILURE);
         }
-        close(fd);
         continue;
       }
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
