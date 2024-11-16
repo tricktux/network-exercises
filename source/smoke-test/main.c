@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "log.h"
+#include "epoll.h"
 
 #define LOG_FILE "/tmp/network-exercises-smoke-test.log"
 #define LOG_FILE_MODE "w"
@@ -24,7 +25,7 @@
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define BUF_SIZE 1024
-#define PORT "18888"
+#define PORT "7"
 
 int init_logs(FILE* fd)
 {
@@ -116,7 +117,7 @@ int main()
       continue;
 
     if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      log_info("main results loop: we binded baby!!!");
+      log_info("main results loop: we binded to port '%s' baby!!!", PORT);
       break; /* Success */
     }
 
@@ -206,11 +207,10 @@ int main()
         nbytes = recv(fd, buf, sizeof buf, 0);
         if (nbytes == 0) {
           log_warn("main: handling close while reading on fd '%d'", fd);
-          if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
-            perror("epoll_ctl: read(fd)");
+          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
+            perror("epoll_ctl: recv 0");
             exit(EXIT_FAILURE);
           }
-          close(fd);
           break;
         }
 
@@ -220,24 +220,39 @@ int main()
           }
 
           log_trace("main: handling error while recv on fd '%d'", fd);
-          if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
             perror("epoll_ctl: read(fd)");
             exit(EXIT_FAILURE);
           }
-          close(fd);
           break;
         }
         log_trace("main epoll loop: read '%d' bytes from fd '%d'", nbytes, fd);
 
+        // check for EOF
+        int eof = 0;
+        for (int k = 0; k < nbytes; k++) {
+          if (buf[k] == EOF) {
+            eof = 1;
+            break;
+          }
+        }
+
         if (sendall(fd, buf, &nbytes) != 0) {
           log_error("main: failed to sendall on fd '%d'", fd);
-          if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &events[n]) == -1) {
+          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
             perror("epoll_ctl: sendall(fd)");
             exit(EXIT_FAILURE);
           }
-          close(fd);
         }
-        break;
+
+        if (eof == 1) {
+          log_info("main epoll loop: detected EOF on fd '%d'....Closing fd", fd);
+          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
+            perror("epoll_ctl: sendall(fd)");
+            exit(EXIT_FAILURE);
+          }
+          break;
+        }
       }
     }
   }

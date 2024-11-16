@@ -1,6 +1,7 @@
 
 add_executable(smoke-test
     "${PROJECT_SOURCE_DIR}/source/smoke-test/main.c"
+    "${PROJECT_SOURCE_DIR}/source/smoke-test/epoll.c"
     "${PROJECT_SOURCE_DIR}/source/log/log.c"
 )
 
