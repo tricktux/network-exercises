@@ -228,30 +228,12 @@ int main()
         }
         log_trace("main epoll loop: read '%d' bytes from fd '%d'", nbytes, fd);
 
-        // check for EOF
-        int eof = 0;
-        for (int k = 0; k < nbytes; k++) {
-          if (buf[k] == EOF) {
-            eof = 1;
-            break;
-          }
-        }
-
         if (sendall(fd, buf, &nbytes) != 0) {
           log_error("main: failed to sendall on fd '%d'", fd);
           if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
             perror("epoll_ctl: sendall(fd)");
             exit(EXIT_FAILURE);
           }
-        }
-
-        if (eof == 1) {
-          log_info("main epoll loop: detected EOF on fd '%d'....Closing fd", fd);
-          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
-            perror("epoll_ctl: sendall(fd)");
-            exit(EXIT_FAILURE);
-          }
-          break;
         }
       }
     }
