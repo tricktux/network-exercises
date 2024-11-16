@@ -105,7 +105,7 @@
       "cacheVariables": {
         "ZIG": "ON",
         "ZIG_TARGET": "aarch64-linux-gnu",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
