@@ -94,8 +94,8 @@ void fd_accept_and_epoll_add(void *context)
 
   log_info("fd_accept_and_epoll_add: new connection on socket '%d'", conn_sock);
   fcntl(conn_sock, F_SETFL, O_NONBLOCK);
+
   // Doing edge-level trigger
-  // We take care of handling all reads and send below
   ev.events = EPOLLIN | EPOLLET;
   ev.data.fd = conn_sock;
   if (epoll_ctl(info->efd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {
