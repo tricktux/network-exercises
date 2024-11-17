@@ -109,7 +109,7 @@ void fd_recv_and_send(void *context)
   struct epoll_ctl_info* info = context;
   assert(info != NULL);
 
-  char buf[4096];
+  char buf[8192];
   ssize_t nbytes;
 
   for (;;) {
