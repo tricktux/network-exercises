@@ -135,7 +135,7 @@ int main()
   log_trace("main: listening...");
 
   struct epoll_event ev, events[MAX_EVENTS];
-  int conn_sock, nfds, epollfd;
+  int nfds, epollfd;
 
   epollfd = epoll_create1(0);
   if (epollfd == -1) {
@@ -152,10 +152,8 @@ int main()
   }
 
   int n;
-  socklen_t addrlen;
-  struct sockaddr_storage addr;
-
   char buf[4096];
+
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -167,21 +165,7 @@ int main()
     log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
       if (events[n].data.fd == listen_fd) {
-        log_info("main epoll loop: got a 'listen' event");
-        conn_sock = accept(listen_fd, (struct sockaddr*)&addr, &addrlen);
-        if (conn_sock == -1) {
-          perror("accept\n");
-          exit(EXIT_FAILURE);
-        }
-        fcntl(conn_sock, F_SETFL, O_NONBLOCK);
-        // Doing edge-level trigger
-        // We take care of handling all reads and send below
-        ev.events = EPOLLIN | EPOLLET;
-        ev.data.fd = conn_sock;
-        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {
-          perror("epoll_ctl: conn_sock");
-          exit(EXIT_FAILURE);
-        }
+        fd_accept_and_epoll_add(listen_fd, epollfd);
         continue;
       }
 
