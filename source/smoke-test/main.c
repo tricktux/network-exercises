@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
 #include "log.h"
 #include "epoll.h"
@@ -43,39 +44,6 @@ int init_logs(FILE* fd)
   return 0;
 }
 
-int sendall(int sfd, char* buf, ssize_t* len)
-{
-  assert(sfd != 0);
-  assert(buf != NULL);
-  assert(*len > 0);
-
-  ssize_t nbytes_sent = 0;
-  ssize_t total_to_send = *len, total_sent = 0;
-
-  for (; nbytes_sent < total_to_send;) {
-    nbytes_sent = send(sfd, buf, (size_t)total_to_send, 0);
-    if (nbytes_sent == -1) {
-      int err = errno;
-      *len = total_sent;
-      log_error("sendall: send failed, '%d'", err);
-      return err;
-    }
-
-    total_to_send -= nbytes_sent;
-    buf += nbytes_sent;
-    total_sent += nbytes_sent;
-    log_trace(
-        "sendall: in the loop nbytes_sent: '%d', total_to_send: '%u', "
-        "total_sent: '%u'",
-        nbytes_sent,
-        total_to_send,
-        total_sent);
-  }
-
-  *len = total_sent;
-  log_trace("sendall: done: len = '%u'", *len);
-  return 0;
-}
 
 int main()
 {
@@ -150,8 +118,8 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  int n;
-  char buf[4096];
+  int n, fd;
+  struct epoll_ctl_info epci = {epollfd, 0, 0};
 
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
@@ -163,57 +131,30 @@ int main()
 
     log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
+
+      epci.new_fd = events[n].data.fd;
+      fd = events[n].data.fd;
+      epci.event = &events[n];
+
+      // Handle a new listen connection
       if (events[n].data.fd == listen_fd) {
-        fd_accept_and_epoll_add(listen_fd, epollfd);
+        fd_accept_and_epoll_add(&epci);
         continue;
       }
 
-      int fd = events[n].data.fd;
+      // Any event that's not EPOLLIN is an error on this fd
       if ((events[n].events & EPOLLIN) == 0) {
         log_warn("main: handling close event on fd '%d'", fd);
-        if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
+        if (fd_poll_del_and_close(&epci) == -1) {
           perror("epoll_ctl: fd");
           exit(EXIT_FAILURE);
         }
         continue;
       }
+
+      // Echo data now then while there is any
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
-      // read while there's data here
-      // maybe not, we'll get notified again
-      ssize_t nbytes;
-      for (;;) {
-        nbytes = recv(fd, buf, sizeof buf, 0);
-        if (nbytes == 0) {
-          log_warn("main: handling close while reading on fd '%d'", fd);
-          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
-            perror("epoll_ctl: recv 0");
-            exit(EXIT_FAILURE);
-          }
-          break;
-        }
-
-        if (nbytes == -1) {
-          if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-            break;  // We are done reading from this socket
-          }
-
-          log_trace("main: handling error while recv on fd '%d'", fd);
-          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
-            perror("epoll_ctl: read(fd)");
-            exit(EXIT_FAILURE);
-          }
-          break;
-        }
-        log_trace("main epoll loop: read '%d' bytes from fd '%d'", nbytes, fd);
-
-        if (sendall(fd, buf, &nbytes) != 0) {
-          log_error("main: failed to sendall on fd '%d'", fd);
-          if (fd_poll_del_and_close(epollfd, fd, &events[n]) == -1) {
-            perror("epoll_ctl: sendall(fd)");
-            exit(EXIT_FAILURE);
-          }
-        }
-      }
+      fd_recv_and_send(&epci);
     }
   }
   printf("Hello world\n");
