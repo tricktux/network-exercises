@@ -142,16 +142,6 @@ int main()
         continue;
       }
 
-      // Any event that's not EPOLLIN is an error on this fd
-      if ((events[n].events & EPOLLIN) == 0) {
-        log_warn("main: handling close event on fd '%d'", fd);
-        if (fd_poll_del_and_close(&epci) == -1) {
-          perror("epoll_ctl: fd");
-          exit(EXIT_FAILURE);
-        }
-        continue;
-      }
-
       // Echo data now then while there is any
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
       fd_recv_and_send(&epci);
