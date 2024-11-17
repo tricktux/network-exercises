@@ -24,7 +24,6 @@
 
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
-#define BUF_SIZE 1024
 #define PORT "18888"
 
 int init_logs(FILE* fd)
