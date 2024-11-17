@@ -1,6 +1,10 @@
 
+struct epoll_ctl_info {
+  int efd;
+  int new_fd;
+  struct epoll_event* event;
+};
 
+int fd_poll_del_and_close(struct epoll_ctl_info *info);
 
-int fd_poll_del_and_close(int epollfd, int fd, struct epoll_event* event);
-
-void fd_accept_and_epoll_add(int listen_fd, int epollfd);
+void fd_accept_and_epoll_add(struct epoll_ctl_info *info);
