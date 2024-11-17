@@ -44,10 +44,6 @@ int init_logs(FILE* fd)
   return 0;
 }
 
-// Create accept function
-// Create read and send back function
-// How do I know the client finished sending back the data
-
 int sendall(int sfd, char* buf, ssize_t* len)
 {
   assert(sfd != 0);
