@@ -9,10 +9,10 @@ struct epoll_ctl_info {
   struct epoll_event* event;
 };
 
-int fd_poll_del_and_close(struct epoll_ctl_info *info);
+int fd_poll_del_and_close(void *context);
 
-void fd_accept_and_epoll_add(struct epoll_ctl_info *info);
+void fd_accept_and_epoll_add(void *context);
 
-void fd_recv_and_send(struct epoll_ctl_info *info);
+void fd_recv_and_send(void *context);
 
 #endif // !EPOLL_H

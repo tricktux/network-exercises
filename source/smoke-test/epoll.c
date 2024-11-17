@@ -64,8 +64,9 @@ int sendall(int sfd, char* buf, ssize_t* len)
   return 0;
 }
 
-int fd_poll_del_and_close(struct epoll_ctl_info *info)
+int fd_poll_del_and_close(void *context)
 {
+  struct epoll_ctl_info* info = context;
   assert(info != NULL);
   assert(info->event != NULL);
 
@@ -76,8 +77,9 @@ int fd_poll_del_and_close(struct epoll_ctl_info *info)
   return 0;
 }
 
-void fd_accept_and_epoll_add(struct epoll_ctl_info *info)
+void fd_accept_and_epoll_add(void *context)
 {
+  struct epoll_ctl_info* info = context;
   assert(info != NULL);
 
   socklen_t addrlen;
@@ -102,8 +104,9 @@ void fd_accept_and_epoll_add(struct epoll_ctl_info *info)
   }
 }
 
-void fd_recv_and_send(struct epoll_ctl_info *info)
+void fd_recv_and_send(void *context)
 {
+  struct epoll_ctl_info* info = context;
   assert(info != NULL);
 
   char buf[4096];
