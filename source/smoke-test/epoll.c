@@ -1,4 +1,4 @@
-
+#include <arpa/inet.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -9,15 +9,15 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <arpa/inet.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "epoll.h"
 #include "log.h"
+#include "epoll.h"
 
 // get sockaddr, IPv4 or IPv6:
-void *get_in_addr(struct sockaddr *sa) {
+void* get_in_addr(struct sockaddr* sa)
+{
   if (sa->sa_family == AF_INET) {
     return &(((struct sockaddr_in*)sa)->sin_addr);
   }
@@ -25,7 +25,8 @@ void *get_in_addr(struct sockaddr *sa) {
   return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int fd_poll_del_and_close(int epollfd, int fd, struct epoll_event* event) {
+int fd_poll_del_and_close(int epollfd, int fd, struct epoll_event* event)
+{
   if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, event) == -1) {
     return -1;
   }
@@ -33,8 +34,8 @@ int fd_poll_del_and_close(int epollfd, int fd, struct epoll_event* event) {
   return 0;
 }
 
-
-void fd_accept_and_epoll_add(int listen_fd, int epollfd) {
+void fd_accept_and_epoll_add(int listen_fd, int epollfd)
+{
   socklen_t addrlen;
   struct epoll_event ev;
   struct sockaddr_storage addr;
