@@ -16,8 +16,9 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
-#include "log.h"
-#include "epoll.h"
+#include "log/log.h"
+#include "utils/epoll.h"
+#include "utils/utils.h"
 
 #define LOG_FILE "/tmp/network-exercises-smoke-test.log"
 #define LOG_FILE_MODE "w"
@@ -27,24 +28,6 @@
 #define MAX_EVENTS 10
 #define PORT "18888"
 
-int init_logs(FILE* fd)
-{
-  if ((fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
-    printf("Cannot open log file\n");
-    exit(EXIT_FAILURE);
-  }
-
-  if (log_add_fp(fd, LOG_LEVEL) == -1) {
-    printf("Failed to initialize log file\n");
-    return -2;
-  }
-
-  log_set_level(LOG_LEVEL);
-
-  return 0;
-}
-
-
 int main()
 {
   FILE* log_fd = NULL;
@@ -52,7 +35,12 @@ int main()
   struct addrinfo hints;
   struct addrinfo *result, *rp;
 
-  if (init_logs(log_fd) != 0)
+  if ((log_fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
+    printf("Cannot open log file\n");
+    exit(EXIT_FAILURE);
+  }
+
+  if (init_logs(log_fd, LOG_LEVEL) != 0)
     exit(EXIT_FAILURE);
 
   // getaddrinfo

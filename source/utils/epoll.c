@@ -14,8 +14,8 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
-#include "log.h"
-#include "epoll.h"
+#include "log/log.h"
+#include "utils/epoll.h"
 
 atomic_int res = 0;
 
