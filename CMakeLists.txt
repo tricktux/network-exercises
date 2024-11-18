@@ -19,6 +19,7 @@ include(cmake/variables.cmake)
 # ---- Declare executable ----
 
 add_subdirectory(source/smoke-test)
+add_subdirectory(source/prime-time)
 
 # ---- Install rules ----
 
