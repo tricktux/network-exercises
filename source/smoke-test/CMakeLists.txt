@@ -1,7 +1,7 @@
 
 add_executable(smoke-test
     "${PROJECT_SOURCE_DIR}/source/smoke-test/main.c"
-    "${PROJECT_SOURCE_DIR}/source/smoke-test/epoll.c"
+    "${PROJECT_SOURCE_DIR}/source/utils/epoll.c"
     "${PROJECT_SOURCE_DIR}/source/log/log.c"
     "${PROJECT_SOURCE_DIR}/source/thpool/thpool.c"
 )
@@ -17,6 +17,7 @@ target_compile_features(smoke-test PRIVATE c_std_23)
 target_include_directories(smoke-test PRIVATE 
     "${PROJECT_SOURCE_DIR}/source/thpool"
     "${PROJECT_SOURCE_DIR}/source/log"
+    "${PROJECT_SOURCE_DIR}/source/utils"
     "${PROJECT_SOURCE_DIR}/source/smoke-test"
 )
 
