@@ -26,43 +26,7 @@
 
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
-#define PORT "18898"
-
-void recv_and_handle(struct epoll_ctl_info* ctx)
-{
-  assert(ctx != NULL);
-
-  char buf[8192];
-  ssize_t nbytes;
-
-  for (;;) {
-    nbytes = recv(ctx->new_fd, buf, sizeof buf, 0);
-    if (nbytes == 0) {
-      log_warn("main: handling close while reading on fd '%d'", ctx->new_fd);
-      if (fd_poll_del_and_close(ctx) == -1) {
-        perror("epoll_ctl: recv 0");
-        exit(EXIT_FAILURE);
-      }
-      break;
-    }
-
-    if (nbytes == -1) {
-      if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-        break;  // We are done reading from this socket
-      }
-
-      log_trace("main: handling error while recv on fd '%d'", ctx->new_fd);
-      if (fd_poll_del_and_close(ctx) == -1) {
-        perror("epoll_ctl: read(fd)");
-      }
-      break;
-    }
-    log_trace(
-        "main epoll loop: read '%d' bytes from fd '%d'", nbytes, ctx->new_fd);
-
-    // Split and handle requests here
-  }
-}
+#define PORT "18888"
 
 int main()
 {
@@ -155,6 +119,7 @@ int main()
 
     log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
+
       epci.new_fd = events[n].data.fd;
       fd = events[n].data.fd;
       epci.event = &events[n];
