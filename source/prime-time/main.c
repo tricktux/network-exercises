@@ -19,6 +19,7 @@
 #include "log/log.h"
 #include "utils/epoll.h"
 #include "utils/utils.h"
+#include "prime-time/is-prime-request.h"
 
 #define LOG_FILE "/tmp/network-exercises-prime-time.log"
 #define LOG_FILE_MODE "w"
@@ -26,7 +27,78 @@
 
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
-#define PORT "18888"
+#define PORT "18898"
+
+void handle_request(char* raw_req, size_t size)
+{
+  assert(raw_req != NULL);
+  assert(size > 0);
+
+  // Split and handle requests here
+  struct is_prime_request *req, *it;
+  int r = is_prime_request_builder(&req, raw_req, size);
+  if (r < 0) {
+    log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);
+    return;
+  }
+  for (it = req; it != NULL; it = it->next) {
+    r = is_prime_request_malformed(it);
+    if (r < 0) {
+      log_warn("recv_and_handle: is_prime_request_malformed returned '%d'", r);
+      // TODO: what else to do here
+    }
+    if (r == 0) {
+      r = is_prime(it);
+      if (r < 0) {
+        log_warn("recv_and_handle: is_prime returned '%d'", r);
+        // TODO: what else to do here
+      }
+    }
+    r = is_prime_beget_response(it);
+    if (r < 0) {
+      log_warn("recv_and_handle: is_prime returned '%d'", r);
+      // TODO: what else to do here
+    }
+  }
+}
+
+void recv_and_handle(struct epoll_ctl_info* ctx)
+{
+  assert(ctx != NULL);
+
+  char buf[8192];
+  ssize_t nbytes, tot_size = 0, capacity = 8192;
+
+  for (;;) {
+    nbytes = recv(ctx->new_fd, buf, sizeof buf, 0);
+    if (nbytes == 0) {
+      log_warn("recv_and_handle: handling close while reading on fd '%d'",
+               ctx->new_fd);
+      if (fd_poll_del_and_close(ctx) == -1) {
+        perror("epoll_ctl: recv 0");
+        exit(EXIT_FAILURE);
+      }
+      break;
+    }
+
+    if (nbytes == -1) {
+      if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+        handle_request(buf, nbytes);
+        break;  // We are done reading from this socket
+      }
+
+      log_trace("recv_and_handle: handling error while recv on fd '%d'",
+                ctx->new_fd);
+      if (fd_poll_del_and_close(ctx) == -1) {
+        perror("epoll_ctl: read(fd)");
+      }
+      break;
+    }
+    log_trace(
+        "recv_and_handle: read '%d' bytes from fd '%d'", nbytes, ctx->new_fd);
+    tot_size += nbytes;
+  }
+}
 
 int main()
 {
@@ -119,7 +191,6 @@ int main()
 
     log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
-
       epci.new_fd = events[n].data.fd;
       fd = events[n].data.fd;
       epci.event = &events[n];
@@ -132,7 +203,7 @@ int main()
 
       // Echo data now then while there is any
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
-      fd_recv_and_send(&epci);
+      recv_and_handle(&epci);
     }
   }
   printf("Hello world\n");

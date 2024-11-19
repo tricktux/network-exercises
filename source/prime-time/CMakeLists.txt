@@ -3,9 +3,10 @@ set(PROJECT_NAME "prime-time")
 
 add_executable(${PROJECT_NAME}
     "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/main.c"
-    # "${PROJECT_SOURCE_DIR}/source/smoke-test/epoll.c"
+    "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/is-prime-request.c"
+    "${PROJECT_SOURCE_DIR}/source/utils/epoll.c"
+    "${PROJECT_SOURCE_DIR}/source/utils/utils.c"
     "${PROJECT_SOURCE_DIR}/source/log/log.c"
-    # "${PROJECT_SOURCE_DIR}/source/thpool/thpool.c"
 )
 
 add_executable(network-exercises::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
