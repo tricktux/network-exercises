@@ -28,7 +28,7 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-void recv_and_handle(struct epoll_ctl_info *ctx)
+void recv_and_handle(struct epoll_ctl_info* ctx)
 {
   assert(ctx != NULL);
 
@@ -57,7 +57,8 @@ void recv_and_handle(struct epoll_ctl_info *ctx)
       }
       break;
     }
-    log_trace("main epoll loop: read '%d' bytes from fd '%d'", nbytes, ctx->new_fd);
+    log_trace(
+        "main epoll loop: read '%d' bytes from fd '%d'", nbytes, ctx->new_fd);
 
     // Split and handle requests here
   }
@@ -154,7 +155,6 @@ int main()
 
     log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
-
       epci.new_fd = events[n].data.fd;
       fd = events[n].data.fd;
       epci.event = &events[n];
