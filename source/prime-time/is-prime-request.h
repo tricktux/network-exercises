@@ -1,5 +1,4 @@
 
-#include <bits/types/struct_iovec.h>
 #define PRIME_MAX_REQUEST_SIZE 8192
 #define PRIME_MAX_RESPONSE_SIZE 8192
 #define PRIME_REQUEST_METHOD_KEY "method"
