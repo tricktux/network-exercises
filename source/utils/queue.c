@@ -13,38 +13,37 @@
 #include "utils/queue.h"
 #include "log/log.h"
 
-void queue_init(struct queue *qu, size_t capacity)
+void queue_init(struct queue **qu, size_t capacity)
 {
-  if (qu != NULL) {
+  if (*qu != NULL) {
     log_error("queue_init: queue was previously allocated");
     return;
   }
 
   assert(capacity > 0);
 
-  qu = malloc(sizeof(struct queue));
+  *qu = malloc(sizeof(struct queue));
   assert(qu != NULL);
 
-  qu->data = malloc(capacity);
-  assert(qu->data != NULL);
+  (*qu)->data = malloc(capacity);
+  assert((*qu)->data != NULL);
 
-  qu->capacity = capacity;
-  qu->free_capacity = capacity;
-  qu->size = 0;
-  qu->head = qu->data;
+  (*qu)->capacity = capacity;
+  (*qu)->free_capacity = capacity;
+  (*qu)->size = 0;
+  (*qu)->head = (*qu)->data;
 }
 
-void queue_free(struct queue *qu)
+void queue_free(struct queue **qu)
 {
-  if (qu == NULL) {
+  if (*qu == NULL) {
     log_error("queue_free: queue was previously de-allocated");
     return;
   }
 
-  assert(qu->data != NULL);
-  free(qu->data);
-  free(qu);
-  qu = NULL;
+  free((*qu)->data);
+  free((*qu));
+  *qu = NULL;
 }
 
 void queue_push(struct queue *qu, char* data, size_t size)
