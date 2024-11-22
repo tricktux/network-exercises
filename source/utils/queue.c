@@ -23,7 +23,11 @@ void queue_init(struct queue *qu, size_t capacity)
   assert(capacity > 0);
 
   qu = malloc(sizeof(struct queue));
+  assert(qu != NULL);
+
   qu->data = malloc(capacity);
+  assert(qu->data != NULL);
+
   qu->capacity = capacity;
   qu->free_capacity = capacity;
   qu->size = 0;
