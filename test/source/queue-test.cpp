@@ -16,7 +16,7 @@
 
 struct queue* instantiate_and_fill(size_t capacity, const char* data) {
   struct queue* qu = nullptr;
-  queue_init(qu, capacity);
+  queue_init(&qu, capacity);
   if (data != nullptr) {
     queue_push(qu, const_cast<char*>(data), strlen(data));
   }
@@ -25,7 +25,7 @@ struct queue* instantiate_and_fill(size_t capacity, const char* data) {
 
 TEST_CASE("Queue Initialization") {
   struct queue* qu = nullptr;
-  queue_init(qu, 10);
+  queue_init(&qu, 10);
 
   REQUIRE(qu != nullptr);
   REQUIRE(qu->capacity == 10);
@@ -33,13 +33,13 @@ TEST_CASE("Queue Initialization") {
   REQUIRE(qu->free_capacity == 10);
   REQUIRE(qu->head == qu->data);
 
-  queue_free(qu);
+  queue_free(&qu);
 }
 
 TEST_CASE("Queue Free") {
   struct queue* qu = instantiate_and_fill(10, "hello");
 
-  queue_free(qu);
+  queue_free(&qu);
 
   REQUIRE(qu == nullptr); // Memory should be freed, null check after is good practice.
 }
@@ -67,7 +67,7 @@ TEST_CASE("Queue Push and Pop") {
     delete[] buffer;
   }
 
-  queue_free(qu);
+  queue_free(&qu);
 }
 
 TEST_CASE("Queue Edge Cases") {
@@ -88,5 +88,5 @@ TEST_CASE("Queue Edge Cases") {
     REQUIRE(qu->free_capacity == qu->capacity);
   }
 
-  queue_free(qu);
+  queue_free(&qu);
 }
