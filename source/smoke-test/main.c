@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 
 #include <assert.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdarg.h>
@@ -19,10 +18,13 @@
 #include "log/log.h"
 #include "utils/epoll.h"
 #include "utils/utils.h"
+#include "utils/queue.h"
 
 #define LOG_FILE "/tmp/network-exercises-smoke-test.log"
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
+
+#define QUEUE_CAPACITY 65536 //  1024 * 64
 
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
@@ -106,8 +108,12 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  int n, fd;
+  char *data;
+  int n, fd, res, size;
+  struct queue* qu = nullptr;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
+
+  queue_init(&qu, QUEUE_CAPACITY);
 
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
@@ -130,9 +136,40 @@ int main()
         continue;
       }
 
-      // Echo data now then while there is any
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
-      fd_recv_and_send(&epci);
+      res = recv_request(fd, qu);
+      size = queue_pop_no_copy(qu, &data);
+
+      // Handle error case while recv data
+      if (res < -1) {
+        if (fd_poll_del_and_close(&epci) == -1) {
+          perror("epoll_ctl: recv 0");
+          exit(EXIT_FAILURE);
+        }
+
+        continue;
+      }
+
+      // Handle there's data to echo back
+      if (size > 0) {
+        int nbytes = size;
+        if (sendall(fd, data, &size) != 0) {
+          log_error("recv_echo: sending data on fd '%d'", fd);
+          continue;
+        }
+        if (nbytes != size) {
+          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'", nbytes, size);
+        }
+      }
+
+      // Handle socket still open
+      if (res == -1) continue;
+
+      // Handle closing request received
+      if (fd_poll_del_and_close(&epci) == -1) {
+        perror("epoll_ctl: recv 0");
+        exit(EXIT_FAILURE);
+      }
     }
   }
   printf("Hello world\n");
