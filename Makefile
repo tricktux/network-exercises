@@ -3,7 +3,7 @@
 
 all: debug
 
-cmake_clean:
+clean:
 	rm -rf build
 
 git_clean:
