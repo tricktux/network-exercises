@@ -109,3 +109,32 @@ void queue_pop(struct queue *qu, char* data, size_t *size)
   qu->head = qu->data;
   qu->free_capacity = qu->capacity;
 }
+
+void queue_reset(struct queue *qu)
+{
+  assert(qu != NULL);
+
+  qu->size = 0;
+  qu->head = qu->data;
+  qu->free_capacity = qu->capacity;
+}
+
+int queue_pop_no_copy(struct queue *qu, char** data)
+{
+  assert(qu != NULL);
+  assert(data != NULL);
+
+  if (qu->size == 0) {
+    log_warn("queue_pop: queue is empty... noop");
+    return 0;
+  }
+
+  *data = qu->data;
+  int s = qu->size;
+
+  qu->size = 0;
+  qu->head = qu->data;
+  qu->free_capacity = qu->capacity;
+
+  return s;
+}
