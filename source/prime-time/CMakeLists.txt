@@ -5,6 +5,7 @@ add_executable(${PROJECT_NAME}
     "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/main.c"
     "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/is-prime-request.c"
     "${PROJECT_SOURCE_DIR}/source/utils/epoll.c"
+    "${PROJECT_SOURCE_DIR}/source/utils/queue.c"
     "${PROJECT_SOURCE_DIR}/source/utils/utils.c"
     "${PROJECT_SOURCE_DIR}/source/log/log.c"
 )
