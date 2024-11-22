@@ -97,6 +97,13 @@ void queue_pop(struct queue *qu, char* data, size_t *size)
     return;
   }
 
+  if (qu->size > *size) {
+    log_warn("queue_pop: not enough room in storage for queue... noop");
+    return;
+  }
+
+  *size = qu->size;
+
   memcpy(data, qu->data, qu->size);
   qu->size = 0;
   qu->head = qu->data;
