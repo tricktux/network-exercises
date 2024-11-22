@@ -58,10 +58,11 @@ TEST_CASE("Queue Push and Pop") {
   }
 
   SECTION("Pop") {
+    queue_push(qu, const_cast<char*>(data), data_size);
     char* buffer = new char[data_size];
     queue_pop(qu, buffer, &data_size);
 
-    REQUIRE(std::strcmp(buffer, data) == 0);
+    REQUIRE(std::strncmp(buffer, data, data_size) == 0);
     REQUIRE(qu->size == 0);
     REQUIRE(qu->free_capacity == qu->capacity);
     delete[] buffer;
@@ -82,7 +83,10 @@ TEST_CASE("Queue Edge Cases") {
   }
 
   SECTION("Pop Empty Queue") {
-    queue_pop(qu, const_cast<char*>(""), nullptr);
+    size_t ds = 8;
+    char d[ds];
+    queue_pop(qu, d, &ds);
+    queue_pop(qu, d, &ds);
 
     REQUIRE(qu->size == 0);
     REQUIRE(qu->free_capacity == qu->capacity);
