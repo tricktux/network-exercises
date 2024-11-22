@@ -1,8 +1,6 @@
 
 #ifndef EPOLL_H
 
-extern atomic_int res;
-
 struct epoll_ctl_info {
   int efd;
   int new_fd;
@@ -13,6 +11,6 @@ int fd_poll_del_and_close(void *context);
 
 void fd_accept_and_epoll_add(void *context);
 
-void fd_recv_and_send(void *context);
+int sendall(int sfd, char* buf, int* len);
 
 #endif // !EPOLL_H
