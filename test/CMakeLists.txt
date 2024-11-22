@@ -2,7 +2,10 @@
 # depends on being added from it, i.e. the testing is done only from the build
 # tree and is not feasible from an install location
 
-project(network-exercises-tests LANGUAGES CXX)
+# Enable test functionalities
+enable_testing()
+
+project(network-exercises-tests LANGUAGES C CXX)
 
 # ---- Dependencies ----
 
@@ -26,6 +29,14 @@ target_include_directories(utils-test PRIVATE
 target_compile_features(utils-test PRIVATE cxx_std_11)
 
 catch_discover_tests(utils-test)
+
+# Add a custom command to run tests as part of the regular build process
+add_custom_command(
+    TARGET utils-test
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E env CTEST_OUTPUT_ON_FAILURE=1 ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure
+    COMMENT "Running tests..."
+)
 
 # ---- End-of-file commands ----
 
