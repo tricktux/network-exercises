@@ -1,2 +1,2 @@
 
-int create_server(struct addrinfo hints, const char *port, struct addrinfo **result, int *listen_fd);
+int create_server(const char *port, int *listen_fd);

@@ -21,10 +21,21 @@
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 
-int create_server(struct addrinfo hints, const char *port, struct addrinfo **result, int *listen_fd) {
+int create_server(const char *port, int *listen_fd) {
   assert(port != NULL);
-  assert(result != NULL);
   assert(listen_fd != NULL);
+
+  struct addrinfo hints;
+  struct addrinfo **result = NULL;
+  // getaddrinfo
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE; /* For wildcard IP address */
+  hints.ai_protocol = 0; /* Any protocol */
+  hints.ai_canonname = NULL;
+  hints.ai_addr = NULL;
+  hints.ai_next = NULL;
 
   int s = getaddrinfo(NULL, port, &hints, result);
   if (s != 0) {
