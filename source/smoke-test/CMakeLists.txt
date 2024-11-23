@@ -6,6 +6,7 @@ add_executable(smoke-test
     "${PROJECT_SOURCE_DIR}/source/thpool/thpool.c"
     "${PROJECT_SOURCE_DIR}/source/utils/utils.c"
     "${PROJECT_SOURCE_DIR}/source/utils/queue.c"
+    "${PROJECT_SOURCE_DIR}/source/utils/sockets.c"
 )
 
 add_executable(network-exercises::smoke-test ALIAS smoke-test)

@@ -17,8 +17,10 @@
 
 #include "log/log.h"
 #include "utils/epoll.h"
-#include "utils/utils.h"
+#include "utils/sockets.h"
 #include "utils/queue.h"
+#include "utils/utils.h"
+#include "utils/sockets.h"
 
 #define LOG_FILE "/tmp/network-exercises-smoke-test.log"
 #define LOG_FILE_MODE "w"
@@ -33,17 +35,9 @@
 int main()
 {
   FILE* log_fd = NULL;
-  int listen_fd, s;
+  int listen_fd;
   struct addrinfo hints;
-  struct addrinfo *result, *rp;
-
-  if ((log_fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
-    printf("Cannot open log file\n");
-    exit(EXIT_FAILURE);
-  }
-
-  if (init_logs(log_fd, LOG_LEVEL) != 0)
-    exit(EXIT_FAILURE);
+  struct addrinfo **result = NULL;
 
   // getaddrinfo
   memset(&hints, 0, sizeof(hints));
@@ -54,41 +48,19 @@ int main()
   hints.ai_canonname = NULL;
   hints.ai_addr = NULL;
   hints.ai_next = NULL;
-
-  s = getaddrinfo(NULL, PORT, &hints, &result);
-  if (s != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+  if ((log_fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
+    fprintf(stderr,"Cannot open log file\n");
     exit(EXIT_FAILURE);
   }
 
-  log_trace("main: passed getaddrinfo");
-  for (rp = result; rp != NULL; rp = rp->ai_next) {
-    log_trace("main results loop: trying with addrinfo '%d'", rp - result);
+  if (init_logs(log_fd, LOG_LEVEL) != 0)
+    exit(EXIT_FAILURE);
 
-    listen_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-    if (listen_fd == -1)
-      continue;
-
-    if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      log_info("main results loop: we binded to port '%s' baby!!!", PORT);
-      break; /* Success */
-    }
-
-    close(listen_fd);
-  }
-
-  freeaddrinfo(result); /* No longer needed */
-  log_trace("main: freeaddrinfo");
-
-  if (rp == NULL) { /* No address succeeded */
-    fprintf(stderr, "Could not bind\n");
+  if (create_server(hints, PORT, &result, &listen_fd) != 0) {
+    fprintf(stderr, "failed to create server\n");
     exit(EXIT_FAILURE);
   }
 
-  if (listen(listen_fd, MAX_NUM_CON) == -1) {
-    perror("listen failed\n");
-    exit(EXIT_FAILURE);
-  }
   log_trace("main: listening...");
 
   struct epoll_event ev, events[MAX_EVENTS];
