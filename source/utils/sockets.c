@@ -21,12 +21,13 @@
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 
-int create_server(const char *port, int *listen_fd) {
+int create_server(const char* port, int* listen_fd)
+{
   assert(port != NULL);
   assert(listen_fd != NULL);
 
   struct addrinfo hints;
-  struct addrinfo **result = NULL;
+  struct addrinfo** result = NULL;
   // getaddrinfo
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
@@ -44,7 +45,7 @@ int create_server(const char *port, int *listen_fd) {
   }
 
   int fd;
-  struct addrinfo *rp;
+  struct addrinfo* rp;
   log_trace("main: passed getaddrinfo");
   for (rp = *result; rp != NULL; rp = rp->ai_next) {
     fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
@@ -75,5 +76,3 @@ int create_server(const char *port, int *listen_fd) {
   *listen_fd = fd;
   return 0;
 }
-
-

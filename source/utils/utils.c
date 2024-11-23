@@ -41,12 +41,12 @@ int init_logs(FILE* fd, int log_level)
  *
  * @param ctx Pointer to structure to hold context
  * @param qu Pointer to queue to store all the received data
- * @return 
+ * @return
  *    0 if close event received
  *    -1 if EWOULDBLOCK received
  *    -2 for any other kind of error
  */
-int recv_request(int fd, struct queue *qu)
+int recv_request(int fd, struct queue* qu)
 {
   assert(fd > 0);
   assert(qu != NULL);
@@ -71,7 +71,6 @@ int recv_request(int fd, struct queue *qu)
       return -2;
     }
     log_trace("recv_request: read '%d' bytes from fd '%d'", nbytes, fd);
-    queue_push_ex(qu, (size_t) nbytes);
+    queue_push_ex(qu, (size_t)nbytes);
   }
 }
-

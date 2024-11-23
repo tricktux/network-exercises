@@ -13,7 +13,7 @@
 #include "utils/queue.h"
 #include "log/log.h"
 
-void queue_init(struct queue **qu, size_t capacity)
+void queue_init(struct queue** qu, size_t capacity)
 {
   if (*qu != NULL) {
     log_error("queue_init: queue was previously allocated");
@@ -34,7 +34,7 @@ void queue_init(struct queue **qu, size_t capacity)
   (*qu)->head = (*qu)->data;
 }
 
-void queue_free(struct queue **qu)
+void queue_free(struct queue** qu)
 {
   if (*qu == NULL) {
     log_error("queue_free: queue was previously de-allocated");
@@ -46,7 +46,7 @@ void queue_free(struct queue **qu)
   *qu = NULL;
 }
 
-void queue_push(struct queue *qu, char* data, size_t size)
+void queue_push(struct queue* qu, char* data, size_t size)
 {
   assert(qu != NULL);
   assert(data != NULL);
@@ -67,7 +67,7 @@ void queue_push(struct queue *qu, char* data, size_t size)
   qu->free_capacity = qu->capacity - qu->size;
 }
 
-void queue_push_ex(struct queue *qu, size_t size)
+void queue_push_ex(struct queue* qu, size_t size)
 {
   assert(qu != NULL);
 
@@ -86,7 +86,7 @@ void queue_push_ex(struct queue *qu, size_t size)
   qu->free_capacity = qu->capacity - qu->size;
 }
 
-void queue_pop(struct queue *qu, char* data, size_t *size)
+void queue_pop(struct queue* qu, char* data, size_t* size)
 {
   assert(qu != NULL);
   assert(data != NULL);
@@ -110,7 +110,7 @@ void queue_pop(struct queue *qu, char* data, size_t *size)
   qu->free_capacity = qu->capacity;
 }
 
-void queue_reset(struct queue *qu)
+void queue_reset(struct queue* qu)
 {
   assert(qu != NULL);
 
@@ -119,7 +119,7 @@ void queue_reset(struct queue *qu)
   qu->free_capacity = qu->capacity;
 }
 
-int queue_pop_no_copy(struct queue *qu, char** data)
+int queue_pop_no_copy(struct queue* qu, char** data)
 {
   assert(qu != NULL);
   assert(data != NULL);
@@ -130,7 +130,7 @@ int queue_pop_no_copy(struct queue *qu, char** data)
   }
 
   *data = qu->data;
-  int s = (int) qu->size;
+  int s = (int)qu->size;
 
   qu->size = 0;
   qu->head = qu->data;

@@ -25,7 +25,7 @@
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
 
-#define QUEUE_CAPACITY 65536 //  1024 * 64
+#define QUEUE_CAPACITY 65536  //  1024 * 64
 
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
@@ -37,7 +37,7 @@ int main()
   int listen_fd;
 
   if ((log_fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
-    fprintf(stderr,"Cannot open log file\n");
+    fprintf(stderr, "Cannot open log file\n");
     exit(EXIT_FAILURE);
   }
 
@@ -67,7 +67,7 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  char *data;
+  char* data;
   int n, fd, res, size;
   struct queue* qu = nullptr;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
@@ -84,7 +84,6 @@ int main()
 
     log_trace("main epoll loop: epoll got '%d' events", nfds);
     for (n = 0; n < nfds; ++n) {
-
       epci.new_fd = events[n].data.fd;
       fd = events[n].data.fd;
       epci.event = &events[n];
@@ -117,12 +116,15 @@ int main()
           continue;
         }
         if (nbytes != size) {
-          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'", nbytes, size);
+          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'",
+                    nbytes,
+                    size);
         }
       }
 
       // Handle socket still open
-      if (res == -1) continue;
+      if (res == -1)
+        continue;
 
       // Handle closing request received
       if (fd_poll_del_and_close(&epci) == -1) {

@@ -27,12 +27,12 @@
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
 
-#define QUEUE_CAPACITY 65536 //  1024 * 64
+#define QUEUE_CAPACITY 65536  //  1024 * 64
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-void handle_request(struct queue *qu)
+void handle_request(struct queue* qu)
 {
   assert(qu != NULL);
   // TODO: queue_is_empty
@@ -105,7 +105,7 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  char *data;
+  char* data;
   int n, fd, res, size;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue* qu = nullptr;
@@ -154,19 +154,21 @@ int main()
           continue;
         }
         if (nbytes != size) {
-          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'", nbytes, size);
+          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'",
+                    nbytes,
+                    size);
         }
       }
 
       // Handle socket still open
-      if (res == -1) continue;
+      if (res == -1)
+        continue;
 
       // Handle closing request received
       if (fd_poll_del_and_close(&epci) == -1) {
         perror("epoll_ctl: recv 0");
         exit(EXIT_FAILURE);
       }
-
     }
   }
   printf("Hello world\n");

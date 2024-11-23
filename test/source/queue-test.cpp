@@ -16,7 +16,8 @@
 
 #define QUEUE_FULL_SIZE 8
 
-struct queue* instantiate_and_fill(size_t capacity, const char* data) {
+struct queue* instantiate_and_fill(size_t capacity, const char* data)
+{
   struct queue* qu = nullptr;
   queue_init(&qu, capacity);
   if (data != nullptr) {
@@ -25,7 +26,8 @@ struct queue* instantiate_and_fill(size_t capacity, const char* data) {
   return qu;
 }
 
-TEST_CASE("Queue Initialization") {
+TEST_CASE("Queue Initialization")
+{
   struct queue* qu = nullptr;
   queue_init(&qu, 10);
 
@@ -38,28 +40,33 @@ TEST_CASE("Queue Initialization") {
   queue_free(&qu);
 }
 
-TEST_CASE("Queue Free") {
+TEST_CASE("Queue Free")
+{
   struct queue* qu = instantiate_and_fill(10, "hello");
 
   queue_free(&qu);
 
-  REQUIRE(qu == nullptr); // Memory should be freed, null check after is good practice.
+  REQUIRE(qu == nullptr);  // Memory should be freed, null check after is good
+                           // practice.
 }
 
-TEST_CASE("Queue Push and Pop") {
+TEST_CASE("Queue Push and Pop")
+{
   const char* data = "hello";
   size_t data_size = strlen(data);
 
   struct queue* qu = instantiate_and_fill(10, nullptr);
 
-  SECTION("Push") {
+  SECTION("Push")
+  {
     queue_push(qu, const_cast<char*>(data), data_size);
 
     REQUIRE(qu->size == data_size);
     REQUIRE(qu->free_capacity == qu->capacity - data_size);
   }
 
-  SECTION("Pop") {
+  SECTION("Pop")
+  {
     queue_push(qu, const_cast<char*>(data), data_size);
     char* buffer = new char[data_size];
     queue_pop(qu, buffer, &data_size);
@@ -73,10 +80,12 @@ TEST_CASE("Queue Push and Pop") {
   queue_free(&qu);
 }
 
-TEST_CASE("Queue Edge Cases") {
+TEST_CASE("Queue Edge Cases")
+{
   struct queue* qu = instantiate_and_fill(5, "1234");
 
-  SECTION("Push Over Capacity") {
+  SECTION("Push Over Capacity")
+  {
     queue_push(qu, const_cast<char*>("world"), 5);
 
     // As it should over push the capacity, size should remain the same.
@@ -84,7 +93,8 @@ TEST_CASE("Queue Edge Cases") {
     REQUIRE(qu->free_capacity == 1);
   }
 
-  SECTION("Pop Empty Queue") {
+  SECTION("Pop Empty Queue")
+  {
     size_t ds = QUEUE_FULL_SIZE;
     char d[QUEUE_FULL_SIZE];
     queue_pop(qu, d, &ds);
