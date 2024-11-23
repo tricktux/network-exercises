@@ -14,6 +14,8 @@
 #include "utils/queue.h"
 #include <cstring>
 
+#define QUEUE_FULL_SIZE 8
+
 struct queue* instantiate_and_fill(size_t capacity, const char* data) {
   struct queue* qu = nullptr;
   queue_init(&qu, capacity);
@@ -83,8 +85,8 @@ TEST_CASE("Queue Edge Cases") {
   }
 
   SECTION("Pop Empty Queue") {
-    size_t ds = 8;
-    char d[ds];
+    size_t ds = QUEUE_FULL_SIZE;
+    char d[QUEUE_FULL_SIZE];
     queue_pop(qu, d, &ds);
     queue_pop(qu, d, &ds);
 

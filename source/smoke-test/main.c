@@ -17,10 +17,9 @@
 
 #include "log/log.h"
 #include "utils/epoll.h"
-#include "utils/sockets.h"
 #include "utils/queue.h"
-#include "utils/utils.h"
 #include "utils/sockets.h"
+#include "utils/utils.h"
 
 #define LOG_FILE "/tmp/network-exercises-smoke-test.log"
 #define LOG_FILE_MODE "w"
@@ -36,18 +35,7 @@ int main()
 {
   FILE* log_fd = NULL;
   int listen_fd;
-  struct addrinfo hints;
-  struct addrinfo **result = NULL;
 
-  // getaddrinfo
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE; /* For wildcard IP address */
-  hints.ai_protocol = 0; /* Any protocol */
-  hints.ai_canonname = NULL;
-  hints.ai_addr = NULL;
-  hints.ai_next = NULL;
   if ((log_fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
     fprintf(stderr,"Cannot open log file\n");
     exit(EXIT_FAILURE);
@@ -56,11 +44,10 @@ int main()
   if (init_logs(log_fd, LOG_LEVEL) != 0)
     exit(EXIT_FAILURE);
 
-  if (create_server(hints, PORT, &result, &listen_fd) != 0) {
+  if (create_server(PORT, &listen_fd) != 0) {
     fprintf(stderr, "failed to create server\n");
     exit(EXIT_FAILURE);
   }
-
   log_trace("main: listening...");
 
   struct epoll_event ev, events[MAX_EVENTS];
