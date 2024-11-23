@@ -3,6 +3,12 @@
 
 all: debug
 
+format:
+	@find source/ -name '*.cpp' -o -name '*.hpp' -o -name '*.c' -o -name '*.h' | \
+		xargs clang-format -i -style=file
+	@find test/ -name '*.cpp' -o -name '*.hpp' -o -name '*.c' -o -name '*.h' | \
+		xargs clang-format -i -style=file
+
 clean:
 	rm -rf build
 
