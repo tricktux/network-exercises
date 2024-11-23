@@ -7,6 +7,7 @@ add_executable(${PROJECT_NAME}
     "${PROJECT_SOURCE_DIR}/source/utils/epoll.c"
     "${PROJECT_SOURCE_DIR}/source/utils/queue.c"
     "${PROJECT_SOURCE_DIR}/source/utils/utils.c"
+    "${PROJECT_SOURCE_DIR}/source/utils/sockets.c"
     "${PROJECT_SOURCE_DIR}/source/log/log.c"
 )
 

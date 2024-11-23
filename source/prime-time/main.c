@@ -18,21 +18,28 @@
 
 #include "log/log.h"
 #include "utils/epoll.h"
-#include "utils/utils.h"
+#include "utils/queue.h"
+#include "utils/sockets.h"
 #include "prime-time/is-prime-request.h"
+#include "utils/utils.h"
 
 #define LOG_FILE "/tmp/network-exercises-prime-time.log"
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
 
+#define QUEUE_CAPACITY 65536 //  1024 * 64
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-void handle_request(char* raw_req, size_t size)
+void handle_request(struct queue *qu)
 {
-  assert(raw_req != NULL);
-  assert(size > 0);
+  assert(qu != NULL);
+  // TODO: queue_is_empty
+
+  size_t size = qu->size;
+  char raw_req[size];
+  queue_pop(qu, raw_req, &size);
 
   // Split and handle requests here
   struct is_prime_request *req, *it;
@@ -62,50 +69,10 @@ void handle_request(char* raw_req, size_t size)
   }
 }
 
-void recv_and_handle(struct epoll_ctl_info* ctx)
-{
-  assert(ctx != NULL);
-
-  char buf[8192];
-  ssize_t nbytes, tot_size = 0, capacity = 8192;
-
-  for (;;) {
-    nbytes = recv(ctx->new_fd, buf, sizeof buf, 0);
-    if (nbytes == 0) {
-      log_warn("recv_and_handle: handling close while reading on fd '%d'",
-               ctx->new_fd);
-      if (fd_poll_del_and_close(ctx) == -1) {
-        perror("epoll_ctl: recv 0");
-        exit(EXIT_FAILURE);
-      }
-      break;
-    }
-
-    if (nbytes == -1) {
-      if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-        handle_request(buf, nbytes);
-        break;  // We are done reading from this socket
-      }
-
-      log_trace("recv_and_handle: handling error while recv on fd '%d'",
-                ctx->new_fd);
-      if (fd_poll_del_and_close(ctx) == -1) {
-        perror("epoll_ctl: read(fd)");
-      }
-      break;
-    }
-    log_trace(
-        "recv_and_handle: read '%d' bytes from fd '%d'", nbytes, ctx->new_fd);
-    tot_size += nbytes;
-  }
-}
-
 int main()
 {
   FILE* log_fd = NULL;
-  int listen_fd, s;
-  struct addrinfo hints;
-  struct addrinfo *result, *rp;
+  int listen_fd;
 
   if ((log_fd = fopen(LOG_FILE, LOG_FILE_MODE)) == NULL) {
     printf("Cannot open log file\n");
@@ -115,48 +82,8 @@ int main()
   if (init_logs(log_fd, LOG_LEVEL) != 0)
     exit(EXIT_FAILURE);
 
-  // getaddrinfo
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE; /* For wildcard IP address */
-  hints.ai_protocol = 0; /* Any protocol */
-  hints.ai_canonname = NULL;
-  hints.ai_addr = NULL;
-  hints.ai_next = NULL;
-
-  s = getaddrinfo(NULL, PORT, &hints, &result);
-  if (s != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
-    exit(EXIT_FAILURE);
-  }
-
-  log_trace("main: passed getaddrinfo");
-  for (rp = result; rp != NULL; rp = rp->ai_next) {
-    log_trace("main results loop: trying with addrinfo '%d'", rp - result);
-
-    listen_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-    if (listen_fd == -1)
-      continue;
-
-    if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      log_info("main results loop: we binded to port '%s' baby!!!", PORT);
-      break; /* Success */
-    }
-
-    close(listen_fd);
-  }
-
-  freeaddrinfo(result); /* No longer needed */
-  log_trace("main: freeaddrinfo");
-
-  if (rp == NULL) { /* No address succeeded */
-    fprintf(stderr, "Could not bind\n");
-    exit(EXIT_FAILURE);
-  }
-
-  if (listen(listen_fd, MAX_NUM_CON) == -1) {
-    perror("listen failed\n");
+  if (create_server(PORT, &listen_fd) != 0) {
+    fprintf(stderr, "failed to create server\n");
     exit(EXIT_FAILURE);
   }
   log_trace("main: listening...");
@@ -178,8 +105,11 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  int n, fd;
+  char *data;
+  int n, fd, res, size;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
+  struct queue* qu = nullptr;
+  queue_init(&qu, QUEUE_CAPACITY);
 
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
@@ -203,7 +133,40 @@ int main()
 
       // Echo data now then while there is any
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
-      recv_and_handle(&epci);
+      res = recv_request(fd, qu);
+      size = queue_pop_no_copy(qu, &data);
+
+      // Handle error case while recv data
+      if (res < -1) {
+        if (fd_poll_del_and_close(&epci) == -1) {
+          perror("epoll_ctl: recv 0");
+          exit(EXIT_FAILURE);
+        }
+
+        continue;
+      }
+
+      // Handle there's data to echo back
+      if (size > 0) {
+        int nbytes = size;
+        if (sendall(fd, data, &size) != 0) {
+          log_error("recv_echo: sending data on fd '%d'", fd);
+          continue;
+        }
+        if (nbytes != size) {
+          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'", nbytes, size);
+        }
+      }
+
+      // Handle socket still open
+      if (res == -1) continue;
+
+      // Handle closing request received
+      if (fd_poll_del_and_close(&epci) == -1) {
+        perror("epoll_ctl: recv 0");
+        exit(EXIT_FAILURE);
+      }
+
     }
   }
   printf("Hello world\n");
