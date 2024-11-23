@@ -32,17 +32,16 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-void handle_request(struct queue* qu)
+void handle_request(char* raw_req, size_t size)
 {
-  assert(qu != NULL);
-  // TODO: queue_is_empty
-
-  size_t size = qu->size;
-  char raw_req[size];
-  queue_pop(qu, raw_req, &size);
+  assert(raw_req != NULL);
+  if (size == 0) {
+    log_error("handle_request: raw request size is zero");
+    return;
+  }
 
   // Split and handle requests here
-  struct is_prime_request *req, *it;
+  struct is_prime_request **req, *it;
   int r = is_prime_request_builder(&req, raw_req, size);
   if (r < 0) {
     log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);
@@ -146,18 +145,10 @@ int main()
         continue;
       }
 
-      // Handle there's data to echo back
+      // Handle there's data to process
       if (size > 0) {
-        int nbytes = size;
-        if (sendall(fd, data, &size) != 0) {
-          log_error("recv_echo: sending data on fd '%d'", fd);
-          continue;
-        }
-        if (nbytes != size) {
-          log_error("recv_echo: Expected to send: '%u'. Actually sent: '%u'",
-                    nbytes,
-                    size);
-        }
+        log_trace("main epoll loop: handling prime request of size '%d' on fd '%d'", size, fd);
+        handle_request(data, (size_t) size);
       }
 
       // Handle socket still open
