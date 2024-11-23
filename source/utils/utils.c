@@ -21,7 +21,6 @@
 
 #include "log/log.h"
 #include "utils/queue.h"
-#include "utils/epoll.h"
 
 #include "utils/utils.h"
 
@@ -72,7 +71,7 @@ int recv_request(int fd, struct queue *qu)
       return -2;
     }
     log_trace("recv_request: read '%d' bytes from fd '%d'", nbytes, fd);
-    queue_push_ex(qu, nbytes);
+    queue_push_ex(qu, (size_t) nbytes);
   }
 }
 

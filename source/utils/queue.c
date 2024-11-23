@@ -130,7 +130,7 @@ int queue_pop_no_copy(struct queue *qu, char** data)
   }
 
   *data = qu->data;
-  int s = qu->size;
+  int s = (int) qu->size;
 
   qu->size = 0;
   qu->head = qu->data;
