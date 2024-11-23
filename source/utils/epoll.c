@@ -17,40 +17,6 @@
 #include "log/log.h"
 #include "utils/epoll.h"
 
-int sendall(int sfd, char* buf, int* len)
-{
-  assert(sfd != 0);
-  assert(buf != NULL);
-  assert(*len > 0);
-
-  long nbytes_sent = 0;
-  int total_to_send = *len, total_sent = 0;
-
-  for (; nbytes_sent < total_to_send;) {
-    nbytes_sent = send(sfd, buf, (size_t)total_to_send, 0);
-    if (nbytes_sent == -1) {
-      int err = errno;
-      *len = total_sent;
-      log_error("sendall: send failed, '%d'", err);
-      return err;
-    }
-
-    total_to_send -= (int)nbytes_sent;
-    buf += nbytes_sent;
-    total_sent += (int)nbytes_sent;
-    log_trace(
-        "sendall: in the loop nbytes_sent: '%d', total_to_send: '%u', "
-        "total_sent: '%u'",
-        nbytes_sent,
-        total_to_send,
-        total_sent);
-  }
-
-  *len = total_sent;
-  log_trace("sendall: done: len = '%u'", *len);
-  return 0;
-}
-
 int fd_poll_del_and_close(void* context)
 {
   struct epoll_ctl_info* info = context;
