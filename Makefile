@@ -23,19 +23,19 @@ debug:
 release:
 	cmake --preset=release
 	cmake --build --preset=release
-	ln -sf build/dev/compile_commands.json .
+	ln -sf build/release/compile_commands.json .
 
 zig_release:
 	cmake --preset=zig-release
 	cmake --build --preset=zig-release
-	ln -sf build/dev/compile_commands.json .
+	ln -sf build/zig-release/compile_commands.json .
 
 sanitize:
 	cmake --preset=sanitize
 	cmake --build --preset=sanitize
-	ln -sf build/dev/compile_commands.json .
+	ln -sf build/sanitize/compile_commands.json .
 
 ci-ubuntu:
 	cmake --preset=ci-linux-local
 	cmake --build --preset=ci-linux-local
-	ln -sf build/dev/compile_commands.json .
+	ln -sf build/ci-linux-local/compile_commands.json .
