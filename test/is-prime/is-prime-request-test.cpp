@@ -45,14 +45,16 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request->is_prime == false);
   }
 
-  /*SECTION("Valid request with floating-point number") {*/
-  /*  char raw_request[] = "{\"method\":\"isPrime\",\"number\":17.5}\n";*/
-  /*  REQUIRE(is_prime_request_builder(&request, raw_request,
-   * strlen(raw_request)) == 1);*/
-  /*  REQUIRE(request != NULL);*/
-  /*  REQUIRE(request->number < 0);*/
-  /*  REQUIRE(request->is_prime == false);*/
-  /*}*/
+  SECTION("Valid request with floating-point number")
+  {
+    char raw_request[] = "{\"method\":\"isPrime\",\"number\":17.5}\n";
+    REQUIRE(
+        is_prime_request_builder(&request, raw_request, strlen(raw_request))
+        == 1);
+    REQUIRE(request != NULL);
+    REQUIRE(request->number == 17);
+    REQUIRE(request->is_prime == true);
+  }
 
   if (request)
     is_prime_free(&request);
