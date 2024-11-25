@@ -1,3 +1,5 @@
+#ifndef INCLUDE_UTILS_QUEUE_H_
+#define INCLUDE_UTILS_QUEUE_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,3 +24,6 @@ int queue_pop_no_copy(struct queue* qu, char** data);
 #ifdef __cplusplus
 }
 #endif
+
+#endif  // INCLUDE_UTILS_QUEUE_H_
+

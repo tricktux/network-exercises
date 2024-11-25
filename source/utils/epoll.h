@@ -1,5 +1,6 @@
 
 #ifndef EPOLL_H
+#define EPOLL_H
 
 struct epoll_ctl_info {
   int efd;
