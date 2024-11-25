@@ -32,6 +32,8 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
+// TODO: This logic could be easily moved to the main loop
+// It's simple enough
 void handle_request(char* raw_req, size_t size)
 {
   assert(raw_req != NULL);
@@ -41,31 +43,27 @@ void handle_request(char* raw_req, size_t size)
   }
 
   // Split and handle requests here
-  struct is_prime_request **req, *it;
+  struct is_prime_request *req, *it;
   int r = is_prime_request_builder(&req, raw_req, size);
-  if (r < 0) {
+  if (r <= 0) {
     log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);
     return;
   }
-  for (it = req; it != NULL; it = it->next) {
-    r = is_prime_request_malformed(it);
-    if (r < 0) {
-      log_warn("recv_and_handle: is_prime_request_malformed returned '%d'", r);
-      // TODO: what else to do here
-    }
-    if (r == 0) {
-      r = is_prime(it);
-      if (r < 0) {
-        log_warn("recv_and_handle: is_prime returned '%d'", r);
-        // TODO: what else to do here
-      }
-    }
-    r = is_prime_beget_response(it);
-    if (r < 0) {
-      log_warn("recv_and_handle: is_prime returned '%d'", r);
-      // TODO: what else to do here
-    }
-  }
+  /*for (it = req; it != NULL; it = it->next) {*/
+  /*  r = is_prime_request_malformed(it);*/
+  /*  if (r < 0) {*/
+  /*    log_warn("recv_and_handle: is_prime_request_malformed returned '%d'", r);*/
+  /*    // TODO: what else to do here*/
+  /*  }*/
+  /*  if (r == 0) {*/
+  /*    r = is_prime(it);*/
+  /*    if (r < 0) {*/
+  /*      log_warn("recv_and_handle: is_prime returned '%d'", r);*/
+  /*      // TODO: what else to do here*/
+  /*    }*/
+  /*  }*/
+  /*  char* res = is_prime_beget_response(it);*/
+  /*}*/
 }
 
 int main()
