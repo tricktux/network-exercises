@@ -1,7 +1,12 @@
 {
   "name": "network-exercises",
   "version-semver": "0.1.0",
-  "dependencies": [],
+  "dependencies": [
+    {
+      "name": "json-c",
+      "version>=": "2023-08-12"
+    }
+  ],
   "default-features": [],
   "features": {
     "test": {
