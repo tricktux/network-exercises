@@ -26,6 +26,7 @@
 
 #define DELIMETERS "\n"
 
+/// Return the number of requests processed
 int is_prime_request_builder(struct is_prime_request** request,
                              char* raw_request,
                              size_t req_size)
@@ -34,26 +35,47 @@ int is_prime_request_builder(struct is_prime_request** request,
   assert(raw_request != NULL);
   assert(req_size > 0);
 
-  int j;
-  char *str1, *token;
-  char *saveptr1;
-  struct is_prime_request* preq;
+  bool prime;
+  int j = 0, number;
+  char *str1 = raw_request, *token, *saveptr1;
+  struct is_prime_request *prev;
 
   // tokenizer on the split delimiters
-  for (j = 1, str1 = raw_request; ; j++, str1 = NULL) {
+  for (; ; str1 = NULL) {
     token = strtok_r(str1, DELIMETERS, &saveptr1);
     if (token == NULL)
       break;
-    log_trace("%d: %s", j, token);
+    j++;
+    number = is_prime_request_malformed(token);
+    prime = is_prime(number);
 
+    // The very first request pointer should be the one passed 
+    // as argument to the function
+    struct is_prime_request *curr;
+    if (j == 0)
+      curr = *request;
+    is_prime_init(&curr, number, prime);
+
+    // Stop handling requests for this socket as soon as we
+    // find a malformed request
+    if (number < 0)
+      break;
+
+    // Singly linked list logic
+    if (j > 0)
+      prev->next = curr;
+    prev = curr;
   }
 
-  return 0;
+  return j;
 }
 
-int is_prime_init(struct is_prime_request** request, char *req, size_t req_size)
+void is_prime_init(struct is_prime_request** request, int number, bool prime)
 {
-
+  *request = malloc(sizeof(struct is_prime_request));
+  (*request)->next = NULL;
+  (*request)->is_prime = prime;
+  (*request)->number = number;
 }
 
 int is_prime_request_malformed(char *req) 
@@ -108,6 +130,26 @@ int is_prime_request_malformed(char *req)
   return number_value;
 }
 
-int is_prime(struct is_prime_request* request) {}
+bool is_prime(int number) 
+{
+  if (number <= 1)
+    return false; // less than 2 are not prime numbers
+  for (int i = 2; i * i <= number; i++) {
+    if (number % i == 0)
+      return false;
+  }
+  return true;
+}
+
 char* is_prime_beget_response(struct is_prime_request* request) {}
-int is_prime_free(struct is_prime_request** request) {}
+
+void is_prime_free(struct is_prime_request** request)
+{
+  assert(*request != NULL);
+  struct is_prime_request *curr = *request, *next = NULL;
+  do {
+    next = curr->next;
+    free(curr);
+    curr = next;
+  } while (curr != NULL);
+}
