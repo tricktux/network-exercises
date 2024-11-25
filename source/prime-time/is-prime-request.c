@@ -31,30 +31,28 @@ int is_prime_request_builder(struct is_prime_request** request,
                              char* raw_request,
                              size_t req_size)
 {
-  assert(*request != NULL);
   assert(raw_request != NULL);
   assert(req_size > 0);
 
   bool prime;
-  int j = 0, number;
+  int j = 1, number;
   char *str1 = raw_request, *token, *saveptr1;
   struct is_prime_request *prev;
 
   // tokenizer on the split delimiters
-  for (; ; str1 = NULL) {
+  for (; ; j++, str1 = NULL) {
     token = strtok_r(str1, DELIMETERS, &saveptr1);
     if (token == NULL)
       break;
-    j++;
     number = is_prime_request_malformed(token);
     prime = is_prime(number);
 
     // The very first request pointer should be the one passed 
     // as argument to the function
     struct is_prime_request *curr;
-    if (j == 0)
-      curr = *request;
     is_prime_init(&curr, number, prime);
+    if (j == 1)
+      *request = curr;
 
     // Stop handling requests for this socket as soon as we
     // find a malformed request
@@ -62,12 +60,12 @@ int is_prime_request_builder(struct is_prime_request** request,
       break;
 
     // Singly linked list logic
-    if (j > 0)
+    if (j > 1)
       prev->next = curr;
     prev = curr;
   }
 
-  return j;
+  return j - 1;
 }
 
 void is_prime_init(struct is_prime_request** request, int number, bool prime)
