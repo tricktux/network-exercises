@@ -54,10 +54,14 @@ int is_prime_request_builder(struct is_prime_request** request,
     if (j == 1)
       *request = curr;
 
+    is_prime_beget_response(curr);
     // Stop handling requests for this socket as soon as we
     // find a malformed request
-    if (number < 0)
+    if (number < 0) {
+      // Regardless this is a handled request
+      j++;
       break;
+    }
 
     // Singly linked list logic
     if (j > 1)
@@ -139,7 +143,16 @@ bool is_prime(int number)
   return true;
 }
 
-char* is_prime_beget_response(struct is_prime_request* request) {}
+void is_prime_beget_response(struct is_prime_request* request)
+{
+  assert(request != NULL);
+
+  if (request->number < 0) {
+    sprintf(request->response, PRIME_RESPONSE_FORMAT, "\"ill-formed-request!!!\"");
+    return;
+  }
+  sprintf(request->response, PRIME_RESPONSE_FORMAT, (request->is_prime ? "true" : "false"));
+}
 
 void is_prime_free(struct is_prime_request** request)
 {

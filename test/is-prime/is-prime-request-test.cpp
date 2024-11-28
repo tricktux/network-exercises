@@ -34,6 +34,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
     REQUIRE(request->next == NULL);
+    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":true}") == 0);
   }
 
   SECTION("Valid request with non-prime number")
@@ -45,6 +46,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request->number == 24);
     REQUIRE(request->is_prime == false);
     REQUIRE(request->next == NULL);
+    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":false}") == 0);
   }
 
   SECTION("Valid request with floating-point number")
@@ -57,6 +59,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
     REQUIRE(request->next == NULL);
+    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":true}") == 0);
   }
 
   SECTION("Valid request with prime number; followed by invalid request")
@@ -68,11 +71,34 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
     REQUIRE(request->next != NULL);
+    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":true}") == 0);
     struct is_prime_request *next = request->next;
     REQUIRE(next->number == 24);
     REQUIRE(next->is_prime == false);
     REQUIRE(next->next == NULL);
+    REQUIRE(strcmp(next->response, "{\"method\":\"isPrime\",\"prime\":false}") == 0);
   }
+
+  if (request)
+    is_prime_free(&request);
+}
+
+TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
+{
+  struct is_prime_request* request = NULL;
+
+  SECTION("Valid request with prime number")
+  {
+    char raw_request[] = "{\"method\":\"isPrime\",\"number\":foo}\n";
+    REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
+            == 1);
+    REQUIRE(request != NULL);
+    REQUIRE(request->number < 0);
+    REQUIRE(request->is_prime == false);
+    REQUIRE(request->next == NULL);
+    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":\"ill-formed-request!!!\"}") == 0);
+  }
+
 
   if (request)
     is_prime_free(&request);
