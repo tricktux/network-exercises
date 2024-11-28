@@ -171,13 +171,14 @@ void is_prime_beget_response(struct is_prime_request* request)
   assert(request != NULL);
 
   if (request->number < 0) {
-    sprintf(
-        request->response, PRIME_RESPONSE_FORMAT, "\"ill-formed-request!!!\"");
+    strcpy(request->response, PRIME_RESPONSE_ILL_FORMAT);
+    log_trace("is_prime_beget_response: '%s'", request->response);
     return;
   }
   sprintf(request->response,
           PRIME_RESPONSE_FORMAT,
           (request->is_prime ? "true" : "false"));
+  log_trace("is_prime_beget_response: '%s'", request->response);
 }
 
 void is_prime_free(struct is_prime_request** request)

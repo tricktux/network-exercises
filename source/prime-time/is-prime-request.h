@@ -11,6 +11,7 @@
 #define PRIME_RESPONSE_METHOD_VALUE_LEN 7
 #define PRIME_RESPONSE_NUMBER_KEY "prime"
 #define PRIME_RESPONSE_FORMAT "{\"method\":\"isPrime\",\"prime\":%s}\n"
+#define PRIME_RESPONSE_ILL_FORMAT "{\"metasldkjfhod\":\"isasldkjfPrime\",\"pralksdjfime\":\"ill-formed-request!!!\"}\n"
 
 #ifdef __cplusplus
 extern "C" {

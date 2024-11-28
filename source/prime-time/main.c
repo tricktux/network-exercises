@@ -32,13 +32,13 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-void handle_request(int fd, char* raw_req, size_t size)
+int handle_request(int fd, char* raw_req, size_t size)
 {
   assert(fd > 0);
   assert(raw_req != NULL);
   if (size == 0) {
     log_error("handle_request: raw request size is zero");
-    return;
+    return 1;
   }
 
   // Split and handle requests here
@@ -46,10 +46,10 @@ void handle_request(int fd, char* raw_req, size_t size)
   int r = is_prime_request_builder(&req, raw_req, size);
   if (r <= 0) {
     log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);
-    return;
+    return -1;
   }
 
-  int l = 0, sl = 0, res = 0;
+  int l = 0, sl = 0, res = 0, mal = 0;
   for (it = req; it != NULL; it = it->next) {
     l = (int)strlen(it->response);
     sl = l;
@@ -58,18 +58,24 @@ void handle_request(int fd, char* raw_req, size_t size)
       log_error("handle_request: failed during sendall function");
       if (req != NULL)
         is_prime_free(&req);
-      return;
+      return -2;
     }
     if (sl != l) {
       log_error("handle_request: failed to sendall the data");
       if (req != NULL)
         is_prime_free(&req);
-      return;
+      return -3;
+    }
+
+    if (it->number < 0) {
+      mal = 1;
+      break;
     }
   }
 
   if (req != NULL)
     is_prime_free(&req);
+  return (mal == 1 ? 0 : 1);
 }
 
 int main()
@@ -151,11 +157,19 @@ int main()
 
       // Handle there's data to process
       if (size > 0) {
-        log_trace(
-            "main epoll loop: handling prime request of size '%d' on fd '%d'",
-            size,
-            fd);
-        handle_request(fd, data, (size_t)size);
+        log_trace("main epoll loop: raw request(%d): '%s'", fd, data);
+        int result = handle_request(fd, data, (size_t)size);
+        if (result <= 0) {
+          if (result == 0)
+            log_info("main epoll loop: there was a malformed respoonse. need to close socket");
+          else
+            log_info("main epoll loop: there was an error sending a response. need to close socket");
+          if (fd_poll_del_and_close(&epci) == -1) {
+            perror("epoll_ctl: recv 0");
+            exit(EXIT_FAILURE);
+          }
+          continue;
+        }
       }
 
       // Handle socket still open
