@@ -59,6 +59,21 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request->next == NULL);
   }
 
+  SECTION("Valid request with prime number; followed by invalid request")
+  {
+    char raw_request[] = "{\"method\":\"isPrime\",\"number\":17}\n{\"method\":\"isPrime\",\"number\":24}\n";
+    REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
+            == 2);
+    REQUIRE(request != NULL);
+    REQUIRE(request->number == 17);
+    REQUIRE(request->is_prime == true);
+    REQUIRE(request->next != NULL);
+    struct is_prime_request *next = request->next;
+    REQUIRE(next->number == 24);
+    REQUIRE(next->is_prime == false);
+    REQUIRE(next->next == NULL);
+  }
+
   if (request)
     is_prime_free(&request);
 }
