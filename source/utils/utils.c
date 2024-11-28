@@ -33,6 +33,8 @@ int init_logs(FILE* fd, int log_level)
 
   log_set_level(log_level);
 
+  log_set_quiet(true);
+
   return 0;
 }
 
