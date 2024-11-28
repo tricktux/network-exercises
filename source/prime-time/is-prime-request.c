@@ -37,19 +37,19 @@ int is_prime_request_builder(struct is_prime_request** request,
   bool prime;
   int j = 1, number;
   char *str1 = raw_request, *token, *saveptr1;
-  struct is_prime_request *prev;
+  struct is_prime_request* prev;
 
   // tokenizer on the split delimiters
-  for (; ; j++, str1 = NULL) {
+  for (;; j++, str1 = NULL) {
     token = strtok_r(str1, DELIMETERS, &saveptr1);
     if (token == NULL)
       break;
     number = is_prime_request_malformed(token);
     prime = is_prime(number);
 
-    // The very first request pointer should be the one passed 
+    // The very first request pointer should be the one passed
     // as argument to the function
-    struct is_prime_request *curr;
+    struct is_prime_request* curr;
     is_prime_init(&curr, number, prime);
     if (j == 1)
       *request = curr;
@@ -82,7 +82,7 @@ void is_prime_init(struct is_prime_request** request, int number, bool prime)
   (*request)->number = number;
 }
 
-int is_prime_request_malformed(char *req) 
+int is_prime_request_malformed(char* req)
 {
   assert(req != NULL);
 
@@ -90,43 +90,54 @@ int is_prime_request_malformed(char *req)
 
   {
     // If there's a period it probably means a double and that's is a non-prime
-    char *r = NULL;
+    char* r = NULL;
     r = strchr(req, '.');
     if (r != NULL)
       return -8;
   }
 
   // Is json?
-  json_object *root = json_tokener_parse(req);
+  json_object* root = json_tokener_parse(req);
   if (!root) {
     log_warn("is_prime_request_malformed: json_tokener_parse failed");
     return -1;
   }
 
-  json_object *method = json_object_object_get(root, PRIME_RESPONSE_METHOD_KEY);
+  json_object* method = json_object_object_get(root, PRIME_RESPONSE_METHOD_KEY);
   if (!method) {
     json_object_put(root);
-    log_warn("is_prime_request_malformed: json_object_object_get failed for 'method'");
+    log_warn(
+        "is_prime_request_malformed: json_object_object_get failed for "
+        "'method'");
     return -2;
   }
 
-  const char *method_value = json_object_get_string(method);
+  const char* method_value = json_object_get_string(method);
   if (!method_value) {
     json_object_put(root);
-    log_warn("is_prime_request_malformed: json_object_get_string failed for 'method'");
+    log_warn(
+        "is_prime_request_malformed: json_object_get_string failed for "
+        "'method'");
     return -3;
   }
 
-  if (strncmp(PRIME_RESPONSE_METHOD_VALUE, method_value, PRIME_RESPONSE_METHOD_VALUE_LEN) != 0) {
+  if (strncmp(PRIME_RESPONSE_METHOD_VALUE,
+              method_value,
+              PRIME_RESPONSE_METHOD_VALUE_LEN)
+      != 0)
+  {
     json_object_put(root);
-    log_warn("is_prime_request_malformed: method value did not match '%s'", method_value);
+    log_warn("is_prime_request_malformed: method value did not match '%s'",
+             method_value);
     return -4;
   }
 
-  json_object *number = json_object_object_get(root, PRIME_REQUEST_NUMBER_KEY);
+  json_object* number = json_object_object_get(root, PRIME_REQUEST_NUMBER_KEY);
   if (!method) {
     json_object_put(root);
-    log_warn("is_prime_request_malformed: json_object_object_get failed for 'number'");
+    log_warn(
+        "is_prime_request_malformed: json_object_object_get failed for "
+        "'number'");
     return -5;
   }
 
@@ -134,7 +145,9 @@ int is_prime_request_malformed(char *req)
   int number_value = json_object_get_int(number);
   if (errno != 0) {
     json_object_put(root);
-    log_warn("is_prime_request_malformed: json_object_get_int64 failed for '%s'", number);
+    log_warn(
+        "is_prime_request_malformed: json_object_get_int64 failed for '%s'",
+        number);
     return -7;
   }
 
@@ -142,10 +155,10 @@ int is_prime_request_malformed(char *req)
   return number_value;
 }
 
-bool is_prime(int number) 
+bool is_prime(int number)
 {
   if (number <= 1)
-    return false; // less than 2 are not prime numbers
+    return false;  // less than 2 are not prime numbers
   for (int i = 2; i * i <= number; i++) {
     if (number % i == 0)
       return false;
@@ -158,10 +171,13 @@ void is_prime_beget_response(struct is_prime_request* request)
   assert(request != NULL);
 
   if (request->number < 0) {
-    sprintf(request->response, PRIME_RESPONSE_FORMAT, "\"ill-formed-request!!!\"");
+    sprintf(
+        request->response, PRIME_RESPONSE_FORMAT, "\"ill-formed-request!!!\"");
     return;
   }
-  sprintf(request->response, PRIME_RESPONSE_FORMAT, (request->is_prime ? "true" : "false"));
+  sprintf(request->response,
+          PRIME_RESPONSE_FORMAT,
+          (request->is_prime ? "true" : "false"));
 }
 
 void is_prime_free(struct is_prime_request** request)

@@ -26,4 +26,3 @@ int queue_pop_no_copy(struct queue* qu, char** data);
 #endif
 
 #endif  // INCLUDE_UTILS_QUEUE_H_
-

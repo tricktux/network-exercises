@@ -51,7 +51,7 @@ void handle_request(int fd, char* raw_req, size_t size)
 
   int l = 0, sl = 0, res = 0;
   for (it = req; it != NULL; it = it->next) {
-    l = (int) strlen(it->response);
+    l = (int)strlen(it->response);
     sl = l;
     res = sendall(fd, it->response, &l);
     if (res != 0) {
@@ -151,8 +151,11 @@ int main()
 
       // Handle there's data to process
       if (size > 0) {
-        log_trace("main epoll loop: handling prime request of size '%d' on fd '%d'", size, fd);
-        handle_request(fd, data, (size_t) size);
+        log_trace(
+            "main epoll loop: handling prime request of size '%d' on fd '%d'",
+            size,
+            fd);
+        handle_request(fd, data, (size_t)size);
       }
 
       // Handle socket still open

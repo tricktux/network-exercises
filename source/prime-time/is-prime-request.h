@@ -10,8 +10,7 @@
 #define PRIME_RESPONSE_METHOD_VALUE "isPrime"
 #define PRIME_RESPONSE_METHOD_VALUE_LEN 7
 #define PRIME_RESPONSE_NUMBER_KEY "prime"
-#define PRIME_RESPONSE_FORMAT \
-  "{\"method\":\"isPrime\",\"prime\":%s}\n"
+#define PRIME_RESPONSE_FORMAT "{\"method\":\"isPrime\",\"prime\":%s}\n"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,12 +26,11 @@ struct is_prime_request {
 int is_prime_request_builder(struct is_prime_request** request,
                              char* raw_request,
                              size_t req_size);
-int is_prime_request_malformed(char *req);
+int is_prime_request_malformed(char* req);
 bool is_prime(int number);
 void is_prime_beget_response(struct is_prime_request* request);
 void is_prime_init(struct is_prime_request** request, int number, bool prime);
 void is_prime_free(struct is_prime_request** request);
-
 
 #ifdef __cplusplus
 }
