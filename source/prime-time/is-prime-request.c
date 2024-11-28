@@ -55,6 +55,11 @@ int is_prime_request_builder(struct is_prime_request** request,
       *request = curr;
 
     is_prime_beget_response(curr);
+
+    // Singly linked list logic
+    if (j > 1)
+      prev->next = curr;
+
     // Stop handling requests for this socket as soon as we
     // find a malformed request
     if (number < 0) {
@@ -63,9 +68,6 @@ int is_prime_request_builder(struct is_prime_request** request,
       break;
     }
 
-    // Singly linked list logic
-    if (j > 1)
-      prev->next = curr;
     prev = curr;
   }
 
