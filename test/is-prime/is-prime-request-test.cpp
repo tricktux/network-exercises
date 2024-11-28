@@ -93,7 +93,7 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
 
   SECTION("Valid request with prime number")
   {
-    char raw_request[] = "{\"method\":\"isPrime\",\"number\":foo}\n";
+    char raw_request[] = "{\"method\":\"isPrime\",\"number\":\"foo\"}\n";
     REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
             == 1);
     REQUIRE(request != NULL);
@@ -103,6 +103,40 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
     REQUIRE(strcmp(request->response, PRIME_MALFORMED) == 0);
   }
 
+  SECTION("Invalid composite request with prime number; followed by non prime request")
+  {
+    char raw_request[] = 
+      "{\"method\":\"isPrime\",\"number\":17}\n"
+      "{\"method\":\"isPrime\",\"number\":24}\n"
+      "{\"method\":\"isPrime\",\"number\":13}\n"
+      "{\"method\":\"isPrime\",\"number\":\"hola\"}\n"
+      "{\"method\":\"isPrime\",\"number\":23}\n";
+    REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
+            == 4);
+    REQUIRE(request != NULL);
+    REQUIRE(request->number == 17);
+    REQUIRE(request->is_prime == true);
+    REQUIRE(request->next != NULL);
+    REQUIRE(strcmp(request->response, PRIME_TRUE) == 0);
+
+    struct is_prime_request *next = request->next;
+    REQUIRE(next->number == 24);
+    REQUIRE(next->is_prime == false);
+    REQUIRE(next->next != NULL);
+    REQUIRE(strcmp(next->response, PRIME_FALSE) == 0);
+
+    next = next->next;
+    REQUIRE(next->number == 13);
+    REQUIRE(next->is_prime == true);
+    REQUIRE(next->next != NULL);
+    REQUIRE(strcmp(next->response, PRIME_TRUE) == 0);
+
+    next = next->next;
+    REQUIRE(next->number < 0);
+    REQUIRE(next->is_prime == false);
+    REQUIRE(next->next == NULL);
+    REQUIRE(strcmp(next->response, PRIME_MALFORMED) == 0);
+  }
 
   if (request)
     is_prime_free(&request);
