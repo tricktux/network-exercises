@@ -11,7 +11,7 @@
 #define PRIME_RESPONSE_METHOD_VALUE_LEN 7
 #define PRIME_RESPONSE_NUMBER_KEY "prime"
 #define PRIME_RESPONSE_FORMAT \
-  "{\"method\":\"isPrime\",\"prime\":%s}"
+  "{\"method\":\"isPrime\",\"prime\":%s}\n"
 
 #ifdef __cplusplus
 extern "C" {
