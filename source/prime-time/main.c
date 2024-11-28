@@ -32,10 +32,9 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-// TODO: This logic could be easily moved to the main loop
-// It's simple enough
-void handle_request(char* raw_req, size_t size)
+void handle_request(int fd, char* raw_req, size_t size)
 {
+  assert(fd > 0);
   assert(raw_req != NULL);
   if (size == 0) {
     log_error("handle_request: raw request size is zero");
@@ -43,27 +42,34 @@ void handle_request(char* raw_req, size_t size)
   }
 
   // Split and handle requests here
-  struct is_prime_request *req, *it;
+  struct is_prime_request *req = NULL, *it = NULL;
   int r = is_prime_request_builder(&req, raw_req, size);
   if (r <= 0) {
     log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);
     return;
   }
-  /*for (it = req; it != NULL; it = it->next) {*/
-  /*  r = is_prime_request_malformed(it);*/
-  /*  if (r < 0) {*/
-  /*    log_warn("recv_and_handle: is_prime_request_malformed returned '%d'", r);*/
-  /*    // TODO: what else to do here*/
-  /*  }*/
-  /*  if (r == 0) {*/
-  /*    r = is_prime(it);*/
-  /*    if (r < 0) {*/
-  /*      log_warn("recv_and_handle: is_prime returned '%d'", r);*/
-  /*      // TODO: what else to do here*/
-  /*    }*/
-  /*  }*/
-  /*  char* res = is_prime_beget_response(it);*/
-  /*}*/
+
+  int l = 0, sl = 0, res = 0;
+  for (it = req; it != NULL; it = it->next) {
+    l = (int) strlen(it->response);
+    sl = l;
+    res = sendall(fd, it->response, &l);
+    if (res != 0) {
+      log_error("handle_request: failed during sendall function");
+      if (req != NULL)
+        is_prime_free(&req);
+      return;
+    }
+    if (sl != l) {
+      log_error("handle_request: failed to sendall the data");
+      if (req != NULL)
+        is_prime_free(&req);
+      return;
+    }
+  }
+
+  if (req != NULL)
+    is_prime_free(&req);
 }
 
 int main()
@@ -146,7 +152,7 @@ int main()
       // Handle there's data to process
       if (size > 0) {
         log_trace("main epoll loop: handling prime request of size '%d' on fd '%d'", size, fd);
-        handle_request(data, (size_t) size);
+        handle_request(fd, data, (size_t) size);
       }
 
       // Handle socket still open
