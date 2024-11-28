@@ -33,6 +33,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request != NULL);
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
+    REQUIRE(request->next == NULL);
   }
 
   SECTION("Valid request with non-prime number")
@@ -43,6 +44,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request != NULL);
     REQUIRE(request->number == 24);
     REQUIRE(request->is_prime == false);
+    REQUIRE(request->next == NULL);
   }
 
   SECTION("Valid request with floating-point number")
@@ -54,6 +56,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request != NULL);
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
+    REQUIRE(request->next == NULL);
   }
 
   if (request)
