@@ -62,7 +62,7 @@ int create_server(const char* port, int* listen_fd)
   assert(listen_fd != NULL);
 
   struct addrinfo hints;
-  struct addrinfo** result = NULL;
+  struct addrinfo* result = NULL;
   // getaddrinfo
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
@@ -73,7 +73,7 @@ int create_server(const char* port, int* listen_fd)
   hints.ai_addr = NULL;
   hints.ai_next = NULL;
 
-  int s = getaddrinfo(NULL, port, &hints, result);
+  int s = getaddrinfo(NULL, port, &hints, &result);
   if (s != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
     return -1;
@@ -82,7 +82,7 @@ int create_server(const char* port, int* listen_fd)
   int fd;
   struct addrinfo* rp;
   log_trace("main: passed getaddrinfo");
-  for (rp = *result; rp != NULL; rp = rp->ai_next) {
+  for (rp = result; rp != NULL; rp = rp->ai_next) {
     fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
     if (fd == -1)
       continue;
@@ -95,7 +95,7 @@ int create_server(const char* port, int* listen_fd)
     close(fd);
   }
 
-  freeaddrinfo(*result); /* No longer needed */
+  freeaddrinfo(result); /* No longer needed */
   log_trace("main: freeaddrinfo");
 
   if (rp == NULL) { /* No address succeeded */
