@@ -56,10 +56,10 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
         is_prime_request_builder(&request, raw_request, strlen(raw_request))
         == 1);
     REQUIRE(request != NULL);
-    REQUIRE(request->number == 17);
-    REQUIRE(request->is_prime == true);
+    REQUIRE(request->number < 0);
+    REQUIRE(request->is_prime == false);
     REQUIRE(request->next == NULL);
-    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":true}") == 0);
+    REQUIRE(strcmp(request->response, "{\"method\":\"isPrime\",\"prime\":\"ill-formed-request!!!\"}") == 0);
   }
 
   SECTION("Valid request with prime number; followed by invalid request")

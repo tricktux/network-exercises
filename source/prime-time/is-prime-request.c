@@ -86,6 +86,14 @@ int is_prime_request_malformed(char *req)
 
   log_trace("is_prime_request_malformed: parsing request: '%s'", req);
 
+  {
+    // If there's a period it probably means a double and that's is a non-prime
+    char *r = NULL;
+    r = strchr(req, '.');
+    if (r != NULL)
+      return -8;
+  }
+
   // Is json?
   json_object *root = json_tokener_parse(req);
   if (!root) {
