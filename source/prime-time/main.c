@@ -67,7 +67,7 @@ int handle_request(int fd, char* raw_req, size_t size)
       return -3;
     }
 
-    if (it->number < 0) {
+    if (it->is_malformed) {
       mal = 1;
       break;
     }

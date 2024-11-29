@@ -38,6 +38,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request != NULL);
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(request->next == NULL);
     REQUIRE(strcmp(request->response, PRIME_TRUE) == 0);
   }
@@ -50,6 +51,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request != NULL);
     REQUIRE(request->number == 24);
     REQUIRE(request->is_prime == false);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(request->next == NULL);
     REQUIRE(strcmp(request->response, PRIME_FALSE) == 0);
   }
@@ -60,8 +62,8 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
             == 1);
     REQUIRE(request != NULL);
-    REQUIRE(request->number < 0);
     REQUIRE(request->is_prime == false);
+    REQUIRE(request->is_malformed == true);
     REQUIRE(request->next == NULL);
     REQUIRE(strcmp(request->response, PRIME_MALFORMED) == 0);
   }
@@ -78,11 +80,13 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     REQUIRE(request != NULL);
     REQUIRE(request->number == 17);
     REQUIRE(request->is_prime == true);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(request->next != NULL);
     REQUIRE(strcmp(request->response, PRIME_TRUE) == 0);
     struct is_prime_request* next = request->next;
     REQUIRE(next->number == 24);
     REQUIRE(next->is_prime == false);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(next->next == NULL);
     REQUIRE(strcmp(next->response, PRIME_FALSE) == 0);
   }
@@ -101,8 +105,8 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
     REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
             == 1);
     REQUIRE(request != NULL);
-    REQUIRE(request->number < 0);
     REQUIRE(request->is_prime == false);
+    REQUIRE(request->is_malformed == true);
     REQUIRE(request->next == NULL);
     REQUIRE(strcmp(request->response, PRIME_MALFORMED) == 0);
   }
@@ -112,7 +116,7 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
       "request")
   {
     char raw_request[] =
-        "{\"method\":\"isPrime\",\"number\":17}\n"
+        "{\"method\":\"isPrime\",\"number\":72727}\n"
         "{\"method\":\"isPrime\",\"number\":24}\n"
         "{\"method\":\"isPrime\",\"number\":13}\n"
         "{\"method\":\"isPrime\",\"number\":\"hola\"}\n"
@@ -120,26 +124,29 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
     REQUIRE(is_prime_request_builder(&request, raw_request, strlen(raw_request))
             == 4);
     REQUIRE(request != NULL);
-    REQUIRE(request->number == 17);
+    REQUIRE(request->number == 72727);
     REQUIRE(request->is_prime == true);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(request->next != NULL);
     REQUIRE(strcmp(request->response, PRIME_TRUE) == 0);
 
     struct is_prime_request* next = request->next;
     REQUIRE(next->number == 24);
     REQUIRE(next->is_prime == false);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(next->next != NULL);
     REQUIRE(strcmp(next->response, PRIME_FALSE) == 0);
 
     next = next->next;
     REQUIRE(next->number == 13);
     REQUIRE(next->is_prime == true);
+    REQUIRE(request->is_malformed == false);
     REQUIRE(next->next != NULL);
     REQUIRE(strcmp(next->response, PRIME_TRUE) == 0);
 
     next = next->next;
-    REQUIRE(next->number < 0);
     REQUIRE(next->is_prime == false);
+    REQUIRE(request->is_malformed == true);
     REQUIRE(next->next == NULL);
     REQUIRE(strcmp(next->response, PRIME_MALFORMED) == 0);
   }
