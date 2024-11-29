@@ -24,7 +24,7 @@
 
 #include "prime-time/is-prime-request.h"
 
-#define DELIMETERS "\n"
+#define DELIMITERS "\n"
 
 /// Return the number of requests processed
 int is_prime_request_builder(struct is_prime_request** request,
@@ -41,7 +41,7 @@ int is_prime_request_builder(struct is_prime_request** request,
 
   // tokenizer on the split delimiters
   for (;; j++, str1 = NULL) {
-    token = strtok_r(str1, DELIMETERS, &saveptr1);
+    token = strtok_r(str1, DELIMITERS, &saveptr1);
     if (token == NULL)
       break;
     number = is_prime_request_malformed(token);
