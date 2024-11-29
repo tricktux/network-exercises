@@ -213,4 +213,6 @@ void is_prime_free(struct is_prime_request** request)
     free(curr);
     curr = next;
   } while (curr != NULL);
+
+  *request = NULL;
 }
