@@ -44,6 +44,9 @@ int is_prime_request_builder(struct is_prime_request** request,
     token = strtok_r(str1, DELIMITERS, &saveptr1);
     if (token == NULL)
       break;
+    // We have exceeded the request size
+    if ((token - raw_request) >= req_size)
+      break;
     number = is_prime_request_malformed(token);
     prime = is_prime(number);
 
