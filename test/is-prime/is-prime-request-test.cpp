@@ -133,20 +133,20 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
     struct is_prime_request* next = request->next;
     REQUIRE(next->number == 24);
     REQUIRE(next->is_prime == false);
-    REQUIRE(request->is_malformed == false);
+    REQUIRE(next->is_malformed == false);
     REQUIRE(next->next != NULL);
     REQUIRE(strcmp(next->response, PRIME_FALSE) == 0);
 
     next = next->next;
     REQUIRE(next->number == 13);
     REQUIRE(next->is_prime == true);
-    REQUIRE(request->is_malformed == false);
+    REQUIRE(next->is_malformed == false);
     REQUIRE(next->next != NULL);
     REQUIRE(strcmp(next->response, PRIME_TRUE) == 0);
 
     next = next->next;
     REQUIRE(next->is_prime == false);
-    REQUIRE(request->is_malformed == true);
+    REQUIRE(next->is_malformed == true);
     REQUIRE(next->next == NULL);
     REQUIRE(strcmp(next->response, PRIME_MALFORMED) == 0);
   }
