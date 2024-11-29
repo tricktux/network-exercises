@@ -32,9 +32,10 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-int handle_request(int fd, char* raw_req, size_t size)
+int handle_request(struct queue *sdq, int fd, char* raw_req, size_t size)
 {
   assert(fd > 0);
+  assert(sdq != NULL);
   assert(raw_req != NULL);
   if (size == 0) {
     log_error("handle_request: raw request size is zero");
@@ -117,8 +118,9 @@ int main()
   char* data;
   int n, fd, res, size;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
-  struct queue* qu = nullptr;
-  queue_init(&qu, QUEUE_CAPACITY);
+  struct queue* rcqu = NULL, *sdqu = NULL;
+  queue_init(&rcqu, QUEUE_CAPACITY);
+  queue_init(&sdqu, QUEUE_CAPACITY);
 
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
@@ -142,8 +144,8 @@ int main()
 
       // Echo data now then while there is any
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
-      res = recv_request(fd, qu);
-      size = queue_pop_no_copy(qu, &data);
+      res = recv_request(fd, rcqu);
+      size = queue_pop_no_copy(rcqu, &data);
 
       // Handle error case while recv data
       if (res < -1) {
