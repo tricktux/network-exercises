@@ -11,13 +11,14 @@
 #define PRIME_RESPONSE_METHOD_VALUE_LEN 7
 #define PRIME_RESPONSE_NUMBER_KEY "prime"
 #define PRIME_RESPONSE_FORMAT "{\"method\":\"isPrime\",\"prime\":%s}\n"
-#define PRIME_RESPONSE_ILL_FORMAT "{\"metasldkjfhod\":\"isasldkjfPrime\",\"pralksdjfime\":\"ill-formed-request!!!\"}\n"
+#define PRIME_RESPONSE_ILL_RESPONSE "\"ill-formed-request!!!\""
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct is_prime_request {
+  size_t resp_size;
   char response[PRIME_MAX_RESPONSE_SIZE];
   bool is_prime;
   bool is_malformed;

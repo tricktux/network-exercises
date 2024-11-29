@@ -34,8 +34,8 @@ int is_prime_request_builder(struct is_prime_request** request,
   assert(raw_request != NULL);
   assert(req_size > 0);
 
-  bool prime, malformed;
-  int j = 1, number;
+  bool malformed;
+  int j = 1;
   char *str1 = raw_request, *token, *saveptr1;
   struct is_prime_request* prev;
 
@@ -192,11 +192,13 @@ void is_prime_beget_response(struct is_prime_request* request)
   assert(request != NULL);
 
   if (request->is_malformed) {
-    strcpy(request->response, PRIME_RESPONSE_ILL_FORMAT);
+    request->resp_size = sprintf(request->response,
+            PRIME_RESPONSE_FORMAT,
+            PRIME_RESPONSE_ILL_RESPONSE);
     log_trace("is_prime_beget_response: '%s'", request->response);
     return;
   }
-  sprintf(request->response,
+  request->resp_size = sprintf(request->response,
           PRIME_RESPONSE_FORMAT,
           (request->is_prime ? "true" : "false"));
   log_trace("is_prime_beget_response: '%s'", request->response);
