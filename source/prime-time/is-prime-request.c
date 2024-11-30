@@ -21,21 +21,23 @@
 #include <json-c/json_tokener.h>
 
 #include "log/log.h"
+#include "utils/queue.h"
 
 #include "prime-time/is-prime-request.h"
 
 #define DELIMITERS "\n"
 
 /// Return the number of requests processed
-int is_prime_request_builder(struct is_prime_request** request,
+int is_prime_request_builder(struct queue *sdq, struct is_prime_request** request,
                              char* raw_request,
                              size_t req_size)
 {
+  assert(sdq != NULL);
   assert(raw_request != NULL);
   assert(req_size > 0);
 
   bool malformed;
-  int j = 1;
+  int j = 1, size;
   char *str1 = raw_request, *token, *saveptr1;
   struct is_prime_request* prev;
 
@@ -45,7 +47,7 @@ int is_prime_request_builder(struct is_prime_request** request,
     if (token == NULL)
       break;
     // We have exceeded the request size
-    if ((token - raw_request) >= req_size)
+    if ((token - raw_request) >= (long) req_size)
       break;
 
     // The very first request pointer should be the one passed
@@ -57,7 +59,8 @@ int is_prime_request_builder(struct is_prime_request** request,
 
     malformed = is_prime_request_malformed(curr, token);
     is_prime_request_f(curr);
-    is_prime_beget_response(curr);
+    is_prime_beget_response(curr, sdq->head, &size);
+    queue_push_ex(sdq, (size_t) size);
 
     // Singly linked list logic
     if (j > 1)
@@ -187,21 +190,23 @@ void is_prime_request_f(struct is_prime_request *request)
   request->is_prime = true;
 }
 
-void is_prime_beget_response(struct is_prime_request* request)
+void is_prime_beget_response(struct is_prime_request* request, char *response, int *size)
 {
   assert(request != NULL);
+  assert(response != NULL);
+  assert(size != NULL);
 
   if (request->is_malformed) {
-    request->resp_size = sprintf(request->response,
+    *size = sprintf(response,
             PRIME_RESPONSE_FORMAT,
             PRIME_RESPONSE_ILL_RESPONSE);
-    log_trace("is_prime_beget_response: '%s'", request->response);
+    log_trace("is_prime_beget_response: '%s'", response);
     return;
   }
-  request->resp_size = sprintf(request->response,
+  *size = sprintf(response,
           PRIME_RESPONSE_FORMAT,
           (request->is_prime ? "true" : "false"));
-  log_trace("is_prime_beget_response: '%s'", request->response);
+  log_trace("is_prime_beget_response: '%s'", response);
 }
 
 void is_prime_free(struct is_prime_request** request)

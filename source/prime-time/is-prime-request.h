@@ -18,20 +18,18 @@ extern "C" {
 #endif
 
 struct is_prime_request {
-  size_t resp_size;
-  char response[PRIME_MAX_RESPONSE_SIZE];
   bool is_prime;
   bool is_malformed;
   int number;
   struct is_prime_request* next;
 };
 
-int is_prime_request_builder(struct is_prime_request** request,
+int is_prime_request_builder(struct queue *sdq, struct is_prime_request** request,
                              char* raw_request,
                              size_t req_size);
 bool is_prime_request_malformed(struct is_prime_request *request, char* req);
 void is_prime_request_f(struct is_prime_request *request);
-void is_prime_beget_response(struct is_prime_request* request);
+void is_prime_beget_response(struct is_prime_request* request, char *response, int *size);
 void is_prime_init(struct is_prime_request** request);
 void is_prime_free(struct is_prime_request** request);
 

@@ -1,6 +1,7 @@
 
 add_executable(is-prime-test 
     "${CMAKE_SOURCE_DIR}/source/log/log.c"
+    "${CMAKE_SOURCE_DIR}/source/utils/queue.c"
     "${CMAKE_SOURCE_DIR}/source/prime-time/is-prime-request.c"
     is-prime-request-test.cpp
 )
