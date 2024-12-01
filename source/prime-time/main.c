@@ -116,8 +116,8 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  char* data;
-  int n, fd, res, size;
+  char *data, *sddata;
+  int n, fd, res, size, sdsize;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue* rcqu = NULL, *sdqu = NULL;
   queue_init(&rcqu, QUEUE_CAPACITY);
@@ -173,8 +173,8 @@ int main()
           }
           continue;
         }
-        size = queue_pop_no_copy(sdqu, &data);
-        res = sendall(fd, data, &size);
+        sdsize = queue_pop_no_copy(sdqu, &sddata);
+        res = sendall(fd, sddata, &sdsize);
         if (res != 0) {
           log_error("handle_request: failed during sendall function");
         }
