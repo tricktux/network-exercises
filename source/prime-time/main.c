@@ -89,7 +89,7 @@ int main()
   }
 
   char *data, *sddata;
-  int n, fd, res, size, sdsize, rs;
+  int n, fd, res, size, sdsize, rs, result;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue* rcqu = NULL, *sdqu = NULL;
   queue_init(&rcqu, QUEUE_CAPACITY);
@@ -133,22 +133,17 @@ int main()
       // Handle there's data to process
       if (size > 0) {
         log_trace("main epoll loop: raw request(%d): '%s'", fd, data);
-        int result = handle_request(sdqu, data, (size_t)size);
-        if (result <= 0) {
-          if (result == 0)
-            log_info("main epoll loop: there was a malformed respoonse. need to close socket");
-          else
-            log_info("main epoll loop: there was an error handling the request. need to close socket");
-          if (fd_poll_del_and_close(&epci) == -1) {
-            perror("epoll_ctl: recv 0");
-            exit(EXIT_FAILURE);
-          }
-          continue;
-        }
+        result = handle_request(sdqu, data, (size_t)size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
         rs = sendall(fd, sddata, &sdsize);
-        if (rs != 0) {
-          log_error("main epoll loop:: failed during sendall function");
+
+        if ((result <= 0) || (rs != 0)) {
+          if (result == 0)
+            log_info("main epoll loop: there was a malformed respoonse. need to close socket");
+          else if (result < 0)
+            log_info("main epoll loop: there was an error handling the request. need to close socket");
+          else if (rs != 0)
+            log_error("main epoll loop:: failed during sendall function");
           if (fd_poll_del_and_close(&epci) == -1) {
             perror("epoll_ctl: recv 0");
             exit(EXIT_FAILURE);
