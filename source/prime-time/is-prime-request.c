@@ -82,16 +82,6 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
 
   log_trace("is_prime_request_malformed: parsing request: '%s'", req);
 
-  {
-    // If there's a period it probably means a double and that's is a non-prime
-    char* r = NULL;
-    r = strchr(req, '.');
-    if (r != NULL) {
-      request->is_malformed = true;
-      return true;
-    }
-  }
-
   // Is json?
   json_object* root = json_tokener_parse(req);
   if (!root) {
@@ -106,6 +96,14 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
     log_warn(
         "is_prime_request_malformed: json_object_object_get failed for "
         "'method'");
+    request->is_malformed = true;
+    return true;
+  }
+
+  if (json_object_get_type(method) != json_type_string) {
+    json_object_put(root);
+    log_warn(
+      "is_prime_request_malformed: method is not of type string");
     request->is_malformed = true;
     return true;
   }
@@ -138,6 +136,24 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
     log_warn(
         "is_prime_request_malformed: json_object_object_get failed for "
         "'number'");
+    request->is_malformed = true;
+    return true;
+  }
+
+  // If we receive a double, the request is technically not malformed
+  // but it's not a prime either.
+  json_type num_type = json_object_get_type(number);
+  if (num_type == json_type_double) {
+    json_object_put(root);
+    request->is_malformed = false;
+    request->number = -1;
+    return false;
+  }
+
+  if (num_type != json_type_int) {
+    json_object_put(root);
+    log_warn(
+      "is_prime_request_malformed: number is not of type int");
     request->is_malformed = true;
     return true;
   }

@@ -62,9 +62,9 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
     char raw_request[] = "{\"method\":\"isPrime\",\"number\":17.5}\n";
     REQUIRE(is_prime_request_builder(sdqu, raw_request, strlen(raw_request), &malformed)
             == 1);
-    REQUIRE(malformed == true);
+    REQUIRE(malformed == false);
     size = queue_pop_no_copy(sdqu, &data);
-    REQUIRE(strncmp(data, PRIME_RESPONSE_ILL_RESPONSE, size) == 0);
+    REQUIRE(strncmp(data, PRIME_FALSE, size) == 0);
   }
 
   SECTION(
@@ -98,9 +98,29 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
   queue_init(&sdqu, 1024);
   char response[1024];
 
-  SECTION("Valid request with prime number")
+  SECTION("Invalid request with letters")
   {
     char raw_request[] = "{\"method\":\"isPrime\",\"number\":\"foo\"}\n";
+    REQUIRE(is_prime_request_builder(sdqu, raw_request, strlen(raw_request), &malformed)
+            == 1);
+    REQUIRE(malformed == true);
+    size = queue_pop_no_copy(sdqu, &data);
+    REQUIRE(strncmp(data, PRIME_RESPONSE_ILL_RESPONSE, size) == 0);
+  }
+
+  SECTION("Invalid request with quoted number")
+  {
+    char raw_request[] = "{\"method\":\"isPrime\",\"number\":\"16\"}\n";
+    REQUIRE(is_prime_request_builder(sdqu, raw_request, strlen(raw_request), &malformed)
+            == 1);
+    REQUIRE(malformed == true);
+    size = queue_pop_no_copy(sdqu, &data);
+    REQUIRE(strncmp(data, PRIME_RESPONSE_ILL_RESPONSE, size) == 0);
+  }
+
+  SECTION("Invalid request with number but inside of array")
+  {
+    char raw_request[] = "{\"method\":\"isPrime\",\"number\":[16]}\n";
     REQUIRE(is_prime_request_builder(sdqu, raw_request, strlen(raw_request), &malformed)
             == 1);
     REQUIRE(malformed == true);
