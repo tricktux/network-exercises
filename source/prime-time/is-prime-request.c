@@ -58,7 +58,7 @@ int is_prime_request_builder(struct queue *sdq,
       req = curr;
 
     *malformed = is_prime_request_malformed(curr, token);
-    is_prime_request_f(curr);
+    curr->is_prime = is_prime_f(curr->number);
     is_prime_beget_response(curr, sdq->head, &size);
     queue_push_ex(sdq, (size_t) size);
 
@@ -175,22 +175,17 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
   return false;
 }
 
-void is_prime_request_f(struct is_prime_request *request)
+bool is_prime_f(int number)
 {
-  assert(request != NULL);
-
-  int number = request->number;
   if (number <= 1) {
-    request->is_prime = false;  // less than 2 are not prime numbers
-    return;
+    return false;  // less than 2 are not prime numbers
   }
   for (int i = 2; i * i <= number; i++) {
     if (number % i == 0) {
-      request->is_prime = false;
-      return;
+      return false;
     }
   }
-  request->is_prime = true;
+  return true;
 }
 
 void is_prime_beget_response(struct is_prime_request* request, char *response, int *size)
