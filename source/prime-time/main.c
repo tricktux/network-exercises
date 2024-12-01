@@ -146,9 +146,15 @@ int main()
           continue;
         }
         sdsize = queue_pop_no_copy(sdqu, &sddata);
+        log_trace("main epoll loop: queue(%d): '%s'", sdsize, sddata);
         res = sendall(fd, sddata, &sdsize);
         if (res != 0) {
-          log_error("handle_request: failed during sendall function");
+          log_error("main epoll loop:: failed during sendall function");
+          if (fd_poll_del_and_close(&epci) == -1) {
+            perror("epoll_ctl: recv 0");
+            exit(EXIT_FAILURE);
+          }
+          continue;
         }
       }
 
