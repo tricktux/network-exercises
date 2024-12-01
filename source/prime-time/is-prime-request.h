@@ -22,9 +22,9 @@ struct is_prime_request {
   struct is_prime_request* next;
 };
 
-int is_prime_request_builder(struct queue *sdq, struct is_prime_request** request,
+int is_prime_request_builder(struct queue *sdq,
                              char* raw_request,
-                             size_t req_size);
+                             size_t req_size, bool *malformed);
 bool is_prime_request_malformed(struct is_prime_request *request, char* req);
 void is_prime_request_f(struct is_prime_request *request);
 void is_prime_beget_response(struct is_prime_request* request, char *response, int *size);

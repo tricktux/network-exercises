@@ -43,41 +43,14 @@ int handle_request(struct queue *sdq, int fd, char* raw_req, size_t size)
   }
 
   // Split and handle requests here
-  struct is_prime_request *req = NULL;
-  int r = is_prime_request_builder(sdq, &req, raw_req, size);
+  bool mal = false;
+  int r = is_prime_request_builder(sdq, raw_req, size, &mal);
   if (r <= 0) {
     log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);
     return -1;
   }
 
-  /*int l = 0, sl = 0, res = 0, mal = 0;*/
-  /*for (it = req; it != NULL; it = it->next) {*/
-  /*  l = (int)strlen(it->response);*/
-  /*  sl = l;*/
-  /*  res = sendall(fd, it->response, &l);*/
-  /*  if (res != 0) {*/
-  /*    log_error("handle_request: failed during sendall function");*/
-  /*    if (req != NULL)*/
-  /*      is_prime_free(&req);*/
-  /*    return -2;*/
-  /*  }*/
-  /*  if (sl != l) {*/
-  /*    log_error("handle_request: failed to sendall the data");*/
-  /*    if (req != NULL)*/
-  /*      is_prime_free(&req);*/
-  /*    return -3;*/
-  /*  }*/
-  /**/
-  /*  if (it->is_malformed) {*/
-  /*    mal = 1;*/
-  /*    break;*/
-  /*  }*/
-  /*}*/
-
-  if (req != NULL)
-    is_prime_free(&req);
-  return 1;
-  /*return (mal == 1 ? 0 : 1);*/
+  return (mal ? 0 : 1);
 }
 
 int main()

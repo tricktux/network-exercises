@@ -28,18 +28,18 @@
 #define DELIMITERS "\n"
 
 /// Return the number of requests processed
-int is_prime_request_builder(struct queue *sdq, struct is_prime_request** request,
+int is_prime_request_builder(struct queue *sdq,
                              char* raw_request,
-                             size_t req_size)
+                             size_t req_size, bool *malformed)
 {
   assert(sdq != NULL);
+  assert(malformed != NULL);
   assert(raw_request != NULL);
   assert(req_size > 0);
 
-  bool malformed;
   int j = 1, size;
   char *str1 = raw_request, *token, *saveptr1;
-  struct is_prime_request* prev;
+  struct is_prime_request* req = NULL, *prev;
 
   // tokenizer on the split delimiters
   for (;; j++, str1 = NULL) {
@@ -55,9 +55,9 @@ int is_prime_request_builder(struct queue *sdq, struct is_prime_request** reques
     struct is_prime_request* curr;
     is_prime_init(&curr);
     if (j == 1)
-      *request = curr;
+      req = curr;
 
-    malformed = is_prime_request_malformed(curr, token);
+    *malformed = is_prime_request_malformed(curr, token);
     is_prime_request_f(curr);
     is_prime_beget_response(curr, sdq->head, &size);
     queue_push_ex(sdq, (size_t) size);
@@ -68,7 +68,7 @@ int is_prime_request_builder(struct queue *sdq, struct is_prime_request** reques
 
     // Stop handling requests for this socket as soon as we
     // find a malformed request
-    if (malformed) {
+    if (*malformed) {
       // Regardless this is a handled request
       j++;
       break;
@@ -76,6 +76,9 @@ int is_prime_request_builder(struct queue *sdq, struct is_prime_request** reques
 
     prev = curr;
   }
+
+  if (req != NULL)
+    is_prime_free(&req);
 
   return j - 1;
 }
