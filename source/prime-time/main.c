@@ -32,9 +32,8 @@
 #define MAX_EVENTS 10
 #define PORT "18898"
 
-int handle_request(struct queue *sdq, int fd, char* raw_req, size_t size)
+int handle_request(struct queue *sdq, char* raw_req, size_t size)
 {
-  assert(fd > 0);
   assert(sdq != NULL);
   assert(raw_req != NULL);
   if (size == 0) {
@@ -134,7 +133,7 @@ int main()
       // Handle there's data to process
       if (size > 0) {
         log_trace("main epoll loop: raw request(%d): '%s'", fd, data);
-        int result = handle_request(sdqu, fd, data, (size_t)size);
+        int result = handle_request(sdqu, data, (size_t)size);
         if (result <= 0) {
           if (result == 0)
             log_info("main epoll loop: there was a malformed respoonse. need to close socket");
