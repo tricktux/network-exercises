@@ -31,6 +31,8 @@ int sendall(int sfd, char* buf, int* len)
   long nbytes_sent = 0;
   int total_to_send = *len, total_sent = 0;
 
+  log_trace("sendall: sending: '%s'", buf);
+
   for (; nbytes_sent < total_to_send;) {
     nbytes_sent = send(sfd, buf, (size_t)total_to_send, 0);
     if (nbytes_sent == -1) {
