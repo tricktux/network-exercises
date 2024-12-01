@@ -39,8 +39,7 @@ int is_prime_request_builder(struct queue *sdq,
 
   int j = 1, size;
   char *str1 = raw_request, *token, *saveptr1;
-  struct is_prime_request* curr = NULL;
-  is_prime_init(&curr);
+  struct is_prime_request curr;
 
   // tokenizer on the split delimiters
   for (;; j++, str1 = NULL) {
@@ -52,9 +51,9 @@ int is_prime_request_builder(struct queue *sdq,
       break;
 
 
-    *malformed = is_prime_request_malformed(curr, token);
-    curr->is_prime = is_prime_f(curr->number);
-    is_prime_beget_response(curr, sdq->head, &size);
+    *malformed = is_prime_request_malformed(&curr, token);
+    curr.is_prime = is_prime_f(curr.number);
+    is_prime_beget_response(&curr, sdq->head, &size);
     queue_push_ex(sdq, (size_t) size);
 
     // Stop handling requests for this socket as soon as we
@@ -65,9 +64,6 @@ int is_prime_request_builder(struct queue *sdq,
       break;
     }
   }
-
-  if (curr != NULL)
-    is_prime_free(&curr);
 
   return j - 1;
 }
