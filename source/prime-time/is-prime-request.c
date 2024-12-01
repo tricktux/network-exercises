@@ -133,7 +133,7 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
   }
 
   json_object* number = json_object_object_get(root, PRIME_REQUEST_NUMBER_KEY);
-  if (!method) {
+  if (!number) {
     json_object_put(root);
     log_warn(
         "is_prime_request_malformed: json_object_object_get failed for "
