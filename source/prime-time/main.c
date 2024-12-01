@@ -138,7 +138,7 @@ int main()
           if (result == 0)
             log_info("main epoll loop: there was a malformed respoonse. need to close socket");
           else
-            log_info("main epoll loop: there was an error sending a response. need to close socket");
+            log_info("main epoll loop: there was an error handling the request. need to close socket");
           if (fd_poll_del_and_close(&epci) == -1) {
             perror("epoll_ctl: recv 0");
             exit(EXIT_FAILURE);
