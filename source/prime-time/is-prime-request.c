@@ -39,7 +39,8 @@ int is_prime_request_builder(struct queue *sdq,
 
   int j = 1, size;
   char *str1 = raw_request, *token, *saveptr1;
-  struct is_prime_request* req = NULL, *prev;
+  struct is_prime_request* curr = NULL;
+  is_prime_init(&curr);
 
   // tokenizer on the split delimiters
   for (;; j++, str1 = NULL) {
@@ -50,21 +51,11 @@ int is_prime_request_builder(struct queue *sdq,
     if ((token - raw_request) >= (long) req_size)
       break;
 
-    // The very first request pointer should be the one passed
-    // as argument to the function
-    struct is_prime_request* curr;
-    is_prime_init(&curr);
-    if (j == 1)
-      req = curr;
 
     *malformed = is_prime_request_malformed(curr, token);
     curr->is_prime = is_prime_f(curr->number);
     is_prime_beget_response(curr, sdq->head, &size);
     queue_push_ex(sdq, (size_t) size);
-
-    // Singly linked list logic
-    if (j > 1)
-      prev->next = curr;
 
     // Stop handling requests for this socket as soon as we
     // find a malformed request
@@ -73,12 +64,10 @@ int is_prime_request_builder(struct queue *sdq,
       j++;
       break;
     }
-
-    prev = curr;
   }
 
-  if (req != NULL)
-    is_prime_free(&req);
+  if (curr != NULL)
+    is_prime_free(&curr);
 
   return j - 1;
 }
@@ -86,7 +75,6 @@ int is_prime_request_builder(struct queue *sdq,
 void is_prime_init(struct is_prime_request** request)
 {
   *request = malloc(sizeof(struct is_prime_request));
-  (*request)->next = NULL;
   (*request)->is_prime = false;
   (*request)->number = 0;
 }
@@ -210,12 +198,7 @@ void is_prime_beget_response(struct is_prime_request* request, char *response, i
 void is_prime_free(struct is_prime_request** request)
 {
   assert(*request != NULL);
-  struct is_prime_request *curr = *request, *next = NULL;
-  do {
-    next = curr->next;
-    free(curr);
-    curr = next;
-  } while (curr != NULL);
 
+  free(*request);
   *request = NULL;
 }

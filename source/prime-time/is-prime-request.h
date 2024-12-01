@@ -19,7 +19,6 @@ struct is_prime_request {
   bool is_prime;
   bool is_malformed;
   int number;
-  struct is_prime_request* next;
 };
 
 int is_prime_request_builder(struct queue *sdq,
