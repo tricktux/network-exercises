@@ -115,13 +115,14 @@ int main()
         continue;
       }
 
-      // Echo data now then while there is any
+      // Receive all the data into the queue
       log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
       res = recv_request(fd, rcqu);
       size = queue_pop_no_copy(rcqu, &data);
 
       // Handle error case while recv data
       if (res < -1) {
+        log_error("main epoll loop: error while receiving data");
         if (fd_poll_del_and_close(&epci) == -1) {
           perror("epoll_ctl: recv 0");
           exit(EXIT_FAILURE);
