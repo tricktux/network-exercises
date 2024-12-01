@@ -64,7 +64,7 @@ TEST_CASE("is_prime_request_builder handles valid requests", "[request]")
             == 1);
     REQUIRE(malformed == true);
     size = queue_pop_no_copy(sdqu, &data);
-    REQUIRE(strncmp(data, PRIME_MALFORMED, size) == 0);
+    REQUIRE(strncmp(data, PRIME_RESPONSE_ILL_RESPONSE, size) == 0);
   }
 
   SECTION(
@@ -105,7 +105,7 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
             == 1);
     REQUIRE(malformed == true);
     size = queue_pop_no_copy(sdqu, &data);
-    REQUIRE(strncmp(data, PRIME_MALFORMED, size) == 0);
+    REQUIRE(strncmp(data, PRIME_RESPONSE_ILL_RESPONSE, size) == 0);
   }
 
   SECTION(
@@ -122,7 +122,7 @@ TEST_CASE("is_prime_request_builder handles invalid requests", "[request]")
             == 4);
 
     REQUIRE(malformed == true);
-    sprintf(response, "%s%s%s%s", PRIME_TRUE, PRIME_FALSE, PRIME_TRUE, PRIME_MALFORMED);
+    sprintf(response, "%s%s%s%s", PRIME_TRUE, PRIME_FALSE, PRIME_TRUE, PRIME_RESPONSE_ILL_RESPONSE);
     size = queue_pop_no_copy(sdqu, &data);
     REQUIRE(strncmp(data, response, size) == 0);
   }

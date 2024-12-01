@@ -179,9 +179,8 @@ void is_prime_beget_response(struct is_prime_request* request, char *response, i
   assert(size != NULL);
 
   if (request->is_malformed) {
-    *size = sprintf(response,
-            PRIME_RESPONSE_FORMAT,
-            PRIME_RESPONSE_ILL_RESPONSE);
+    *size = PRIME_RESPONSE_ILL_RESPONSE_SIZE;
+    memcpy(response, PRIME_RESPONSE_ILL_RESPONSE, (size_t) *size);
     log_trace("is_prime_beget_response: '%s'", response);
     return;
   }
