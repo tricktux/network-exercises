@@ -89,7 +89,7 @@ int main()
   }
 
   char *data, *sddata;
-  int n, fd, res, size, sdsize;
+  int n, fd, res, size, sdsize, rs;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue* rcqu = NULL, *sdqu = NULL;
   queue_init(&rcqu, QUEUE_CAPACITY);
@@ -146,9 +146,8 @@ int main()
           continue;
         }
         sdsize = queue_pop_no_copy(sdqu, &sddata);
-        log_trace("main epoll loop: queue(%d): '%s'", sdsize, sddata);
-        res = sendall(fd, sddata, &sdsize);
-        if (res != 0) {
+        rs = sendall(fd, sddata, &sdsize);
+        if (rs != 0) {
           log_error("main epoll loop:: failed during sendall function");
           if (fd_poll_del_and_close(&epci) == -1) {
             perror("epoll_ctl: recv 0");
@@ -163,6 +162,7 @@ int main()
         continue;
 
       // Handle closing request received
+      log_info("main epoll loop:: closing connection");
       if (fd_poll_del_and_close(&epci) == -1) {
         perror("epoll_ctl: recv 0");
         exit(EXIT_FAILURE);
