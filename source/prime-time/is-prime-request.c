@@ -25,8 +25,6 @@
 
 #include "prime-time/is-prime-request.h"
 
-#define DELIMITERS "\n"
-
 /// Return the number of requests processed
 int is_prime_request_builder(struct queue *sdq,
                              char* raw_request,
@@ -43,13 +41,12 @@ int is_prime_request_builder(struct queue *sdq,
 
   // tokenizer on the split delimiters
   for (;; j++, str1 = NULL) {
-    token = strtok_r(str1, DELIMITERS, &saveptr1);
+    token = strtok_r(str1, PRIME_REQUEST_DELIMITERS, &saveptr1);
     if (token == NULL)
       break;
     // We have exceeded the request size
     if ((token - raw_request) >= (long) req_size)
       break;
-
 
     *malformed = is_prime_request_malformed(&curr, token);
     curr.is_prime = is_prime_f(curr.number);
