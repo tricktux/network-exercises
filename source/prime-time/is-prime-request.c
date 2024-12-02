@@ -38,7 +38,7 @@ int is_prime_request_builder(struct queue *sdq,
   assert(req_size > 0);
 
   int j = 1, size;
-  char *str1 = raw_request, *token, *saveptr1;
+  char *str1 = raw_request, *token, *saveptr1 = NULL;
   struct is_prime_request curr;
 
   // tokenizer on the split delimiters
