@@ -209,3 +209,17 @@ int queue_pop_no_copy(struct queue* qu, char** data)
 
   return s;
 }
+
+int queue_peek(struct queue* qu, char** data)
+{
+  assert(qu != NULL);
+  assert(data != NULL);
+
+  if (qu->size == 0) {
+    log_warn("queue_pop: queue is empty... noop");
+    return 0;
+  }
+
+  *data = qu->data;
+  return (int)qu->size;
+}

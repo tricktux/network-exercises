@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
+#define _GNU_SOURCE
 
 #include <assert.h>
 #include <errno.h>
@@ -88,7 +89,7 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  char *data, *sddata;
+  char *data, *sddata, *complete_req;
   int n, fd, res, size, sdsize, rs, result;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue* rcqu = NULL, *sdqu = NULL;
@@ -116,9 +117,8 @@ int main()
       }
 
       // Receive all the data into the queue
-      log_trace("main epoll loop: handling POLLIN event on fd '%d'", fd);
       res = recv_request(fd, rcqu);
-      size = queue_pop_no_copy(rcqu, &data);
+      log_trace("main epoll loop: handling POLLIN event on fd '%d' with res: '%d'", fd, res);
 
       // Handle error case while recv data
       if (res < -1) {
@@ -131,9 +131,18 @@ int main()
         continue;
       }
 
-      // Handle there's data to process
+      // Peek at the data to check if we have at least one complete request
+      complete_req = NULL;
+      size = queue_peek(rcqu, &data);
       if (size > 0) {
-        log_trace("main epoll loop: raw request(%d): '%s'", fd, data);
+        complete_req = (char *) memrchr(data, PRIME_REQUEST_DELIMITERS[0], size);
+        log_trace("main epoll loop: complete_req = '%d'", (complete_req == NULL ? 0 : 1));
+      }
+
+      // If we do, process it
+      if (complete_req != NULL) {
+        size = queue_pop_no_copy(rcqu, &data);
+        log_trace("main epoll loop: raw request: fd: '%d', size: '%d', data: '%s'", fd, size, data);
         result = handle_request(sdqu, data, (size_t)size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
         rs = sendall(fd, sddata, &sdsize);

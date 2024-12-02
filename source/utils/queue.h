@@ -20,6 +20,7 @@ void queue_pop(struct queue* qu, char* data, size_t* size);
 void queue_free(struct queue** qu);
 void queue_reset(struct queue* qu);
 int queue_pop_no_copy(struct queue* qu, char** data);
+int queue_peek(struct queue* qu, char** data);
 
 #ifdef __cplusplus
 }
