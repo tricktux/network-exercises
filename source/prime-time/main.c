@@ -31,7 +31,7 @@
 #define QUEUE_CAPACITY 65536  //  1024 * 64
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
-#define PORT "18898"
+#define PORT "18888"
 
 int handle_request(struct queue *sdq, char* raw_req, size_t size)
 {
