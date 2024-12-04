@@ -239,8 +239,6 @@ TEST_CASE("price query tests", "[prices]")
   prices_push(ps, &p4);
   prices_push(ps, &p5);
 
-  prices_binary_sort(ps);
-
   REQUIRE(prices_query(ps, &q1) == q1avg);
   REQUIRE(prices_query(ps, &q2) == q2avg);
 
