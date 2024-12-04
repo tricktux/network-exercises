@@ -17,6 +17,7 @@ include(Catch)
 
 add_subdirectory(queue)
 add_subdirectory(is-prime)
+add_subdirectory(means-to-an-end)
 
 # ---- End-of-file commands ----
 
