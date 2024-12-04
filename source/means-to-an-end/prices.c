@@ -77,6 +77,12 @@ bool prices_duplicate_timestamp_check(struct prices* ps, int32_t timestamp)
 
 void prices_binary_sort(struct prices* ps)
 {
+  assert(ps != NULL);
+  assert(ps->data != NULL);
+
+  if (ps->size == 0)
+    return;
+
   for (size_t i = 1; i < ps->size; i++) {
     struct price key = ps->data[i];
     int left = 0;
