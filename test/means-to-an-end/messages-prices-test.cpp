@@ -212,3 +212,39 @@ TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]")
 
   prices_free(&ps);
 }
+
+
+TEST_CASE("price query tests", "[prices]")
+{
+  struct prices* ps = nullptr;
+  prices_init(&ps, 10);
+
+  REQUIRE(ps != nullptr);
+  REQUIRE(ps->data != nullptr);
+
+  struct price p1 = {4, 300};
+  struct price p2 = {5, 200};
+  struct price p3 = {3, 301};
+  struct price p4 = {1, 100};
+  struct price p5 = {2, 201};
+
+  struct price_query q1 = {1, 5};
+  const auto q1avg = 220;
+  struct price_query q2 = {2, 4};
+  const auto q2avg = 267;
+
+  prices_push(ps, &p1);
+  prices_push(ps, &p2);
+  prices_push(ps, &p3);
+  prices_push(ps, &p4);
+  prices_push(ps, &p5);
+
+  prices_binary_sort(ps);
+
+  REQUIRE(prices_query(ps, &q1) == q1avg);
+  REQUIRE(prices_query(ps, &q2) == q2avg);
+
+  prices_free(&ps);
+
+  REQUIRE(ps == nullptr);
+}

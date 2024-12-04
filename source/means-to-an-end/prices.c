@@ -108,4 +108,26 @@ void prices_binary_sort(struct prices* ps)
 
 /*If there are no samples within the requested period, or if mintime comes after
  * maxtime, the value returned must be 0.*/
-int32_t prices_query(struct prices* ps, struct price_query* pq) {}
+int32_t prices_query(struct prices* ps, struct price_query* pq)
+{
+  assert(ps != NULL);
+  assert(ps->data != NULL);
+  assert(pq != NULL);
+
+  if (ps->size == 0)
+    return 0;
+
+  size_t k = 0;
+  int32_t mean = 0;
+  int32_t num_prices = 0;
+  int32_t curr_ts = 0;
+  for (; k < ps->size; k++) {
+    curr_ts = ps->data[k].timestamp;
+    if ((pq->mintime <= curr_ts) && (curr_ts <= pq->maxtime)) {
+      mean += ps->data[k].price;
+      num_prices++;
+    }
+  }
+
+  return num_prices == 0 ? 0 : mean / num_prices;
+}
