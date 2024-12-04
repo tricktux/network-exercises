@@ -30,8 +30,6 @@ void prices_free(struct prices** pps);
 //     - Don't add new prices on timestamp conflict
 //   - After push, sort, to keep the array sorted
 void prices_push(struct prices* ps, struct price* data);
-// Get pointer to the data
-void prices_binary_sort(struct prices* ps);
 bool prices_duplicate_timestamp_check(struct prices* ps, int32_t timestamp);
 /*If there are no samples within the requested period, or if mintime comes after
  * maxtime, the value returned must be 0.*/
