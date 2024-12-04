@@ -16,11 +16,11 @@
 #include <unistd.h>
 
 #include <catch2/catch.hpp>
-#include "means-to-an-end/prices.h"
+#include "means-to-an-end/asset-prices.h"
 
 TEST_CASE("prices_init initializes prices structure correctly", "[prices]")
 {
-  struct prices* ps = nullptr;
+  struct asset_prices* ps = nullptr;
   size_t capacity = 10;
 
   prices_init(&ps, capacity);
@@ -36,7 +36,7 @@ TEST_CASE("prices_init initializes prices structure correctly", "[prices]")
 
 TEST_CASE("prices_init_data increases capacity", "[prices]")
 {
-  struct prices* ps = nullptr;
+  struct asset_prices* ps = nullptr;
   size_t initial_capacity = 10;
   size_t new_capacity = 20;
 
@@ -51,13 +51,13 @@ TEST_CASE("prices_init_data increases capacity", "[prices]")
 
 TEST_CASE("prices_push adds data correctly", "[prices]")
 {
-  struct prices* ps = nullptr;
+  struct asset_prices* ps = nullptr;
   size_t capacity = 2;
   prices_init(&ps, capacity);
 
-  struct price p1 = {1, 100};
-  struct price p2 = {2, 200};
-  struct price p3 = {3, 300};
+  struct asset_price p1 = {1, 100};
+  struct asset_price p2 = {2, 200};
+  struct asset_price p3 = {3, 300};
 
   SECTION("Push within capacity")
   {
@@ -89,7 +89,7 @@ TEST_CASE("prices_push adds data correctly", "[prices]")
 
 TEST_CASE("prices_free deallocates memory correctly", "[prices]")
 {
-  struct prices* ps = nullptr;
+  struct asset_prices* ps = nullptr;
   prices_init(&ps, 10);
 
   REQUIRE(ps != nullptr);
@@ -102,17 +102,17 @@ TEST_CASE("prices_free deallocates memory correctly", "[prices]")
 
 TEST_CASE("detecting duplicate timestamps", "[prices]")
 {
-  struct prices* ps = nullptr;
+  struct asset_prices* ps = nullptr;
   prices_init(&ps, 10);
 
   REQUIRE(ps != nullptr);
   REQUIRE(ps->data != nullptr);
 
-  struct price p1 = {3, 300};
-  struct price p2 = {2, 200};
-  struct price p3 = {3, 301};
-  struct price p4 = {1, 100};
-  struct price p5 = {2, 201};
+  struct asset_price p1 = {3, 300};
+  struct asset_price p2 = {2, 200};
+  struct asset_price p3 = {3, 301};
+  struct asset_price p4 = {1, 100};
+  struct asset_price p5 = {2, 201};
 
   prices_push(ps, &p1);
   prices_push(ps, &p2);
@@ -128,21 +128,21 @@ TEST_CASE("detecting duplicate timestamps", "[prices]")
 
 TEST_CASE("price query tests", "[prices]")
 {
-  struct prices* ps = nullptr;
+  struct asset_prices* ps = nullptr;
   prices_init(&ps, 10);
 
   REQUIRE(ps != nullptr);
   REQUIRE(ps->data != nullptr);
 
-  struct price p1 = {4, 300};
-  struct price p2 = {5, 200};
-  struct price p3 = {3, 301};
-  struct price p4 = {1, 100};
-  struct price p5 = {2, 201};
+  struct asset_price p1 = {4, 300};
+  struct asset_price p2 = {5, 200};
+  struct asset_price p3 = {3, 301};
+  struct asset_price p4 = {1, 100};
+  struct asset_price p5 = {2, 201};
 
-  struct price_query q1 = {1, 5};
+  struct asset_price_query q1 = {1, 5};
   const auto q1avg = 220;
-  struct price_query q2 = {2, 4};
+  struct asset_price_query q2 = {2, 4};
   const auto q2avg = 267;
 
   prices_push(ps, &p1);

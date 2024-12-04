@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 
 #include "utils/queue.h"
-#include "means-to-an-end/prices.h"
+#include "means-to-an-end/asset-prices.h"
 #include "means-to-an-end/messages.h"
 
 void message_parse(struct queue* sdqu, char* data, size_t dsize)
@@ -20,14 +20,14 @@ void message_parse(struct queue* sdqu, char* data, size_t dsize)
 
     switch (type) {
       case MESSAGE_QUERY: {
-        struct price_query qry;
+        struct asset_price_query qry;
         qry.mintime = ntohl(*first_word);
         qry.maxtime = ntohl(*second_word);
         // Process query...
         break;
       }
       case MESSAGE_INSERT: {
-        struct price prc;
+        struct asset_price prc;
         prc.timestamp = ntohl(*first_word);
         prc.price = ntohl(*second_word);
         // Insert price directly into vector without additional memcpy
