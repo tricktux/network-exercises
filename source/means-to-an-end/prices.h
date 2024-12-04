@@ -31,8 +31,8 @@ void prices_free(struct prices **pps);
 //   - After push, sort, to keep the array sorted
 void prices_push(struct prices *ps, struct price* data);
 // Get pointer to the data
-/*size_t vector_peek(struct vector **v, void** data);*/
-void prices_sort(struct prices *ps);
+void prices_binary_sort(struct prices *ps);
+bool prices_duplicate_timestamp_check(struct prices *ps, int32_t timestamp);
 /*If there are no samples within the requested period, or if mintime comes after maxtime, the value returned must be 0.*/
 int32_t prices_query(struct prices *ps, struct price_query *pq);
 

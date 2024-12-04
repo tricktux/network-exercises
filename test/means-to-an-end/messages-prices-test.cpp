@@ -93,3 +93,109 @@ TEST_CASE("prices_free deallocates memory correctly", "[prices]") {
 
     REQUIRE(ps == nullptr);
 }
+
+TEST_CASE("detecting duplicate timestamps", "[prices]") {
+  struct prices *ps = nullptr;
+  prices_init(&ps, 10);
+
+  REQUIRE(ps != nullptr);
+  REQUIRE(ps->data != nullptr);
+
+  struct price p1 = {3, 300};
+  struct price p2 = {2, 200};
+  struct price p3 = {3, 301};
+  struct price p4 = {1, 100};
+  struct price p5 = {2, 201};
+
+  prices_push(ps, &p1);
+  prices_push(ps, &p2);
+
+  REQUIRE(prices_duplicate_timestamp_check(ps, p3.timestamp) == true);
+  REQUIRE(prices_duplicate_timestamp_check(ps, p4.timestamp) == false);
+  REQUIRE(prices_duplicate_timestamp_check(ps, p5.timestamp) == true);
+
+  prices_free(&ps);
+
+  REQUIRE(ps == nullptr);
+}
+
+TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]") {
+  struct prices *ps = nullptr;
+  prices_init(&ps, 10);
+
+  SECTION("Sort already sorted data") {
+    struct price p1 = {1, 100};
+    struct price p2 = {2, 200};
+    struct price p3 = {3, 300};
+
+    prices_push(ps, &p1);
+    prices_push(ps, &p2);
+    prices_push(ps, &p3);
+
+    prices_binary_sort(ps);
+
+    REQUIRE(ps->size == 3);
+    REQUIRE(ps->data[0].timestamp == 1);
+    REQUIRE(ps->data[1].timestamp == 2);
+    REQUIRE(ps->data[2].timestamp == 3);
+  }
+
+  SECTION("Sort reverse sorted data") {
+    struct price p1 = {3, 300};
+    struct price p2 = {2, 200};
+    struct price p3 = {1, 100};
+
+    prices_push(ps, &p1);
+    prices_push(ps, &p2);
+    prices_push(ps, &p3);
+
+    prices_binary_sort(ps);
+
+    REQUIRE(ps->size == 3);
+    REQUIRE(ps->data[0].timestamp == 1);
+    REQUIRE(ps->data[1].timestamp == 2);
+    REQUIRE(ps->data[2].timestamp == 3);
+  }
+
+  SECTION("Sort randomly ordered data") {
+    struct price p1 = {5, 500};
+    struct price p2 = {2, 200};
+    struct price p3 = {8, 800};
+    struct price p4 = {1, 100};
+    struct price p5 = {9, 900};
+
+    prices_push(ps, &p1);
+    prices_push(ps, &p2);
+    prices_push(ps, &p3);
+    prices_push(ps, &p4);
+    prices_push(ps, &p5);
+
+    prices_binary_sort(ps);
+
+    REQUIRE(ps->size == 5);
+    REQUIRE(ps->data[0].timestamp == 1);
+    REQUIRE(ps->data[1].timestamp == 2);
+    REQUIRE(ps->data[2].timestamp == 5);
+    REQUIRE(ps->data[3].timestamp == 8);
+    REQUIRE(ps->data[4].timestamp == 9);
+  }
+
+  SECTION("Sort single element") {
+    struct price p1 = {1, 100};
+
+    prices_push(ps, &p1);
+
+    prices_binary_sort(ps);
+
+    REQUIRE(ps->size == 1);
+    REQUIRE(ps->data[0].timestamp == 1);
+  }
+
+  SECTION("Sort empty array") {
+    prices_binary_sort(ps);
+
+    REQUIRE(ps->size == 0);
+  }
+
+  prices_free(&ps);
+}
