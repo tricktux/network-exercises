@@ -7,12 +7,13 @@
 
 #include "means-to-an-end/prices.h"
 
-void prices_init_data(struct prices *ps, size_t capacity) {
+void prices_init_data(struct prices* ps, size_t capacity)
+{
   assert(ps != NULL);
   assert(capacity > 0);
   assert(capacity > ps->capacity);
 
-  struct price *new_data = NULL;
+  struct price* new_data = NULL;
   new_data = reallocarray(ps->data, sizeof(struct price), capacity);
   assert(new_data != NULL);
 
@@ -20,7 +21,8 @@ void prices_init_data(struct prices *ps, size_t capacity) {
   ps->capacity = capacity;
 }
 
-void prices_init(struct prices **pps, size_t capacity) {
+void prices_init(struct prices** pps, size_t capacity)
+{
   assert(capacity > 0);
 
   *pps = malloc(sizeof(struct prices));
@@ -32,7 +34,8 @@ void prices_init(struct prices **pps, size_t capacity) {
   (*pps)->size = 0;
 }
 
-void prices_free(struct prices **pps) {
+void prices_free(struct prices** pps)
+{
   assert(*pps != NULL);
   assert((*pps)->data != NULL);
 
@@ -45,7 +48,8 @@ void prices_free(struct prices **pps) {
 //   - Check prices with the same timestamp
 //     - Don't add new prices on timestamp conflict
 //   - After push, sort, to keep the array sorted
-void prices_push(struct prices *ps, struct price* data) {
+void prices_push(struct prices* ps, struct price* data)
+{
   assert(ps != NULL);
   assert(ps->data != NULL);
   assert(data != NULL);
@@ -57,7 +61,7 @@ void prices_push(struct prices *ps, struct price* data) {
   ps->data[ps->size++] = *data;
 }
 
-bool prices_duplicate_timestamp_check(struct prices *ps, int32_t timestamp)
+bool prices_duplicate_timestamp_check(struct prices* ps, int32_t timestamp)
 {
   assert(ps != NULL);
   assert(ps->data != NULL);
@@ -96,7 +100,6 @@ void prices_binary_sort(struct prices* ps)
   }
 }
 
-/*If there are no samples within the requested period, or if mintime comes after maxtime, the value returned must be 0.*/
-int32_t prices_query(struct prices *ps, struct price_query *pq) {
-
-}
+/*If there are no samples within the requested period, or if mintime comes after
+ * maxtime, the value returned must be 0.*/
+int32_t prices_query(struct prices* ps, struct price_query* pq) {}

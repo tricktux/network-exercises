@@ -18,84 +18,91 @@
 #include <catch2/catch.hpp>
 #include "means-to-an-end/prices.h"
 
-TEST_CASE("prices_init initializes prices structure correctly", "[prices]") {
-    struct prices *ps = nullptr;
-    size_t capacity = 10;
+TEST_CASE("prices_init initializes prices structure correctly", "[prices]")
+{
+  struct prices* ps = nullptr;
+  size_t capacity = 10;
 
-    prices_init(&ps, capacity);
+  prices_init(&ps, capacity);
 
-    REQUIRE(ps != nullptr);
-    REQUIRE(ps->capacity == capacity);
-    REQUIRE(ps->size == 0);
-    REQUIRE(ps->data != nullptr);
+  REQUIRE(ps != nullptr);
+  REQUIRE(ps->capacity == capacity);
+  REQUIRE(ps->size == 0);
+  REQUIRE(ps->data != nullptr);
 
-    prices_free(&ps);
-    REQUIRE(ps == nullptr);
+  prices_free(&ps);
+  REQUIRE(ps == nullptr);
 }
 
-TEST_CASE("prices_init_data increases capacity", "[prices]") {
-    struct prices *ps = nullptr;
-    size_t initial_capacity = 10;
-    size_t new_capacity = 20;
+TEST_CASE("prices_init_data increases capacity", "[prices]")
+{
+  struct prices* ps = nullptr;
+  size_t initial_capacity = 10;
+  size_t new_capacity = 20;
 
-    prices_init(&ps, initial_capacity);
-    REQUIRE(ps->capacity == initial_capacity);
+  prices_init(&ps, initial_capacity);
+  REQUIRE(ps->capacity == initial_capacity);
 
-    prices_init_data(ps, new_capacity);
-    REQUIRE(ps->capacity == new_capacity);
+  prices_init_data(ps, new_capacity);
+  REQUIRE(ps->capacity == new_capacity);
 
-    prices_free(&ps);
+  prices_free(&ps);
 }
 
-TEST_CASE("prices_push adds data correctly", "[prices]") {
-    struct prices *ps = nullptr;
-    size_t capacity = 2;
-    prices_init(&ps, capacity);
+TEST_CASE("prices_push adds data correctly", "[prices]")
+{
+  struct prices* ps = nullptr;
+  size_t capacity = 2;
+  prices_init(&ps, capacity);
 
-    struct price p1 = {1, 100};
-    struct price p2 = {2, 200};
-    struct price p3 = {3, 300};
+  struct price p1 = {1, 100};
+  struct price p2 = {2, 200};
+  struct price p3 = {3, 300};
 
-    SECTION("Push within capacity") {
-        prices_push(ps, &p1);
-        REQUIRE(ps->size == 1);
-        REQUIRE(ps->data[0].timestamp == 1);
-        REQUIRE(ps->data[0].price == 100);
+  SECTION("Push within capacity")
+  {
+    prices_push(ps, &p1);
+    REQUIRE(ps->size == 1);
+    REQUIRE(ps->data[0].timestamp == 1);
+    REQUIRE(ps->data[0].price == 100);
 
-        prices_push(ps, &p2);
-        REQUIRE(ps->size == 2);
-        REQUIRE(ps->data[1].timestamp == 2);
-        REQUIRE(ps->data[1].price == 200);
-    }
+    prices_push(ps, &p2);
+    REQUIRE(ps->size == 2);
+    REQUIRE(ps->data[1].timestamp == 2);
+    REQUIRE(ps->data[1].price == 200);
+  }
 
-    SECTION("Push beyond capacity triggers resize") {
-        prices_push(ps, &p1);
-        prices_push(ps, &p2);
-        prices_push(ps, &p3);
+  SECTION("Push beyond capacity triggers resize")
+  {
+    prices_push(ps, &p1);
+    prices_push(ps, &p2);
+    prices_push(ps, &p3);
 
-        REQUIRE(ps->size == 3);
-        REQUIRE(ps->capacity == 4);  // Double the original capacity
-        REQUIRE(ps->data[2].timestamp == 3);
-        REQUIRE(ps->data[2].price == 300);
-    }
+    REQUIRE(ps->size == 3);
+    REQUIRE(ps->capacity == 4);  // Double the original capacity
+    REQUIRE(ps->data[2].timestamp == 3);
+    REQUIRE(ps->data[2].price == 300);
+  }
 
-    prices_free(&ps);
+  prices_free(&ps);
 }
 
-TEST_CASE("prices_free deallocates memory correctly", "[prices]") {
-    struct prices *ps = nullptr;
-    prices_init(&ps, 10);
+TEST_CASE("prices_free deallocates memory correctly", "[prices]")
+{
+  struct prices* ps = nullptr;
+  prices_init(&ps, 10);
 
-    REQUIRE(ps != nullptr);
-    REQUIRE(ps->data != nullptr);
+  REQUIRE(ps != nullptr);
+  REQUIRE(ps->data != nullptr);
 
-    prices_free(&ps);
+  prices_free(&ps);
 
-    REQUIRE(ps == nullptr);
+  REQUIRE(ps == nullptr);
 }
 
-TEST_CASE("detecting duplicate timestamps", "[prices]") {
-  struct prices *ps = nullptr;
+TEST_CASE("detecting duplicate timestamps", "[prices]")
+{
+  struct prices* ps = nullptr;
   prices_init(&ps, 10);
 
   REQUIRE(ps != nullptr);
@@ -119,11 +126,13 @@ TEST_CASE("detecting duplicate timestamps", "[prices]") {
   REQUIRE(ps == nullptr);
 }
 
-TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]") {
-  struct prices *ps = nullptr;
+TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]")
+{
+  struct prices* ps = nullptr;
   prices_init(&ps, 10);
 
-  SECTION("Sort already sorted data") {
+  SECTION("Sort already sorted data")
+  {
     struct price p1 = {1, 100};
     struct price p2 = {2, 200};
     struct price p3 = {3, 300};
@@ -140,7 +149,8 @@ TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]") {
     REQUIRE(ps->data[2].timestamp == 3);
   }
 
-  SECTION("Sort reverse sorted data") {
+  SECTION("Sort reverse sorted data")
+  {
     struct price p1 = {3, 300};
     struct price p2 = {2, 200};
     struct price p3 = {1, 100};
@@ -157,7 +167,8 @@ TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]") {
     REQUIRE(ps->data[2].timestamp == 3);
   }
 
-  SECTION("Sort randomly ordered data") {
+  SECTION("Sort randomly ordered data")
+  {
     struct price p1 = {5, 500};
     struct price p2 = {2, 200};
     struct price p3 = {8, 800};
@@ -180,7 +191,8 @@ TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]") {
     REQUIRE(ps->data[4].timestamp == 9);
   }
 
-  SECTION("Sort single element") {
+  SECTION("Sort single element")
+  {
     struct price p1 = {1, 100};
 
     prices_push(ps, &p1);
@@ -191,7 +203,8 @@ TEST_CASE("prices_binary_sort sorts prices correctly", "[prices]") {
     REQUIRE(ps->data[0].timestamp == 1);
   }
 
-  SECTION("Sort empty array") {
+  SECTION("Sort empty array")
+  {
     prices_binary_sort(ps);
 
     REQUIRE(ps->size == 0);

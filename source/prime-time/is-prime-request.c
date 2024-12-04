@@ -26,9 +26,10 @@
 #include "prime-time/is-prime-request.h"
 
 /// Return the number of requests processed
-int is_prime_request_builder(struct queue *sdq,
+int is_prime_request_builder(struct queue* sdq,
                              char* raw_request,
-                             size_t req_size, bool *malformed)
+                             size_t req_size,
+                             bool* malformed)
 {
   assert(sdq != NULL);
   assert(malformed != NULL);
@@ -45,13 +46,13 @@ int is_prime_request_builder(struct queue *sdq,
     if (token == NULL)
       break;
     // We have exceeded the request size
-    if ((token - raw_request) >= (long) req_size)
+    if ((token - raw_request) >= (long)req_size)
       break;
 
     *malformed = is_prime_request_malformed(&curr, token);
     curr.is_prime = is_prime_f(curr.number);
     is_prime_beget_response(&curr, sdq->head, &size);
-    queue_push_ex(sdq, (size_t) size);
+    queue_push_ex(sdq, (size_t)size);
 
     // Stop handling requests for this socket as soon as we
     // find a malformed request
@@ -72,7 +73,7 @@ void is_prime_init(struct is_prime_request** request)
   (*request)->number = 0;
 }
 
-bool is_prime_request_malformed(struct is_prime_request *request, char* req)
+bool is_prime_request_malformed(struct is_prime_request* request, char* req)
 {
   assert(request != NULL);
   assert(req != NULL);
@@ -99,8 +100,7 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
 
   if (json_object_get_type(method) != json_type_string) {
     json_object_put(root);
-    log_warn(
-      "is_prime_request_malformed: method is not of type string");
+    log_warn("is_prime_request_malformed: method is not of type string");
     request->is_malformed = true;
     return true;
   }
@@ -149,8 +149,7 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
 
   if (num_type != json_type_int) {
     json_object_put(root);
-    log_warn(
-      "is_prime_request_malformed: number is not of type int");
+    log_warn("is_prime_request_malformed: number is not of type int");
     request->is_malformed = true;
     return true;
   }
@@ -159,9 +158,8 @@ bool is_prime_request_malformed(struct is_prime_request *request, char* req)
   int number_value = json_object_get_int(number);
   if (errno != 0) {
     json_object_put(root);
-    log_warn(
-        "is_prime_request_malformed: json_object_get_int failed for '%s'",
-        number);
+    log_warn("is_prime_request_malformed: json_object_get_int failed for '%s'",
+             number);
     request->is_malformed = true;
     return true;
   }
@@ -185,7 +183,9 @@ bool is_prime_f(int number)
   return true;
 }
 
-void is_prime_beget_response(struct is_prime_request* request, char *response, int *size)
+void is_prime_beget_response(struct is_prime_request* request,
+                             char* response,
+                             int* size)
 {
   assert(request != NULL);
   assert(response != NULL);
@@ -193,13 +193,12 @@ void is_prime_beget_response(struct is_prime_request* request, char *response, i
 
   if (request->is_malformed) {
     *size = PRIME_RESPONSE_ILL_RESPONSE_SIZE;
-    memcpy(response, PRIME_RESPONSE_ILL_RESPONSE, (size_t) *size);
+    memcpy(response, PRIME_RESPONSE_ILL_RESPONSE, (size_t)*size);
     log_trace("is_prime_beget_response: '%s'", response);
     return;
   }
-  *size = sprintf(response,
-          PRIME_RESPONSE_FORMAT,
-          (request->is_prime ? "true" : "false"));
+  *size = sprintf(
+      response, PRIME_RESPONSE_FORMAT, (request->is_prime ? "true" : "false"));
   log_trace("is_prime_beget_response: '%s'", response);
 }
 

@@ -23,12 +23,15 @@ struct is_prime_request {
   int number;
 };
 
-int is_prime_request_builder(struct queue *sdq,
+int is_prime_request_builder(struct queue* sdq,
                              char* raw_request,
-                             size_t req_size, bool *malformed);
-bool is_prime_request_malformed(struct is_prime_request *request, char* req);
+                             size_t req_size,
+                             bool* malformed);
+bool is_prime_request_malformed(struct is_prime_request* request, char* req);
 bool is_prime_f(int number);
-void is_prime_beget_response(struct is_prime_request* request, char *response, int *size);
+void is_prime_beget_response(struct is_prime_request* request,
+                             char* response,
+                             int* size);
 void is_prime_init(struct is_prime_request** request);
 void is_prime_free(struct is_prime_request** request);
 

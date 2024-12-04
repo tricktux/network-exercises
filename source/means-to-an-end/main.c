@@ -31,7 +31,7 @@
 #define MAX_EVENTS 10
 #define PORT "18888"
 
-int handle_request(struct queue *sdq, char* raw_req, size_t size)
+int handle_request(struct queue* sdq, char* raw_req, size_t size)
 {
   assert(sdq != NULL);
   assert(raw_req != NULL);
@@ -44,8 +44,8 @@ int handle_request(struct queue *sdq, char* raw_req, size_t size)
   bool mal = false;
   /*int r = is_prime_request_builder(sdq, raw_req, size, &mal);*/
   /*if (r <= 0) {*/
-    /*log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);*/
-    /*return -1;*/
+  /*log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);*/
+  /*return -1;*/
   /*}*/
 
   return (mal ? 0 : 1);
@@ -90,7 +90,7 @@ int main()
   char *data, *sddata, *complete_req;
   int n, fd, res, size, sdsize, rs, result;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
-  struct queue* rcqu = NULL, *sdqu = NULL;
+  struct queue *rcqu = NULL, *sdqu = NULL;
   queue_init(&rcqu, QUEUE_CAPACITY);
   queue_init(&sdqu, QUEUE_CAPACITY);
 
@@ -116,7 +116,10 @@ int main()
 
       // Receive all the data into the queue
       res = recv_request(fd, rcqu);
-      log_trace("main epoll loop: handling POLLIN event on fd '%d' with res: '%d'", fd, res);
+      log_trace(
+          "main epoll loop: handling POLLIN event on fd '%d' with res: '%d'",
+          fd,
+          res);
 
       // Handle error case while recv data
       if (res < -1) {
@@ -133,23 +136,33 @@ int main()
       complete_req = NULL;
       size = queue_peek(rcqu, &data);
       if (size > 0) {
-        /*complete_req = (char *) memrchr(data, PRIME_REQUEST_DELIMITERS[0], size);*/
-        log_trace("main epoll loop: complete_req = '%d'", (complete_req == NULL ? 0 : 1));
+        /*complete_req = (char *) memrchr(data, PRIME_REQUEST_DELIMITERS[0],
+         * size);*/
+        log_trace("main epoll loop: complete_req = '%d'",
+                  (complete_req == NULL ? 0 : 1));
       }
 
       // If we do, process it
       if (complete_req != NULL) {
         size = queue_pop_no_copy(rcqu, &data);
-        log_trace("main epoll loop: raw request: fd: '%d', size: '%d', data: '%s'", fd, size, data);
+        log_trace(
+            "main epoll loop: raw request: fd: '%d', size: '%d', data: '%s'",
+            fd,
+            size,
+            data);
         result = handle_request(sdqu, data, (size_t)size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
         rs = sendall(fd, sddata, &sdsize);
 
         if ((result <= 0) || (rs != 0)) {
           if (result == 0)
-            log_info("main epoll loop: there was a malformed respoonse. need to close socket");
+            log_info(
+                "main epoll loop: there was a malformed respoonse. need to "
+                "close socket");
           else if (result < 0)
-            log_info("main epoll loop: there was an error handling the request. need to close socket");
+            log_info(
+                "main epoll loop: there was an error handling the request. "
+                "need to close socket");
           else if (rs != 0)
             log_error("main epoll loop:: failed during sendall function");
           if (fd_poll_del_and_close(&epci) == -1) {
