@@ -30,7 +30,7 @@ int fd_poll_del_and_close(void* context)
   return 0;
 }
 
-void fd_accept_and_epoll_add(void* context)
+int fd_accept_and_epoll_add(void* context)
 {
   struct epoll_ctl_info* info = context;
   assert(info != NULL);
@@ -55,4 +55,6 @@ void fd_accept_and_epoll_add(void* context)
     perror("fd_accept_and_epoll_add: epoll_ctl: conn_sock");
     exit(EXIT_FAILURE);
   }
+
+  return conn_sock;
 }
