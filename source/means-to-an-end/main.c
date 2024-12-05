@@ -22,6 +22,9 @@
 #include "utils/sockets.h"
 #include "utils/utils.h"
 
+#include "means-to-an-end/asset-prices.h"
+#include "means-to-an-end/messages.h"
+
 #define LOG_FILE "/tmp/network-exercises-means-to-an-end.log"
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
@@ -30,26 +33,6 @@
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define PORT "18888"
-
-int handle_request(struct queue* sdq, char* raw_req, size_t size)
-{
-  assert(sdq != NULL);
-  assert(raw_req != NULL);
-  if (size == 0) {
-    log_error("handle_request: raw request size is zero");
-    return 1;
-  }
-
-  // Split and handle requests here
-  bool mal = false;
-  /*int r = is_prime_request_builder(sdq, raw_req, size, &mal);*/
-  /*if (r <= 0) {*/
-  /*log_warn("recv_and_handle: is_prime_request_builder returned '%d'", r);*/
-  /*return -1;*/
-  /*}*/
-
-  return (mal ? 0 : 1);
-}
 
 int main()
 {
@@ -87,10 +70,12 @@ int main()
     exit(EXIT_FAILURE);
   }
 
-  char *data, *sddata, *complete_req;
+  bool complete_req = false, client_found = false;
+  char *data, *sddata;
   int n, fd, res, size, sdsize, rs, result;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue *rcqu = NULL, *sdqu = NULL;
+  struct clients_asset *ca = NULL;
   queue_init(&rcqu, QUEUE_CAPACITY);
   queue_init(&sdqu, QUEUE_CAPACITY);
 
@@ -110,7 +95,8 @@ int main()
 
       // Handle a new listen connection
       if (events[n].data.fd == listen_fd) {
-        fd_accept_and_epoll_add(&epci);
+        int new_fd = fd_accept_and_epoll_add(&epci);
+        clients_asset_add(&ca, new_fd);
         continue;
       }
 
@@ -124,6 +110,7 @@ int main()
       // Handle error case while recv data
       if (res < -1) {
         log_error("main epoll loop: error while receiving data");
+        clients_asset_remove(&ca, fd);
         if (fd_poll_del_and_close(&epci) == -1) {
           perror("epoll_ctl: recv 0");
           exit(EXIT_FAILURE);
@@ -133,43 +120,37 @@ int main()
       }
 
       // Peek at the data to check if we have at least one complete request
-      complete_req = NULL;
+      complete_req = false;
       size = queue_peek(rcqu, &data);
-      if (size > 0) {
-        /*complete_req = (char *) memrchr(data, PRIME_REQUEST_DELIMITERS[0],
-         * size);*/
+      if ((size > 0) && (size % MESSAGE_SIZE == 0)) {
+        complete_req = true;
         log_trace("main epoll loop: complete_req = '%d'",
-                  (complete_req == NULL ? 0 : 1));
+                  (complete_req ? 1 : 0));
       }
 
-      // If we do, process it
-      if (complete_req != NULL) {
+      // If we do, process itl
+      if (complete_req) {
         size = queue_pop_no_copy(rcqu, &data);
         log_trace(
-            "main epoll loop: raw request: fd: '%d', size: '%d', data: '%s'",
+            "main epoll loop: raw request: fd: '%d', size: '%d'",
             fd,
-            size,
-            data);
-        result = handle_request(sdqu, data, (size_t)size);
-        sdsize = queue_pop_no_copy(sdqu, &sddata);
-        rs = sendall(fd, sddata, &sdsize);
+            size);
 
-        if ((result <= 0) || (rs != 0)) {
-          if (result == 0)
-            log_info(
-                "main epoll loop: there was a malformed respoonse. need to "
-                "close socket");
-          else if (result < 0)
-            log_info(
-                "main epoll loop: there was an error handling the request. "
-                "need to close socket");
-          else if (rs != 0)
+        client_found = clients_asset_find(&ca, fd);
+        assert(client_found);
+        message_parse(ca->asset, sdqu, data, size);
+        sdsize = queue_pop_no_copy(sdqu, &sddata);
+        if (sdsize > 0) {
+          rs = sendall(fd, sddata, &sdsize);
+          if (rs != 0) {
             log_error("main epoll loop:: failed during sendall function");
-          if (fd_poll_del_and_close(&epci) == -1) {
-            perror("epoll_ctl: recv 0");
-            exit(EXIT_FAILURE);
+            clients_asset_remove(&ca, fd);
+            if (fd_poll_del_and_close(&epci) == -1) {
+              perror("epoll_ctl: recv 0");
+              exit(EXIT_FAILURE);
+            }
+            continue;
           }
-          continue;
         }
       }
 
@@ -179,6 +160,7 @@ int main()
 
       // Handle closing request received
       log_info("main epoll loop:: closing connection");
+      clients_asset_remove(&ca, fd);
       if (fd_poll_del_and_close(&epci) == -1) {
         perror("epoll_ctl: recv 0");
         exit(EXIT_FAILURE);
