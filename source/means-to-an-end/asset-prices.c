@@ -7,7 +7,7 @@
 
 #include "means-to-an-end/asset-prices.h"
 
-void prices_init_data(struct asset_prices* ps, size_t capacity)
+void asset_prices_init_data(struct asset_prices* ps, size_t capacity)
 {
   assert(ps != NULL);
   assert(capacity > 0);
@@ -21,7 +21,7 @@ void prices_init_data(struct asset_prices* ps, size_t capacity)
   ps->capacity = capacity;
 }
 
-void prices_init(struct asset_prices** pps, size_t capacity)
+void asset_prices_init(struct asset_prices** pps, size_t capacity)
 {
   assert(capacity > 0);
 
@@ -30,11 +30,11 @@ void prices_init(struct asset_prices** pps, size_t capacity)
 
   (*pps)->capacity = 0;
   (*pps)->data = NULL;
-  prices_init_data(*pps, capacity);
+  asset_prices_init_data(*pps, capacity);
   (*pps)->size = 0;
 }
 
-void prices_free(struct asset_prices** pps)
+void asset_prices_free(struct asset_prices** pps)
 {
   assert(*pps != NULL);
   assert((*pps)->data != NULL);
@@ -48,20 +48,20 @@ void prices_free(struct asset_prices** pps)
 //   - Check prices with the same timestamp
 //     - Don't add new prices on timestamp conflict
 //   - After push, sort, to keep the array sorted
-void prices_push(struct asset_prices* ps, struct asset_price* data)
+void asset_prices_push(struct asset_prices* ps, struct asset_price* data)
 {
   assert(ps != NULL);
   assert(ps->data != NULL);
   assert(data != NULL);
 
   if ((ps->size + 1) >= ps->capacity) {
-    prices_init_data(ps, ps->capacity * 2);
+    asset_prices_init_data(ps, ps->capacity * 2);
   }
 
   ps->data[ps->size++] = *data;
 }
 
-bool prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp)
+bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp)
 {
   assert(ps != NULL);
   assert(ps->data != NULL);
@@ -77,7 +77,7 @@ bool prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp
 
 /*If there are no samples within the requested period, or if mintime comes after
  * maxtime, the value returned must be 0.*/
-int32_t prices_query(struct asset_prices* ps, struct asset_price_query* pq)
+int32_t asset_prices_query(struct asset_prices* ps, struct asset_price_query* pq)
 {
   assert(ps != NULL);
   assert(ps->data != NULL);

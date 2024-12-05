@@ -22,18 +22,18 @@ struct asset_prices {
   size_t capacity;  // Not bytes, but number struct price we can hold
 };
 
-void prices_init(struct asset_prices** pps, size_t capacity);
-void prices_init_data(struct asset_prices* ps, size_t capacity);
-void prices_free(struct asset_prices** pps);
+void asset_prices_init(struct asset_prices** pps, size_t capacity);
+void asset_prices_init_data(struct asset_prices* ps, size_t capacity);
+void asset_prices_free(struct asset_prices** pps);
 // TODO: On push
 //   - Check prices with the same timestamp
 //     - Don't add new prices on timestamp conflict
 //   - After push, sort, to keep the array sorted
-void prices_push(struct asset_prices* ps, struct asset_price* data);
-bool prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp);
+void asset_prices_push(struct asset_prices* ps, struct asset_price* data);
+bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp);
 /*If there are no samples within the requested period, or if mintime comes after
  * maxtime, the value returned must be 0.*/
-int32_t prices_query(struct asset_prices* ps, struct asset_price_query* pq);
+int32_t asset_prices_query(struct asset_prices* ps, struct asset_price_query* pq);
 
 #ifdef __cplusplus
 }
