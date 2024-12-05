@@ -104,6 +104,9 @@ int32_t asset_prices_query(struct asset_prices* ps, struct asset_price_query* pq
 
 void clients_asset_init(struct clients_asset **pca, int client_id)
 {
+  assert(*pca == NULL);
+  assert(client_id > 0);
+
   *pca = malloc(sizeof(struct clients_asset));
   assert(*pca != NULL);
 
@@ -132,6 +135,7 @@ void clients_asset_free(struct clients_asset **pca)
   assert(*pca != NULL);
   assert((*pca)->asset != NULL);
 
+  // Adjust prev and next values now that middle is gone
   struct clients_asset *prev = NULL;
   struct clients_asset *next = NULL;
   struct clients_asset *curr = *pca;
@@ -145,6 +149,19 @@ void clients_asset_free(struct clients_asset **pca)
   asset_prices_free(&(curr->asset));
   free(curr);
   curr = NULL;
+
+  // Adjust argument pointer
+  if (prev != NULL) {
+    *pca = prev;
+    return;
+  }
+
+  if (next != NULL) {
+    *pca = next;
+    return;
+  }
+
+  *pca = NULL;
 }
 
 void clients_asset_free_all(struct clients_asset **pca)
