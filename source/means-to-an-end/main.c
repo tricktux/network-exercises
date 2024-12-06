@@ -22,7 +22,7 @@
 #include "utils/sockets.h"
 #include "utils/utils.h"
 
-#include "means-to-an-end/asset-prices.h"
+#include "means-to-an-end/client-session.h"
 #include "means-to-an-end/messages.h"
 
 #define LOG_FILE "/tmp/network-exercises-means-to-an-end.log"

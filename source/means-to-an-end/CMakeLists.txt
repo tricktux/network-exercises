@@ -4,6 +4,7 @@ set(PROJECT_NAME "means-to-an-end")
 add_executable(${PROJECT_NAME}
     "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/main.c"
     "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/asset-prices.c"
+    "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/client-session.c"
     "${PROJECT_SOURCE_DIR}/source/${PROJECT_NAME}/messages.c"
     "${PROJECT_SOURCE_DIR}/source/utils/epoll.c"
     "${PROJECT_SOURCE_DIR}/source/utils/queue.c"

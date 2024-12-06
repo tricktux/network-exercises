@@ -17,6 +17,7 @@
 
 #include <catch2/catch.hpp>
 #include "means-to-an-end/asset-prices.h"
+#include "means-to-an-end/client-session.h"
 
 TEST_CASE("prices_init initializes prices structure correctly", "[prices]")
 {
