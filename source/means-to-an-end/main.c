@@ -75,7 +75,7 @@ int main()
   int n, fd, res, size, sdsize, rs, result;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue *rcqu = NULL, *sdqu = NULL;
-  struct clients_asset *ca = NULL;
+  struct clients_session *ca = NULL;
   queue_init(&rcqu, QUEUE_CAPACITY);
   queue_init(&sdqu, QUEUE_CAPACITY);
 
@@ -96,7 +96,7 @@ int main()
       // Handle a new listen connection
       if (events[n].data.fd == listen_fd) {
         int new_fd = fd_accept_and_epoll_add(&epci);
-        clients_asset_add(&ca, new_fd);
+        clients_session_add(&ca, new_fd);
         continue;
       }
 
@@ -110,7 +110,7 @@ int main()
       // Handle error case while recv data
       if (res < -1) {
         log_error("main epoll loop: error while receiving data");
-        clients_asset_remove(&ca, fd);
+        clients_session_remove(&ca, fd);
         if (fd_poll_del_and_close(&epci) == -1) {
           perror("epoll_ctl: recv 0");
           exit(EXIT_FAILURE);
@@ -136,7 +136,7 @@ int main()
             fd,
             size);
 
-        client_found = clients_asset_find(&ca, fd);
+        client_found = clients_session_find(&ca, fd);
         assert(client_found);
         message_parse(ca->asset, sdqu, data, size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
@@ -144,7 +144,7 @@ int main()
           rs = sendall(fd, sddata, &sdsize);
           if (rs != 0) {
             log_error("main epoll loop:: failed during sendall function");
-            clients_asset_remove(&ca, fd);
+            clients_session_remove(&ca, fd);
             if (fd_poll_del_and_close(&epci) == -1) {
               perror("epoll_ctl: recv 0");
               exit(EXIT_FAILURE);
@@ -160,7 +160,7 @@ int main()
 
       // Handle closing request received
       log_info("main epoll loop:: closing connection");
-      clients_asset_remove(&ca, fd);
+      clients_session_remove(&ca, fd);
       if (fd_poll_del_and_close(&epci) == -1) {
         perror("epoll_ctl: recv 0");
         exit(EXIT_FAILURE);

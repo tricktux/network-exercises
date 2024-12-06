@@ -162,99 +162,99 @@ TEST_CASE("price query tests", "[prices]")
 
 
 // Helper function to create a list with multiple clients
-void create_test_list(struct clients_asset **pca, int num_clients) {
+void create_test_list(struct clients_session **pca, int num_clients) {
   for (int i = 1; i <= num_clients; ++i) {
-    clients_asset_add(pca, i);
+    clients_session_add(pca, i);
   }
 }
 
-TEST_CASE("clients_asset operations", "[clients_asset]") {
-  struct clients_asset *ca = nullptr;
+TEST_CASE("clients_session operations", "[clients_session]") {
+  struct clients_session *ca = nullptr;
 
   SECTION("Initialization and addition") {
     REQUIRE(ca == nullptr);
 
-    clients_asset_init(&ca, 1);
+    clients_session_init(&ca, 1);
     REQUIRE(ca != nullptr);
 
-    clients_asset_add(&ca, 2);
-    clients_asset_add(&ca, 3);
+    clients_session_add(&ca, 2);
+    clients_session_add(&ca, 3);
 
     // Check if we can find all added clients
-    REQUIRE(clients_asset_find(&ca, 1));
-    REQUIRE(clients_asset_find(&ca, 2));
-    REQUIRE(clients_asset_find(&ca, 3));
+    REQUIRE(clients_session_find(&ca, 1));
+    REQUIRE(clients_session_find(&ca, 2));
+    REQUIRE(clients_session_find(&ca, 3));
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
   }
 
   SECTION("Finding clients") {
     create_test_list(&ca, 5);
 
-    REQUIRE(clients_asset_find(&ca, 1));
-    REQUIRE(clients_asset_find(&ca, 3));
-    REQUIRE(clients_asset_find(&ca, 5));
-    REQUIRE_FALSE(clients_asset_find(&ca, 6));
-    REQUIRE_FALSE(clients_asset_find(&ca, 88));
+    REQUIRE(clients_session_find(&ca, 1));
+    REQUIRE(clients_session_find(&ca, 3));
+    REQUIRE(clients_session_find(&ca, 5));
+    REQUIRE_FALSE(clients_session_find(&ca, 6));
+    REQUIRE_FALSE(clients_session_find(&ca, 88));
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
   }
 
   SECTION("Removing clients") {
     create_test_list(&ca, 5);
 
-    REQUIRE(clients_asset_remove(&ca, 3));
-    REQUIRE_FALSE(clients_asset_find(&ca, 3));
+    REQUIRE(clients_session_remove(&ca, 3));
+    REQUIRE_FALSE(clients_session_find(&ca, 3));
 
-    REQUIRE(clients_asset_remove(&ca, 1));
-    REQUIRE_FALSE(clients_asset_find(&ca, 1));
+    REQUIRE(clients_session_remove(&ca, 1));
+    REQUIRE_FALSE(clients_session_find(&ca, 1));
 
-    REQUIRE(clients_asset_remove(&ca, 5));
-    REQUIRE_FALSE(clients_asset_find(&ca, 5));
+    REQUIRE(clients_session_remove(&ca, 5));
+    REQUIRE_FALSE(clients_session_find(&ca, 5));
 
-    REQUIRE_FALSE(clients_asset_remove(&ca, 6));
+    REQUIRE_FALSE(clients_session_remove(&ca, 6));
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
   }
 
   SECTION("Get beginning and end") {
     create_test_list(&ca, 5);
 
-    clients_asset_get_end(&ca);
-    REQUIRE(clients_asset_find(&ca, 5));
+    clients_session_get_end(&ca);
+    REQUIRE(clients_session_find(&ca, 5));
 
-    clients_asset_get_beg(&ca);
-    REQUIRE(clients_asset_find(&ca, 1));
+    clients_session_get_beg(&ca);
+    REQUIRE(clients_session_find(&ca, 1));
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
   }
 
   SECTION("Free individual client") {
     create_test_list(&ca, 3);
 
-    struct clients_asset *temp = ca;
-    clients_asset_find(&temp, 2);
-    clients_asset_free(&temp);
+    struct clients_session *temp = ca;
+    clients_session_find(&temp, 2);
+    clients_session_free(&temp);
 
-    REQUIRE_FALSE(clients_asset_find(&ca, 2));
-    REQUIRE(clients_asset_find(&ca, 1));
-    REQUIRE(clients_asset_find(&ca, 3));
+    REQUIRE_FALSE(clients_session_find(&ca, 2));
+    REQUIRE(clients_session_find(&ca, 1));
+    REQUIRE(clients_session_find(&ca, 3));
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
   }
 
   SECTION("Free all clients") {
     create_test_list(&ca, 5);
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
     REQUIRE(ca == nullptr);
 
     // Ensure we can create a new list after freeing all
     create_test_list(&ca, 3);
-    REQUIRE(clients_asset_find(&ca, 1));
-    REQUIRE(clients_asset_find(&ca, 2));
-    REQUIRE(clients_asset_find(&ca, 3));
+    REQUIRE(clients_session_find(&ca, 1));
+    REQUIRE(clients_session_find(&ca, 2));
+    REQUIRE(clients_session_find(&ca, 3));
 
-    clients_asset_free_all(&ca);
+    clients_session_free_all(&ca);
   }
 }

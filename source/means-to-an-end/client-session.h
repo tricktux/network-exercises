@@ -5,21 +5,21 @@
 extern "C" {
 #endif
 
-struct clients_asset {
+struct clients_session {
   int client_id;   // Client's file descriptor
   struct asset_prices *asset;
-  struct client_asset *next;
-  struct client_asset *prev;
+  struct clients_session *next;
+  struct clients_session *prev;
 };
 
-void clients_asset_init(struct clients_asset **pca, int client_id);
-void clients_asset_free_all(struct clients_asset **pca);
-void clients_asset_add(struct clients_asset **pca, int id);
-bool clients_asset_remove(struct clients_asset **pca, int id);
-bool clients_asset_find(struct clients_asset **pca, int id);
-void clients_asset_get_end(struct clients_asset **pca);
-void clients_asset_get_beg(struct clients_asset **pca);
-void clients_asset_free(struct clients_asset **pca);
+void clients_session_init(struct clients_session **pca, int client_id);
+void clients_session_free_all(struct clients_session **pca);
+void clients_session_add(struct clients_session **pca, int id);
+bool clients_session_remove(struct clients_session **pca, int id);
+bool clients_session_find(struct clients_session **pca, int id);
+void clients_session_get_end(struct clients_session **pca);
+void clients_session_get_beg(struct clients_session **pca);
+void clients_session_free(struct clients_session **pca);
 
 #ifdef __cplusplus
 }
