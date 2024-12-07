@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+#define QUEUE_FREE_CAP_BUFFER 0.5  // Percentage
+
 struct queue {
   char* data;
   size_t capacity;

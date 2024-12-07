@@ -90,7 +90,19 @@ TEST_CASE("Queue Edge Cases")
 
     // As it should over push the capacity, size should remain the same.
     REQUIRE(qu->size == 9);
-    REQUIRE(qu->capacity == 20);
+    REQUIRE(qu->capacity == 40);
+  }
+
+  SECTION("Push Ex Over Capacity")
+  {
+    size_t s = 4;
+    for (size_t k = 0; k < 18; k++) {
+      memcpy(qu->head, const_cast<char*>("world"), 5);
+      queue_push_ex(qu, 5);
+
+      // As it should over push the capacity, size should remain the same.
+      REQUIRE(qu->size == s + ((k + 1) * 5));
+    }
   }
 
   SECTION("Pop Empty Queue")
