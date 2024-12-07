@@ -18,6 +18,7 @@
 #include <catch2/catch.hpp>
 #include "means-to-an-end/asset-prices.h"
 #include "means-to-an-end/client-session.h"
+#include "utils/queue.h"
 
 TEST_CASE("prices_init initializes prices structure correctly", "[prices]")
 {
@@ -184,6 +185,23 @@ TEST_CASE("clients_session operations", "[clients_session]") {
     REQUIRE(clients_session_find(&ca, 1));
     REQUIRE(clients_session_find(&ca, 2));
     REQUIRE(clients_session_find(&ca, 3));
+
+    clients_session_free_all(&ca);
+  }
+
+  SECTION("Queue Initialization") {
+    REQUIRE(ca == nullptr);
+
+    clients_session_init(&ca, 1);
+    REQUIRE(ca != nullptr);
+
+    clients_session_add(&ca, 2);
+    clients_session_add(&ca, 3);
+
+    // Check if we can find all added clients
+    REQUIRE(ca->recv_qu != NULL);
+    REQUIRE(ca->recv_qu->capacity == 512);
+    REQUIRE(ca->recv_qu->size == 0);
 
     clients_session_free_all(&ca);
   }

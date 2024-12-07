@@ -76,7 +76,6 @@ int main()
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue *rcqu = NULL, *sdqu = NULL;
   struct clients_session *ca = NULL;
-  queue_init(&rcqu, QUEUE_CAPACITY);
   queue_init(&sdqu, QUEUE_CAPACITY);
 
   for (;;) {
@@ -101,7 +100,9 @@ int main()
       }
 
       // Receive all the data into the queue
-      res = recv_request(fd, rcqu);
+      client_found = clients_session_find(&ca, fd);
+      assert(client_found);
+      res = recv_request(fd, ca->recv_qu);
       log_trace(
           "main epoll loop: handling POLLIN event on fd '%d' with res: '%d'",
           fd,
@@ -121,7 +122,7 @@ int main()
 
       // Peek at the data to check if we have at least one complete request
       complete_req = false;
-      size = queue_peek(rcqu, &data);
+      size = queue_peek(ca->recv_qu, &data);
       if ((size > 0) && (size % MESSAGE_SIZE == 0)) {
         complete_req = true;
         log_trace("main epoll loop: complete_req = '%d'",
@@ -130,14 +131,12 @@ int main()
 
       // If we do, process itl
       if (complete_req) {
-        size = queue_pop_no_copy(rcqu, &data);
+        size = queue_pop_no_copy(ca->recv_qu, &data);
         log_trace(
             "main epoll loop: raw request: fd: '%d', size: '%d'",
             fd,
             size);
 
-        client_found = clients_session_find(&ca, fd);
-        assert(client_found);
         message_parse(ca->asset, sdqu, data, size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
         if (sdsize > 0) {

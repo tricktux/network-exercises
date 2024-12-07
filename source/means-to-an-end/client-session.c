@@ -21,7 +21,8 @@ void clients_session_init(struct clients_session **pca, int client_id)
   asset_prices_init(&(*pca)->asset, 16);
   assert((*pca)->asset != NULL);
 
-  queue_init(&((*pca)->recv_qu), 512);
+  (*pca)->recv_qu = NULL;
+  queue_init(&(*pca)->recv_qu, 512);
   assert((*pca)->recv_qu != NULL);
 
   (*pca)->next = NULL;
