@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include "utils/queue.h"
 #include "means-to-an-end/asset-prices.h"
 #include "means-to-an-end/client-session.h"
 
@@ -17,8 +18,11 @@ void clients_session_init(struct clients_session **pca, int client_id)
   *pca = malloc(sizeof(struct clients_session));
   assert(*pca != NULL);
 
-  asset_prices_init(&(*pca)->asset, 64);
+  asset_prices_init(&(*pca)->asset, 16);
   assert((*pca)->asset != NULL);
+
+  queue_init(&((*pca)->recv_qu), 512);
+  assert((*pca)->recv_qu != NULL);
 
   (*pca)->next = NULL;
   (*pca)->prev = NULL;

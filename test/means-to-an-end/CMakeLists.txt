@@ -1,6 +1,7 @@
 
 add_executable(messages-prices-test 
     "${CMAKE_SOURCE_DIR}/source/log/log.c"
+    "${CMAKE_SOURCE_DIR}/source/utils/queue.c"
     "${CMAKE_SOURCE_DIR}/source/means-to-an-end/asset-prices.c"
     "${CMAKE_SOURCE_DIR}/source/means-to-an-end/client-session.c"
     messages-prices-test.cpp

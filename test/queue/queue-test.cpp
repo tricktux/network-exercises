@@ -89,8 +89,8 @@ TEST_CASE("Queue Edge Cases")
     queue_push(qu, const_cast<char*>("world"), 5);
 
     // As it should over push the capacity, size should remain the same.
-    REQUIRE(qu->size == 4);
-    REQUIRE(qu->free_capacity == 1);
+    REQUIRE(qu->size == 9);
+    REQUIRE(qu->capacity == 20);
   }
 
   SECTION("Pop Empty Queue")

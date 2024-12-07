@@ -8,6 +8,7 @@ extern "C" {
 struct clients_session {
   int client_id;   // Client's file descriptor
   struct asset_prices *asset;
+  struct queue *recv_qu;
   struct clients_session *next;
   struct clients_session *prev;
 };

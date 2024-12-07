@@ -13,6 +13,38 @@
 #include "utils/queue.h"
 #include "log/log.h"
 
+void queue_init_data(struct queue* qu, size_t capacity)
+{
+  assert(qu != NULL);
+  assert(capacity > 0);
+  assert(capacity > qu->capacity);
+
+  char *new_data = NULL;
+  new_data = realloc(qu->data, capacity);
+  assert(new_data != NULL);
+
+  qu->data = new_data;
+  qu->capacity = capacity;
+  qu->free_capacity = capacity - qu->size;
+}
+
+void queue_expand_capacity(struct queue* qu, size_t size)
+{
+  assert(qu != NULL);
+  if (size ==0)
+    return;
+
+  if (qu->size + size < qu->free_capacity)
+    return;
+
+  size_t new_cap = qu->capacity * 2, new_free_cap = new_cap - qu->size;
+  while (qu->size + size >= new_free_cap) {
+    new_cap *= 2;
+    new_free_cap = new_cap - qu->size;
+  }
+  queue_init_data(qu, new_cap);
+}
+
 /**
  * @brief Initializes a queue with the specified capacity.
  *
@@ -35,12 +67,11 @@ void queue_init(struct queue** qu, size_t capacity)
   *qu = malloc(sizeof(struct queue));
   assert(qu != NULL);
 
-  (*qu)->data = malloc(capacity);
-  assert((*qu)->data != NULL);
-
-  (*qu)->capacity = capacity;
-  (*qu)->free_capacity = capacity;
+  (*qu)->capacity = 0;
   (*qu)->size = 0;
+  (*qu)->data = NULL;
+  queue_init_data(*qu, capacity);
+
   (*qu)->head = (*qu)->data;
 }
 
@@ -81,13 +112,13 @@ void queue_push(struct queue* qu, char* data, size_t size)
   assert(data != NULL);
 
   if (size == 0) {
-    log_warn("queue_push: size is zero... noop");
+    log_trace("queue_push: size is zero... noop");
     return;
   }
 
-  if (qu->size + size >= qu->capacity) {
-    log_error("queue_push: pushing over queue capacity... noop");
-    return;
+  if (qu->size + size >= qu->free_capacity) {
+    queue_expand_capacity(qu, size);
+    log_info("queue_push: expanding current capacity to %d\n", qu->capacity);
   }
 
   memcpy(qu->head, data, size);
@@ -115,9 +146,9 @@ void queue_push_ex(struct queue* qu, size_t size)
     return;
   }
 
-  if (qu->size + size >= qu->capacity) {
-    log_error("queue_push: pushing over queue capacity... noop");
-    return;
+  if (qu->size + size >= qu->free_capacity) {
+    queue_expand_capacity(qu, size);
+    log_info("queue_push: expanding current capacity to %d\n", qu->capacity);
   }
 
   qu->head += size;
