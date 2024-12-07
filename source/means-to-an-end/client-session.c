@@ -59,6 +59,9 @@ void clients_session_free(struct clients_session **pca)
     next->prev = prev;
 
   asset_prices_free(&(curr->asset));
+  curr->asset = NULL;
+  queue_free(&(curr->recv_qu));
+  curr->recv_qu = NULL;
   free(curr);
   curr = NULL;
 
