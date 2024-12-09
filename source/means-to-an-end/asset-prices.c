@@ -14,7 +14,7 @@ void asset_prices_init_data(struct asset_prices* ps, size_t capacity)
   assert(capacity > ps->capacity);
 
   struct asset_price* new_data = NULL;
-  new_data = reallocarray(ps->data, sizeof(struct asset_price), capacity);
+  new_data = reallocarray(ps->data, capacity, sizeof(struct asset_price));
   assert(new_data != NULL);
 
   ps->data = new_data;

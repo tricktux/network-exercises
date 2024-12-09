@@ -11,7 +11,7 @@
 #define PRIME_RESPONSE_NUMBER_KEY "prime"
 #define PRIME_RESPONSE_FORMAT "{\"method\":\"isPrime\",\"prime\":%s}\n"
 #define PRIME_RESPONSE_ILL_RESPONSE "{\"response to malformed request\"}\n"
-#define PRIME_RESPONSE_ILL_RESPONSE_SIZE 37
+#define PRIME_RESPONSE_ILL_RESPONSE_SIZE 34
 
 #ifdef __cplusplus
 extern "C" {

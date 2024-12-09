@@ -8,7 +8,7 @@
 #include "means-to-an-end/asset-prices.h"
 #include "means-to-an-end/messages.h"
 
-void message_parse(struct asset_price *ps, struct queue* sdqu, char* data, size_t dsize)
+void message_parse(struct asset_prices *ps, struct queue* sdqu, char* data, size_t dsize)
 {
   assert(ps != NULL);
   assert(sdqu != NULL);

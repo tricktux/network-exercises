@@ -72,9 +72,9 @@ int main()
 
   bool complete_req = false, client_found = false;
   char *data, *sddata;
-  int n, fd, res, size, sdsize, rs, result;
+  int n, fd, res, size, sdsize, rs;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
-  struct queue *rcqu = NULL, *sdqu = NULL;
+  struct queue *sdqu = NULL;
   struct clients_session *ca = NULL;
   queue_init(&sdqu, QUEUE_CAPACITY);
 
@@ -137,7 +137,7 @@ int main()
             fd,
             size);
 
-        message_parse(ca->asset, sdqu, data, size);
+        message_parse(ca->asset, sdqu, data, (size_t) size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
         if (sdsize > 0) {
           rs = sendall(fd, sddata, &sdsize);

@@ -35,11 +35,11 @@ void queue_expand_capacity(struct queue* qu, size_t size)
   if (size ==0)
     return;
 
-  if (qu->size + size < (qu->free_capacity * QUEUE_FREE_CAP_BUFFER))
+  if (qu->size + size < ((size_t) ((double) qu->free_capacity * QUEUE_FREE_CAP_BUFFER)))
     return;
 
   size_t new_cap = qu->capacity * 2, new_free_cap = new_cap - qu->size;
-  while (qu->size + size >= (new_free_cap * QUEUE_FREE_CAP_BUFFER)) {
+  while (qu->size + size >= (size_t) ((double) new_free_cap * QUEUE_FREE_CAP_BUFFER)) {
     new_cap *= 2;
     new_free_cap = new_cap - qu->size;
   }
@@ -115,7 +115,7 @@ void queue_push(struct queue* qu, char* data, size_t size)
     return;
   }
 
-  if (qu->size + size >= (qu->free_capacity * QUEUE_FREE_CAP_BUFFER)) {
+  if (qu->size + size >= (size_t) ((double) qu->free_capacity * QUEUE_FREE_CAP_BUFFER)) {
     queue_expand_capacity(qu, size);
     log_info("queue_push: expanding current capacity to %d\n", qu->capacity);
   }
@@ -145,7 +145,7 @@ void queue_push_ex(struct queue* qu, size_t size)
     return;
   }
 
-  if (qu->size + size >= (qu->free_capacity * QUEUE_FREE_CAP_BUFFER)) {
+  if (qu->size + size >= (size_t) ((double) qu->free_capacity * QUEUE_FREE_CAP_BUFFER)) {
     queue_expand_capacity(qu, size);
     log_info("queue_push: expanding current capacity to %d\n", qu->capacity);
   }
