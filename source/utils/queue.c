@@ -16,8 +16,12 @@
 void queue_init_data(struct queue* qu, size_t capacity)
 {
   assert(qu != NULL);
-  assert(capacity > 0);
-  assert(capacity > qu->capacity);
+
+  if (capacity == 0)
+    return;
+
+  if (qu->capacity > capacity)
+    return;
 
   char *new_data = NULL;
   new_data = realloc(qu->data, capacity);

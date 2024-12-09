@@ -28,7 +28,7 @@
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
 
-#define QUEUE_CAPACITY 65536  //  1024 * 64
+#define QUEUE_CAPACITY 2048
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define PORT "18888"
