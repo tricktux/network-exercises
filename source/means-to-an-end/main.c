@@ -25,9 +25,12 @@
 #include "means-to-an-end/client-session.h"
 #include "means-to-an-end/messages.h"
 
+#define EPOLL_WAIT_TIMEOUT 15 * 1000
+
 #define LOG_FILE "/tmp/network-exercises-means-to-an-end.log"
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
+
 
 #define QUEUE_CAPACITY 65536  //  1024 * 64
 #define MAX_NUM_CON 10
@@ -80,10 +83,20 @@ int main()
 
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
-    nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, EPOLL_WAIT_TIMEOUT);
     if (nfds == -1) {
       perror("epoll_wait\n");
       exit(EXIT_FAILURE);
+    }
+
+    if (nfds == 0) {
+      log_error("main epoll loop: timeout hit. cleanup time...");
+      close(epollfd);
+      close(listen_fd);
+      queue_free(&sdqu);
+      if (ca != NULL)
+        clients_session_free_all(&ca);
+      exit(EXIT_SUCCESS);
     }
 
     log_trace("main epoll loop: epoll got '%d' events", nfds);
