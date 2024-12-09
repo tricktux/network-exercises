@@ -1,5 +1,5 @@
 
-.PHONY: git_clean cmake_clean debug release sanitize ci-ubuntu
+.PHONY: git_clean cmake_clean debug release sanitize ci-ubuntu perf
 
 all: debug
 
@@ -39,3 +39,11 @@ ci-ubuntu:
 	cmake --preset=ci-linux-local
 	cmake --build --preset=ci-linux-local
 	ln -sf build/ci-linux-local/compile_commands.json .
+
+perf:
+	cmake --preset=perf-analysis
+	cmake --build --preset=perf-analysis
+	ln -sf build/perf-analysis/compile_commands.json .
+	@echo "Build complete. To run perf analysis, use:"
+	@echo "perf record -g ./build/perf-analysis/your_application"
+	@echo "perf report"

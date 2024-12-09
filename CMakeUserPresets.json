@@ -43,6 +43,15 @@
       "inherits": ["ci-ubuntu"],
       "cacheVariables": {
       }
+    },
+    {
+      "name": "perf-analysis",
+      "displayName": "Performance Analysis Build",
+      "description": "Release build with perf support for performance analysis",
+      "binaryDir": "${sourceDir}/build/perf-analysis",
+      "inherits": ["ci-sanitize"],
+      "cacheVariables": {
+      }
     }
   ],
   "buildPresets": [
@@ -70,6 +79,11 @@
       "name": "ci-linux-local",
       "configurePreset": "ci-linux-local",
       "configuration": "Debug"
+    },
+    {
+        "name": "perf-analysis",
+        "configurePreset": "perf-analysis",
+        "configuration": "Debug"
     }
   ],
   "testPresets": [
