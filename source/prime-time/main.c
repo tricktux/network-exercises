@@ -151,9 +151,11 @@ int main()
             fd,
             size,
             data);
+        rs = 0;
         result = handle_request(sdqu, data, (size_t)size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
-        rs = sendall(fd, sddata, &sdsize);
+        if (sdsize > 0)
+          rs = sendall(fd, sddata, &sdsize);
 
         if ((result <= 0) || (rs != 0)) {
           if (result == 0)
