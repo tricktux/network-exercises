@@ -87,18 +87,8 @@ void clients_session_free_all(struct clients_session **pca)
   assert((*pca)->asset != NULL);
 
   clients_session_get_beg(pca);
-
-  struct clients_session *next = NULL;
-  struct clients_session *curr = *pca;
-  do {
-    next = curr->next;
-    asset_prices_free(&(curr->asset));
-    free(curr);
-    curr = NULL;
-    curr = next;
-  } while (curr != NULL);
-
-  *pca = NULL;
+  while (*pca != NULL)
+    clients_session_free(pca);
 }
 
 void clients_session_get_end(struct clients_session **pca) {
