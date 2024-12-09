@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define QUEUE_FREE_CAP_BUFFER 0.5  // Percentage
+#define QUEUE_FREE_CAP_BUFFER 0.8  // Percentage
 
 struct queue {
   char* data;
