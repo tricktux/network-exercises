@@ -90,7 +90,7 @@ TEST_CASE("Queue Edge Cases")
 
     // As it should over push the capacity, size should remain the same.
     REQUIRE(qu->size == 9);
-    REQUIRE(qu->capacity == 40);
+    REQUIRE(qu->capacity == 20);
   }
 
   SECTION("Push Ex Over Capacity")
