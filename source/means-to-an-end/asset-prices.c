@@ -87,7 +87,7 @@ int32_t asset_prices_query(struct asset_prices* ps, struct asset_price_query* pq
     return 0;
 
   size_t k = 0;
-  int32_t mean = 0;
+  int64_t mean = 0;
   int32_t num_prices = 0;
   int32_t curr_ts = 0;
   for (; k < ps->size; k++) {
