@@ -31,6 +31,8 @@ void clients_session_init(struct clients_session **pca, int client_id)
 }
 
 void clients_session_get_beg(struct clients_session **pca) {
+  assert(*pca != NULL);
+
   // Ensure we start from the beginning of the list
   struct clients_session *prev = (*pca)->prev;
   struct clients_session *first = *pca;
@@ -100,6 +102,8 @@ void clients_session_free_all(struct clients_session **pca)
 }
 
 void clients_session_get_end(struct clients_session **pca) {
+  assert(*pca != NULL);
+
   // Ensure we are at the end of the list
   struct clients_session *next = (*pca)->next;
   struct clients_session *last = *pca;

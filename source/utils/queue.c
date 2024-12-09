@@ -147,7 +147,7 @@ void queue_push_ex(struct queue* qu, size_t size)
 
   if (qu->size + size >= (size_t) ((double) qu->free_capacity * QUEUE_FREE_CAP_BUFFER)) {
     queue_expand_capacity(qu, size);
-    log_info("queue_push: expanding current capacity to %d\n", qu->capacity);
+    log_info("queue_push: expanding current capacity to %d", qu->capacity);
   }
 
   qu->head += size;
