@@ -194,12 +194,10 @@ void is_prime_beget_response(struct is_prime_request* request,
   if (request->is_malformed) {
     *size = PRIME_RESPONSE_ILL_RESPONSE_SIZE;
     memcpy(response, PRIME_RESPONSE_ILL_RESPONSE, (size_t)*size);
-    log_trace("is_prime_beget_response: '%s'", response);
     return;
   }
   *size = sprintf(
       response, PRIME_RESPONSE_FORMAT, (request->is_prime ? "true" : "false"));
-  log_trace("is_prime_beget_response: '%s'", response);
 }
 
 void is_prime_free(struct is_prime_request** request)

@@ -147,10 +147,9 @@ int main()
       if (complete_req != NULL) {
         size = queue_pop_no_copy(rcqu, &data);
         log_trace(
-            "main epoll loop: raw request: fd: '%d', size: '%d', data: '%s'",
+            "main epoll loop: raw request: fd: '%d', size: '%d'",
             fd,
-            size,
-            data);
+            size);
         rs = 0;
         result = handle_request(sdqu, data, (size_t)size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
