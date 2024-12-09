@@ -121,8 +121,7 @@ bool is_prime_request_malformed(struct is_prime_request* request, char* req)
       != 0)
   {
     json_object_put(root);
-    log_warn("is_prime_request_malformed: method value did not match '%s'",
-             method_value);
+    log_warn("is_prime_request_malformed: method value unexpected");
     request->is_malformed = true;
     return true;
   }
