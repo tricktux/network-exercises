@@ -154,7 +154,7 @@ bool is_prime_request_malformed(struct is_prime_request* request, char* req)
   }
 
   errno = 0;
-  int number_value = json_object_get_int(number);
+  int64_t number_value = json_object_get_int64(number);
   if (errno != 0) {
     json_object_put(root);
     log_warn("is_prime_request_malformed: json_object_get_int failed for '%s'",
@@ -169,12 +169,12 @@ bool is_prime_request_malformed(struct is_prime_request* request, char* req)
   return false;
 }
 
-bool is_prime_f(int number)
+bool is_prime_f(int64_t number)
 {
   if (number <= 1) {
     return false;  // less than 2 are not prime numbers
   }
-  for (int i = 2; i * i <= number; i++) {
+  for (int64_t i = 2; i * i <= number; i++) {
     if (number % i == 0) {
       return false;
     }

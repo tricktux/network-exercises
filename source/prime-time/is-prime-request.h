@@ -20,7 +20,7 @@ extern "C" {
 struct is_prime_request {
   bool is_prime;
   bool is_malformed;
-  int number;
+  int64_t number;
 };
 
 int is_prime_request_builder(struct queue* sdq,
@@ -28,7 +28,7 @@ int is_prime_request_builder(struct queue* sdq,
                              size_t req_size,
                              bool* malformed);
 bool is_prime_request_malformed(struct is_prime_request* request, char* req);
-bool is_prime_f(int number);
+bool is_prime_f(int64_t number);
 void is_prime_beget_response(struct is_prime_request* request,
                              char* response,
                              int* size);
