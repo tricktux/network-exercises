@@ -14,6 +14,9 @@ struct __attribute__((packed)) message {
   uint32_t second_word;
 };
 
-void message_parse(struct asset_prices *ps, struct queue* sdqu, char* data, size_t dsize);
+void message_parse(struct asset_prices* ps,
+                   struct queue* sdqu,
+                   char* data,
+                   size_t dsize);
 
 #endif  // INCLUDE_MESSAGES_H_

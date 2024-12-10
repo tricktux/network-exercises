@@ -31,7 +31,6 @@
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
 
-
 #define QUEUE_CAPACITY 65536  //  1024 * 64
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
@@ -77,8 +76,8 @@ int main()
   char *data, *sddata;
   int n, fd, res, size, sdsize, rs;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
-  struct queue *sdqu = NULL;
-  struct clients_session *ca = NULL;
+  struct queue* sdqu = NULL;
+  struct clients_session* ca = NULL;
   queue_init(&sdqu, QUEUE_CAPACITY);
 
   for (;;) {
@@ -146,11 +145,9 @@ int main()
       if (complete_req) {
         size = queue_pop_no_copy(ca->recv_qu, &data);
         log_trace(
-            "main epoll loop: raw request: fd: '%d', size: '%d'",
-            fd,
-            size);
+            "main epoll loop: raw request: fd: '%d', size: '%d'", fd, size);
 
-        message_parse(ca->asset, sdqu, data, (size_t) size);
+        message_parse(ca->asset, sdqu, data, (size_t)size);
         sdsize = queue_pop_no_copy(sdqu, &sddata);
         if (sdsize > 0) {
           rs = sendall(fd, sddata, &sdsize);

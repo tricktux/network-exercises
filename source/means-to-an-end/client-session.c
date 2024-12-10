@@ -10,7 +10,7 @@
 #include "means-to-an-end/asset-prices.h"
 #include "means-to-an-end/client-session.h"
 
-void clients_session_init(struct clients_session **pca, int client_id)
+void clients_session_init(struct clients_session** pca, int client_id)
 {
   assert(*pca == NULL);
   assert(client_id > 0);
@@ -30,12 +30,13 @@ void clients_session_init(struct clients_session **pca, int client_id)
   (*pca)->client_id = client_id;
 }
 
-void clients_session_get_beg(struct clients_session **pca) {
+void clients_session_get_beg(struct clients_session** pca)
+{
   assert(*pca != NULL);
 
   // Ensure we start from the beginning of the list
-  struct clients_session *prev = (*pca)->prev;
-  struct clients_session *first = *pca;
+  struct clients_session* prev = (*pca)->prev;
+  struct clients_session* first = *pca;
   while (prev != NULL) {
     first = prev;
     prev = prev->prev;
@@ -44,15 +45,15 @@ void clients_session_get_beg(struct clients_session **pca) {
   *pca = first;
 }
 
-void clients_session_free(struct clients_session **pca)
+void clients_session_free(struct clients_session** pca)
 {
   assert(*pca != NULL);
   assert((*pca)->asset != NULL);
 
   // Adjust prev and next values now that middle is gone
-  struct clients_session *prev = NULL;
-  struct clients_session *next = NULL;
-  struct clients_session *curr = *pca;
+  struct clients_session* prev = NULL;
+  struct clients_session* next = NULL;
+  struct clients_session* curr = *pca;
   prev = curr->prev;
   next = curr->next;
   if (prev != NULL)
@@ -81,7 +82,7 @@ void clients_session_free(struct clients_session **pca)
   *pca = NULL;
 }
 
-void clients_session_free_all(struct clients_session **pca)
+void clients_session_free_all(struct clients_session** pca)
 {
   assert(*pca != NULL);
   assert((*pca)->asset != NULL);
@@ -91,12 +92,13 @@ void clients_session_free_all(struct clients_session **pca)
     clients_session_free(pca);
 }
 
-void clients_session_get_end(struct clients_session **pca) {
+void clients_session_get_end(struct clients_session** pca)
+{
   assert(*pca != NULL);
 
   // Ensure we are at the end of the list
-  struct clients_session *next = (*pca)->next;
-  struct clients_session *last = *pca;
+  struct clients_session* next = (*pca)->next;
+  struct clients_session* last = *pca;
   while (next != NULL) {
     last = next;
     next = next->next;
@@ -105,7 +107,7 @@ void clients_session_get_end(struct clients_session **pca) {
   *pca = last;
 }
 
-void clients_session_add(struct clients_session **pca, int id)
+void clients_session_add(struct clients_session** pca, int id)
 {
   assert(id > 0);
 
@@ -117,11 +119,11 @@ void clients_session_add(struct clients_session **pca, int id)
   clients_session_get_end(pca);
 
   clients_session_init(&((*pca)->next), id);
-  struct clients_session *next = (*pca)->next;
+  struct clients_session* next = (*pca)->next;
   next->prev = *pca;
 }
 
-bool clients_session_remove(struct clients_session **pca, int id)
+bool clients_session_remove(struct clients_session** pca, int id)
 {
   assert(*pca != NULL);
   assert(id > 0);
@@ -135,7 +137,7 @@ bool clients_session_remove(struct clients_session **pca, int id)
   return false;
 }
 
-bool clients_session_find(struct clients_session **pca, int id)
+bool clients_session_find(struct clients_session** pca, int id)
 {
   if (*pca == NULL)
     return false;
@@ -143,8 +145,8 @@ bool clients_session_find(struct clients_session **pca, int id)
 
   clients_session_get_beg(pca);
 
-  struct clients_session *next = NULL;
-  struct clients_session *curr = *pca;
+  struct clients_session* next = NULL;
+  struct clients_session* curr = *pca;
   do {
     if (curr->client_id == id) {
       *pca = curr;

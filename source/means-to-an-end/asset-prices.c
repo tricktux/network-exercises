@@ -61,7 +61,8 @@ void asset_prices_push(struct asset_prices* ps, struct asset_price* data)
   ps->data[ps->size++] = *data;
 }
 
-bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp)
+bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps,
+                                            int32_t timestamp)
 {
   assert(ps != NULL);
   assert(ps->data != NULL);
@@ -77,7 +78,8 @@ bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t tim
 
 /*If there are no samples within the requested period, or if mintime comes after
  * maxtime, the value returned must be 0.*/
-int32_t asset_prices_query(struct asset_prices* ps, struct asset_price_query* pq)
+int32_t asset_prices_query(struct asset_prices* ps,
+                           struct asset_price_query* pq)
 {
   assert(ps != NULL);
   assert(ps->data != NULL);

@@ -30,10 +30,12 @@ void asset_prices_free(struct asset_prices** pps);
 //     - Don't add new prices on timestamp conflict
 //   - After push, sort, to keep the array sorted
 void asset_prices_push(struct asset_prices* ps, struct asset_price* data);
-bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps, int32_t timestamp);
+bool asset_prices_duplicate_timestamp_check(struct asset_prices* ps,
+                                            int32_t timestamp);
 /*If there are no samples within the requested period, or if mintime comes after
  * maxtime, the value returned must be 0.*/
-int32_t asset_prices_query(struct asset_prices* ps, struct asset_price_query* pq);
+int32_t asset_prices_query(struct asset_prices* ps,
+                           struct asset_price_query* pq);
 
 #ifdef __cplusplus
 }
