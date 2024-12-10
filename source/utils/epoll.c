@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
@@ -35,13 +36,13 @@ int fd_accept_and_epoll_add(void* context)
   struct epoll_ctl_info* info = context;
   assert(info != NULL);
 
-  socklen_t addrlen;
-  struct epoll_event ev;
+  socklen_t addrlen = sizeof(struct sockaddr_storage);
   struct sockaddr_storage addr;
 
   int conn_sock = accept(info->new_fd, (struct sockaddr*)&addr, &addrlen);
   if (conn_sock == -1) {
-    perror("accept\n");
+    log_error("accept failed: %s (errno: %d)", strerror(errno), errno);
+    perror("fd_accept_and_epoll_add: accept: ");
     exit(EXIT_FAILURE);
   }
 
@@ -49,6 +50,7 @@ int fd_accept_and_epoll_add(void* context)
   fcntl(conn_sock, F_SETFL, O_NONBLOCK);
 
   // Doing edge-level trigger
+  struct epoll_event ev;
   ev.events = EPOLLIN | EPOLLET;
   ev.data.fd = conn_sock;
   if (epoll_ctl(info->efd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {
