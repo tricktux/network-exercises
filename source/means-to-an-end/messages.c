@@ -18,20 +18,23 @@ void message_parse(struct asset_prices *ps, struct queue* sdqu, char* data, size
   char* pd = data;
   int k;
   int num_msgs = dsize / MESSAGE_SIZE;
+  int32_t mean_p;
+  struct asset_price_query qry;
+  struct asset_price prc;
+  struct message *msg;
+
   for (k = 0; k < num_msgs; k++, pd += MESSAGE_SIZE) {
-   struct message *msg = (struct message *)pd;
+   msg = (struct message *)pd;
 
     switch (msg->type) {
       case MESSAGE_QUERY: {
-        struct asset_price_query qry;
         qry.mintime = ntohl(msg->first_word);
         qry.maxtime = ntohl(msg->second_word);
-        int32_t mean_p = htonl(asset_prices_query(ps, &qry));
+        mean_p = htonl(asset_prices_query(ps, &qry));
         queue_push(sdqu, (char *) &mean_p, sizeof(int32_t));
         break;
       }
       case MESSAGE_INSERT: {
-        struct asset_price prc;
         prc.timestamp = ntohl(msg->first_word);
         prc.price = ntohl(msg->second_word);
         if (!asset_prices_duplicate_timestamp_check(ps, prc.timestamp))
