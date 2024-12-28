@@ -108,6 +108,9 @@ int main()
       }
 
       // Receive all the data into the queue
+      client_found = client_find(&c, fd);
+      assert(client_found == true);
+      res = recv_request(fd, c->recv_qu);
       log_trace(
           "main epoll loop: handling POLLIN event on fd '%d' with res: '%d'",
           fd,
@@ -117,6 +120,7 @@ int main()
       if (res < -1) {
         log_error("main epoll loop: error while receiving data");
         if (fd_poll_del_and_close(&epci) == -1) {
+          client_close(&c);
           perror("epoll_ctl: recv 0");
           exit(EXIT_FAILURE);
         }
