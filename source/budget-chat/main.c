@@ -138,20 +138,19 @@ int main()
       }
 
       // If we do, process itl
-      if (complete_req) {
+      if ((size > 0) && (complete_req)) {
         log_trace(
             "main epoll loop: raw request: fd: '%d', size: '%d'", fd, size);
 
-        if (sdsize > 0) {
-          rs = sendall(fd, sddata, &sdsize);
-          if (rs != 0) {
-            log_error("main epoll loop:: failed during sendall function");
-            if (fd_poll_del_and_close(&epci) == -1) {
-              perror("epoll_ctl: recv 0");
-              exit(EXIT_FAILURE);
-            }
-            continue;
+        rs = client_handle_request(c);
+        if (rs < 0) {
+          log_error("main epoll loop:: failed during client handle");
+          if (fd_poll_del_and_close(&epci) == -1) {
+            client_close(&c);
+            perror("epoll_ctl: recv 0");
+            exit(EXIT_FAILURE);
           }
+          continue;
         }
       }
 
