@@ -54,8 +54,36 @@ void client_open(struct client** pc, int fd)
 
 void client_close(struct client** pc)
 {
-  queue_free(&((*pc)->recv_qu));
-  free(*pc);
+  assert(*pc != NULL);
+  assert((*pc)->recv_qu != NULL);
+
+  // Adjust prev and next values now that middle is gone
+  struct client* prev = NULL;
+  struct client* next = NULL;
+  struct client* curr = *pc;
+  prev = curr->prev;
+  next = curr->next;
+  if (prev != NULL)
+    prev->next = next;
+  if (next != NULL)
+    next->prev = prev;
+
+  queue_free(&(curr->recv_qu));
+  curr->recv_qu = NULL;
+  free(curr);
+  curr = NULL;
+
+  // Adjust argument pointer
+  if (prev != NULL) {
+    *pc = prev;
+    return;
+  }
+
+  if (next != NULL) {
+    *pc = next;
+    return;
+  }
+
   *pc = NULL;
 }
 
