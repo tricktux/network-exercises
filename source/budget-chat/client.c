@@ -9,6 +9,7 @@
 #include <sys/time.h>
 
 #include "utils/queue.h"
+#include "utils/sockets.h"
 #include "budget-chat/client.h"
 
 void client_first(struct client** pc)
@@ -84,7 +85,7 @@ int client_handle_request(struct client* c)
 {
   // tokenize the messages
   // TODO: what to do with more than one message
-  if ((c->name[0] == 0) {
+  if (c->name[0] == 0) {
     if (!client_set_name(c))
       return -1;
 
@@ -117,7 +118,10 @@ void client_name_exists(struct client* c, struct client_name_request* name_req)
 
 void client_send_welcome_prompt(struct client* c)
 {
-  int res = sendall(c->id, CLIENT_WELCOME_PROMPT, CLIENT_WELCOME_PROMPT_SIZE);
+  int l = CLIENT_WELCOME_PROMPT_SIZE;
+  int res = sendall(c->id, CLIENT_WELCOME_PROMPT, &l);
+  assert(res == 0);
+  assert(l == CLIENT_WELCOME_PROMPT_SIZE);
 }
 
 bool client_set_name(struct client* c)

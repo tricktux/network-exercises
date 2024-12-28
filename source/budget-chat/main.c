@@ -22,13 +22,15 @@
 #include "utils/sockets.h"
 #include "utils/utils.h"
 
+#include "budget-chat/client.h"
+
 #define EPOLL_WAIT_TIMEOUT 15 * 1000
 
 #define LOG_FILE "/tmp/network-exercises-budget-chat.log"
 #define LOG_FILE_MODE "w"
 #define LOG_LEVEL 0  // TRACE
 
-#define QUEUE_CAPACITY 65536  //  1024 * 64
+#define QUEUE_CAPACITY 2048
 #define MAX_NUM_CON 10
 #define MAX_EVENTS 10
 #define PORT "18888"
@@ -74,7 +76,7 @@ int main()
   int n, fd, res, size, sdsize, rs;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
   struct queue* sdqu = NULL;
-  struct clients_session* ca = NULL;
+  struct client* c = NULL;
   queue_init(&sdqu, QUEUE_CAPACITY);
 
   for (;;) {
@@ -90,6 +92,7 @@ int main()
       close(epollfd);
       close(listen_fd);
       queue_free(&sdqu);
+      // TODO: client_free_all
       exit(EXIT_SUCCESS);
     }
 
@@ -100,8 +103,10 @@ int main()
       epci.event = &events[n];
 
       // Handle a new listen connection
-      if (events[n].data.fd == listen_fd) {
+      if (fd == listen_fd) {
         fd_accept_and_epoll_add(&epci);
+        client_open(&c, fd);
+        client_send_welcome_prompt(c);
         continue;
       }
 
