@@ -170,17 +170,3 @@ bool client_set_name(struct client* c)
   c->name[size + 1] = 0;
   return true;
 }
-
-// Linked list of client
-struct clients {
-  struct client* curr;
-};
-
-void clients_add(struct clients** cs, int fd)
-{
-  assert(*cs == NULL);
-  assert(fd > 0);
-
-  *cs = malloc(sizeof(struct clients));
-  assert(*ca != NULL);
-}
