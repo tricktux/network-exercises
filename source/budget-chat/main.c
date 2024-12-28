@@ -130,6 +130,12 @@ int main()
 
       // Peek at the data to check if we have at least one complete request
       complete_req = false;
+      size = queue_peek(c->recv_qu, &data);
+      if (size > 0) {
+        complete_req = (char*)memrchr(data, MESSAGE_DELIMETER[0], size);
+        log_trace("main epoll loop: complete_req = '%d'",
+                  (complete_req ? 1 : 0));
+      }
 
       // If we do, process itl
       if (complete_req) {
