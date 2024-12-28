@@ -21,6 +21,7 @@ include(cmake/variables.cmake)
 add_subdirectory(source/smoke-test)
 add_subdirectory(source/prime-time)
 add_subdirectory(source/means-to-an-end)
+add_subdirectory(source/budget-chat)
 
 # ---- Install rules ----
 
