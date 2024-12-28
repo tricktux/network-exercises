@@ -25,6 +25,22 @@ void client_first(struct client** pc)
 
   *pc = first;
 }
+
+void clients_last(struct client** pc)
+{
+  assert(*pc != NULL);
+
+  // Ensure we are at the end of the list
+  struct client* next = (*pc)->next;
+  struct client* last = *pc;
+  while (next != NULL) {
+    last = next;
+    next = next->next;
+  }
+
+  *pc = last;
+}
+
 void client_open(struct client** pc, int fd)
 {
   *pc = malloc(sizeof(struct client));
@@ -42,7 +58,27 @@ void client_close(struct client** pc)
   *pc = NULL;
 }
 
-bool client_find(struct client** pc, int fd) {}
+bool client_find(struct client** pc, int id)
+{
+  if (*pc == NULL)
+    return false;
+  assert(id > 0);
+
+  client_first(pc);
+
+  struct client* next = NULL;
+  struct client* curr = *pc;
+  do {
+    if (curr->id == id) {
+      *pc = curr;
+      return true;
+    }
+    next = curr->next;
+    curr = next;
+  } while (curr != NULL);
+
+  return false;
+}
 
 int client_handle_request(struct client* c)
 {

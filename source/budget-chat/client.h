@@ -24,7 +24,7 @@ struct client {
 
 void client_open(struct client **pc, int fd);
 void client_close(struct client **pc);
-bool client_find(struct client **pc, int fd);
+bool client_find(struct client **pc, int id);
 int client_handle_request(struct client *c);
 void client_collect_list_of_names_other_names(struct client *c);
 void client_broadcast_message_to_all(struct client *c, char *msg, size_t size);
