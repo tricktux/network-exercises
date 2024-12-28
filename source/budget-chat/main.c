@@ -75,9 +75,7 @@ int main()
   char *data, *sddata;
   int n, fd, res, size, sdsize, rs;
   struct epoll_ctl_info epci = {epollfd, 0, 0};
-  struct queue* sdqu = NULL;
   struct client* c = NULL;
-  queue_init(&sdqu, QUEUE_CAPACITY);
 
   for (;;) {
     log_trace("main epoll loop: epoll listening...");
@@ -91,7 +89,6 @@ int main()
       log_error("main epoll loop: timeout hit. cleanup time...");
       close(epollfd);
       close(listen_fd);
-      queue_free(&sdqu);
       // TODO: client_free_all
       exit(EXIT_SUCCESS);
     }
@@ -135,7 +132,6 @@ int main()
         log_trace(
             "main epoll loop: raw request: fd: '%d', size: '%d'", fd, size);
 
-        sdsize = queue_pop_no_copy(sdqu, &sddata);
         if (sdsize > 0) {
           rs = sendall(fd, sddata, &sdsize);
           if (rs != 0) {
