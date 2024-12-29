@@ -52,10 +52,36 @@ void client_open(struct client** pc, int fd)
   (*pc)->prev = NULL;
 }
 
+void client_broadcast_message_from(struct client* c, char* msg, size_t size)
+{
+  assert(c != NULL);
+
+  int r, l = size;
+  struct client* me = c;
+  client_first(&c);
+  struct client* next = c->next;
+  struct client* last = c;
+  do {
+    if ((last->id != me->id) && (last->name[0] != 0)) {
+      l = size;
+      r = sendall(c->id, msg, &l);
+      assert(r == 0);
+    }
+
+    last = next;
+    next = next->next;
+  } while (next != NULL);
+}
+
 void client_close(struct client** pc)
 {
   assert(*pc != NULL);
   assert((*pc)->recv_qu != NULL);
+
+  // Tell everybody that this person left the chat
+  char newuser[128];
+  size_t size = sprintf(newuser, "* '%s' has left the chat", (*pc)->name);
+  client_broadcast_message_from(*pc, newuser, size);
 
   // Adjust prev and next values now that middle is gone
   struct client* prev = NULL;
@@ -149,7 +175,52 @@ bool client_validate_username(struct client* c, struct client_name_request* req)
 
   memcpy(c->name, name, size);
   c->name[size + 1] = 0;
+  c->name_size = size;
   return true;
+}
+
+void client_collect_list_of_names_other_names(struct client* c)
+{
+  assert(c != NULL);
+  assert(queue_empty(c->recv_qu));
+
+  struct client* me = c;
+  client_first(&c);
+  struct client* next = c->next;
+  struct client* last = c;
+  bool first = false;
+  queue_push(me->recv_qu, CLIENT_MEMBERS, CLIENT_MEMBERS_SIZE);
+  do {
+    if ((last->id != me->id) && (last->name[0] != 0)) {
+      if (!first)
+        queue_push(me->recv_qu, ", ", 2);
+      queue_push(me->recv_qu, last->name, last->name_size);
+    }
+
+    last = next;
+    next = next->next;
+  } while (next != NULL);
+}
+
+void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
+{
+  assert(c != NULL);
+
+  int r, l = size;
+  struct client* me = c;
+  client_first(&c);
+  struct client* next = c->next;
+  struct client* last = c;
+  do {
+    if (last->name[0] != 0) {
+      l = size;
+      r = sendall(c->id, msg, &l);
+      assert(r == 0);
+    }
+
+    last = next;
+    next = next->next;
+  } while (next != NULL);
 }
 
 int client_handle_newclient(struct client* c)
@@ -158,13 +229,23 @@ int client_handle_newclient(struct client* c)
 
   struct client_name_request req;
   if (!client_validate_username(c, &req)) {
-    // sendall(req.invalid_name_response)
+    int l = strlen(req.invalid_name_response);
+    int r = sendall(c->id, req.invalid_name_response, &l);
+    assert(r == 0);
     return -1;
   }
 
-  // Collect list of all names in chat
-  // client broadcast message from
-  // client_send(c, WELCOME_MESSAGE)
+  // Send new client list of all names in chat
+  client_collect_list_of_names_other_names(c);
+  char* msg;
+  size_t size = queue_pop_no_copy(c->recv_qu, &msg);
+  int r = sendall(c->id, msg, &size);
+  assert(r == 0);
+
+  // Send all users name of the new user
+  char newuser[128];
+  size = sprintf(newuser, "* '%s' has joined the chat", c->name);
+  client_broadcast_message_from(c, newuser, size);
   return 1;
 }
 
@@ -176,42 +257,9 @@ int client_handle_request(struct client* c)
     return client_handle_newclient(c);
   }
 
+  // TODO: 
   char* msg;
-  size_t size;
-  size = queue_pop_no_copy(c->recv_qu, &msg);
-}
-
-/*void client_on_valid_username(struct client* c)*/
-/*{*/
-/*  // To *c*/
-/*  // - The room contains: etc..*/
-/*  // To everybody else:*/
-/*  // - *c has entered the room*/
-/*}*/
-
-void client_on_exit(struct client* c)
-{
-  // To everybody else:
-  // - *c has entered the room
-}
-
-void client_collect_list_of_names_other_names(struct client* c)
-{
-  assert(*c != NULL);
-
-  //
-}
-
-void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
-{
-  // foreach client
-  // sendall(msg, size);
-}
-
-void client_broadcast_message_from(struct client* c, char* msg, size_t size)
-{
-  // foreach client except c->id
-  // sendall(msg, size);
+  size_t size = queue_pop_no_copy(c->recv_qu, &msg);
 }
 
 bool client_name_exists(struct client* c, struct client_name_request* name_req)
@@ -228,7 +276,7 @@ bool client_name_exists(struct client* c, struct client_name_request* name_req)
   struct client* next = c->next;
   struct client* last = c;
   do {
-    if ((last->id != me->id)
+    if ((last->id != me->id) && (last->name[0] != 0)
         && (strncmp(last->name, name_req->name, name_req->size) == 0))
     {
       name_req->valid = false;

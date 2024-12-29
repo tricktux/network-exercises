@@ -137,7 +137,7 @@ int main()
                   (complete_req ? 1 : 0));
       }
 
-      // If we do, process itl
+      // If we do, process it
       if ((size > 0) && (complete_req)) {
         log_trace(
             "main epoll loop: raw request: fd: '%d', size: '%d'", fd, size);
@@ -167,5 +167,4 @@ int main()
       }
     }
   }
-  printf("Hello world\n");
 }
