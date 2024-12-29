@@ -109,24 +109,98 @@ bool client_find(struct client** pc, int id)
   return false;
 }
 
+bool client_validate_username(struct client* c, struct client_name_request* req)
+{
+  assert(c != NULL);
+  assert(req != NULL);
+
+  // TODO: change from bool to int
+  // Create error codes for all the possible errors
+  // To give the user meaningful error messages
+  char* name = NULL;
+  size_t size;
+  req->valid = false;
+  size = queue_pop_no_copy(c->recv_qu, &name);
+  size--;  // Loose the /r
+  if (size < 1) {
+    strcpy(req->invalid_name_response, "Empty username provided");
+    return false;
+  }
+  if (size >= CLIENT_MAX_NAME) {
+    sprintf(req->invalid_name_response,
+            "Name provided exceeds limit for number of characters: %d",
+            CLIENT_MAX_NAME);
+    return false;
+  }
+
+  for (size_t k = 0; k < size; k++) {
+    if (!isalnum(name[k])) {
+      strcpy(req->invalid_name_response, "Username must only contain alphanumeric characters");
+      return false;
+    }
+  }
+
+  req->name = name;
+  req->size = size;
+  if (!client_name_exists(c, req)) {
+    strcpy(req->invalid_name_response, "Username is already taken");
+    return false;
+  }
+
+  memcpy(c->name, name, size);
+  c->name[size + 1] = 0;
+  return true;
+}
+
+int client_handle_newclient(struct client* c)
+{
+  assert(c != NULL);
+
+  struct client_name_request req;
+  if (!client_validate_username(c, &req)) {
+    // sendall(req.invalid_name_response)
+    return -1;
+  }
+
+  // Collect list of all names in chat
+  // client broadcast message from
+  // client_send(c, WELCOME_MESSAGE)
+  return 1;
+}
+
 int client_handle_request(struct client* c)
 {
   // tokenize the messages
   // TODO: what to do with more than one message
   if (c->name[0] == 0) {
-    if (!client_set_name(c))
-      return -1;
-
-    // client broadcast message from
-    // client_send(c, WELCOME_MESSAGE)
+    return client_handle_newclient(c);
   }
 
-  char *msg;
+  char* msg;
   size_t size;
   size = queue_pop_no_copy(c->recv_qu, &msg);
 }
 
-void client_collect_list_of_names_other_names(struct client* c) {}
+/*void client_on_valid_username(struct client* c)*/
+/*{*/
+/*  // To *c*/
+/*  // - The room contains: etc..*/
+/*  // To everybody else:*/
+/*  // - *c has entered the room*/
+/*}*/
+
+void client_on_exit(struct client* c)
+{
+  // To everybody else:
+  // - *c has entered the room
+}
+
+void client_collect_list_of_names_other_names(struct client* c)
+{
+  assert(*c != NULL);
+
+  //
+}
 
 void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
 {
@@ -140,8 +214,32 @@ void client_broadcast_message_from(struct client* c, char* msg, size_t size)
   // sendall(msg, size);
 }
 
-void client_name_exists(struct client* c, struct client_name_request* name_req)
+bool client_name_exists(struct client* c, struct client_name_request* name_req)
 {
+  assert(c != NULL);
+  assert(name_req != NULL);
+
+  // Does this username exists?
+  // for each client
+  //   if (client->id == c->id) continue;
+  //   if (strcmp(client->name, c->name) == 0) return false;
+  struct client* me = c;
+  client_first(&c);
+  struct client* next = c->next;
+  struct client* last = c;
+  do {
+    if ((last->id != me->id)
+        && (strncmp(last->name, name_req->name, name_req->size) == 0))
+    {
+      name_req->valid = false;
+      return false;
+    }
+
+    last = next;
+    next = next->next;
+  } while (next != NULL);
+
+  return true;
 }
 
 void client_send_welcome_prompt(struct client* c)
@@ -150,23 +248,4 @@ void client_send_welcome_prompt(struct client* c)
   int res = sendall(c->id, CLIENT_WELCOME_PROMPT, &l);
   assert(res == 0);
   assert(l == CLIENT_WELCOME_PROMPT_SIZE);
-}
-
-bool client_set_name(struct client* c)
-{
-  char* name;
-  size_t size;
-  size = queue_pop_no_copy(c->recv_qu, &name);
-  if (size < 1)
-    return false;
-  if (size > CLIENT_MAX_NAME)
-    return false;
-
-  for (size_t k = 0; k < size; k++) {
-    if (!isalnum(name[k])
-      return false;
-  }
-  memcpy(c->name, name, size);
-  c->name[size + 1] = 0;
-  return true;
 }

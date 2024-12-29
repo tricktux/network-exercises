@@ -159,6 +159,7 @@ int main()
         continue;
 
       // Handle closing request received
+      client_close(&c);
       log_info("main epoll loop:: closing connection");
       if (fd_poll_del_and_close(&epci) == -1) {
         perror("epoll_ctl: recv 0");

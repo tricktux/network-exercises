@@ -29,6 +29,5 @@ int client_handle_request(struct client *c);
 void client_collect_list_of_names_other_names(struct client *c);
 void client_broadcast_message_to_all(struct client *c, char *msg, size_t size);
 void client_broadcast_message_from(struct client *c, char *msg, size_t size);
-void client_name_exists(struct client *c, struct client_name_request *name_req);
+bool client_name_exists(struct client *c, struct client_name_request *name_req);
 void client_send_welcome_prompt(struct client *c);
-bool client_set_name(struct client *c);
