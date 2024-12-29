@@ -103,7 +103,6 @@ int main()
       if (fd == listen_fd) {
         fd_accept_and_epoll_add(&epci);
         client_open(&c, fd);
-        client_send_welcome_prompt(c);
         continue;
       }
 

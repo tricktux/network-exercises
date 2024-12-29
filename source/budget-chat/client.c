@@ -50,20 +50,26 @@ void client_open(struct client** pc, int fd)
   queue_init(&(*pc)->recv_qu, CLIENT_RECV_QUEUE_SIZE);
   (*pc)->next = NULL;
   (*pc)->prev = NULL;
+
+  // Send welcome message
+  int l = CLIENT_WELCOME_PROMPT_SIZE;
+  int res = sendall((*pc)->id, CLIENT_WELCOME_PROMPT, &l);
+  assert(res == 0);
+  assert(l == CLIENT_WELCOME_PROMPT_SIZE);
 }
 
 void client_broadcast_message_from(struct client* c, char* msg, size_t size)
 {
   assert(c != NULL);
 
-  int r, l = size;
+  int r, l;
   struct client* me = c;
   client_first(&c);
   struct client* next = c->next;
   struct client* last = c;
   do {
     if ((last->id != me->id) && (last->name[0] != 0)) {
-      l = size;
+      l = (int) size;
       r = sendall(c->id, msg, &l);
       assert(r == 0);
     }
@@ -80,8 +86,8 @@ void client_close(struct client** pc)
 
   // Tell everybody that this person left the chat
   char newuser[128];
-  size_t size = sprintf(newuser, "* '%s' has left the chat", (*pc)->name);
-  client_broadcast_message_from(*pc, newuser, size);
+  int size = sprintf(newuser, "* '%s' has left the chat", (*pc)->name);
+  client_broadcast_message_from(*pc, newuser, (size_t) size);
 
   // Adjust prev and next values now that middle is gone
   struct client* prev = NULL;
@@ -135,6 +141,34 @@ bool client_find(struct client** pc, int id)
   return false;
 }
 
+bool client_name_exists(struct client* c, struct client_name_request* name_req)
+{
+  assert(c != NULL);
+  assert(name_req != NULL);
+
+  // Does this username exists?
+  // for each client
+  //   if (client->id == c->id) continue;
+  //   if (strcmp(client->name, c->name) == 0) return false;
+  struct client* me = c;
+  client_first(&c);
+  struct client* next = c->next;
+  struct client* last = c;
+  do {
+    if ((last->id != me->id) && (last->name[0] != 0)
+      && (strncmp(last->name, name_req->name, name_req->size) == 0))
+    {
+      name_req->valid = false;
+      return false;
+    }
+
+    last = next;
+    next = next->next;
+  } while (next != NULL);
+
+  return true;
+}
+
 bool client_validate_username(struct client* c, struct client_name_request* req)
 {
   assert(c != NULL);
@@ -146,7 +180,7 @@ bool client_validate_username(struct client* c, struct client_name_request* req)
   char* name = NULL;
   size_t size;
   req->valid = false;
-  size = queue_pop_no_copy(c->recv_qu, &name);
+  size = (size_t) queue_pop_no_copy(c->recv_qu, &name);
   size--;  // Loose the /r
   if (size < 1) {
     strcpy(req->invalid_name_response, "Empty username provided");
@@ -189,7 +223,7 @@ void client_collect_list_of_names_other_names(struct client* c)
   struct client* next = c->next;
   struct client* last = c;
   bool first = false;
-  queue_push(me->recv_qu, CLIENT_MEMBERS, CLIENT_MEMBERS_SIZE);
+  queue_push(me->recv_qu,  CLIENT_MEMBERS, CLIENT_MEMBERS_SIZE);
   do {
     if ((last->id != me->id) && (last->name[0] != 0)) {
       if (!first)
@@ -206,14 +240,13 @@ void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
 {
   assert(c != NULL);
 
-  int r, l = size;
-  struct client* me = c;
+  int r, l;
   client_first(&c);
   struct client* next = c->next;
   struct client* last = c;
   do {
     if (last->name[0] != 0) {
-      l = size;
+      l = (int) size;
       r = sendall(c->id, msg, &l);
       assert(r == 0);
     }
@@ -221,6 +254,14 @@ void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
     last = next;
     next = next->next;
   } while (next != NULL);
+}
+
+void client_send_welcome_prompt(struct client* c)
+{
+  int l = CLIENT_WELCOME_PROMPT_SIZE;
+  int res = sendall(c->id, CLIENT_WELCOME_PROMPT, &l);
+  assert(res == 0);
+  assert(l == CLIENT_WELCOME_PROMPT_SIZE);
 }
 
 int client_handle_newclient(struct client* c)
@@ -260,40 +301,14 @@ int client_handle_request(struct client* c)
   // TODO: 
   char* msg;
   size_t size = queue_pop_no_copy(c->recv_qu, &msg);
-}
+  size--;  // Loose the /r
+  // Ignoring emtpy and messages that exceed
+  if (size == 0)
+    return 0;
+  if (size > CLIENT_MAX_MESSAGE_SIZE)
+    return 0;
 
-bool client_name_exists(struct client* c, struct client_name_request* name_req)
-{
-  assert(c != NULL);
-  assert(name_req != NULL);
-
-  // Does this username exists?
-  // for each client
-  //   if (client->id == c->id) continue;
-  //   if (strcmp(client->name, c->name) == 0) return false;
-  struct client* me = c;
-  client_first(&c);
-  struct client* next = c->next;
-  struct client* last = c;
-  do {
-    if ((last->id != me->id) && (last->name[0] != 0)
-        && (strncmp(last->name, name_req->name, name_req->size) == 0))
-    {
-      name_req->valid = false;
-      return false;
-    }
-
-    last = next;
-    next = next->next;
-  } while (next != NULL);
-
-  return true;
-}
-
-void client_send_welcome_prompt(struct client* c)
-{
-  int l = CLIENT_WELCOME_PROMPT_SIZE;
-  int res = sendall(c->id, CLIENT_WELCOME_PROMPT, &l);
-  assert(res == 0);
-  assert(l == CLIENT_WELCOME_PROMPT_SIZE);
+  char mesg[CLIENT_MAX_COMPOSED_MESSAGE_SIZE];
+  size = snprintf(mesg, CLIENT_MAX_COMPOSED_MESSAGE_SIZE, "[%s] %s", c->name, msg);
+  client_broadcast_message_from(c, mesg, size);
 }

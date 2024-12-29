@@ -1,6 +1,14 @@
+#ifndef INCLUDE_H_
+#define INCLUDE_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define MESSAGE_DELIMETER "\n"
 #define CLIENT_MAX_NAME 32
+#define CLIENT_MAX_MESSAGE_SIZE 1024
+#define CLIENT_MAX_COMPOSED_MESSAGE_SIZE CLIENT_MAX_MESSAGE_SIZE + CLIENT_MAX_NAME + 2
 #define CLIENT_WELCOME_PROMPT "Welcome to budgetchat! What shall I call you?"
 #define CLIENT_MEMBERS "* The room contains: "
 #define CLIENT_MEMBERS_SIZE 21
@@ -29,7 +37,9 @@ void client_open(struct client **pc, int fd);
 void client_close(struct client **pc);
 bool client_find(struct client **pc, int id);
 int client_handle_request(struct client *c);
-void client_broadcast_message_to_all(struct client *c, char *msg, size_t size);
-void client_broadcast_message_from(struct client *c, char *msg, size_t size);
-bool client_name_exists(struct client *c, struct client_name_request *name_req);
-void client_send_welcome_prompt(struct client *c);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // INCLUDE_CLIENT_H_
