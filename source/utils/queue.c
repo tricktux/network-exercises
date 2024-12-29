@@ -264,3 +264,10 @@ int queue_peek(struct queue* qu, char** data)
   *data = qu->data;
   return (int)qu->size;
 }
+
+bool queue_empty(struct queue *qu)
+{
+  assert(qu != NULL);
+
+  return (qu->size > 0);
+}
