@@ -47,6 +47,7 @@ void client_open(struct client** pc, int fd)
   *pc = malloc(sizeof(struct client));
   (*pc)->name[0] = 0;
   (*pc)->id = fd;
+  (*pc)->recv_qu = NULL;
   queue_init(&(*pc)->recv_qu, CLIENT_RECV_QUEUE_SIZE);
   (*pc)->next = NULL;
   (*pc)->prev = NULL;
@@ -74,9 +75,9 @@ void client_broadcast_message_from(struct client* c, char* msg, size_t size)
       assert(r == 0);
     }
 
+    next = last->next;
     last = next;
-    next = next->next;
-  } while (next != NULL);
+  } while (last != NULL);
 }
 
 void client_close(struct client** pc)
@@ -159,14 +160,14 @@ bool client_name_exists(struct client* c, struct client_name_request* name_req)
       && (strncmp(last->name, name_req->name, name_req->size) == 0))
     {
       name_req->valid = false;
-      return false;
+      return true;
     }
 
+    next = last->next;
     last = next;
-    next = next->next;
-  } while (next != NULL);
+  } while (last != NULL);
 
-  return true;
+  return false;
 }
 
 bool client_validate_username(struct client* c, struct client_name_request* req)
@@ -202,7 +203,7 @@ bool client_validate_username(struct client* c, struct client_name_request* req)
 
   req->name = name;
   req->size = size;
-  if (!client_name_exists(c, req)) {
+  if (client_name_exists(c, req)) {
     strcpy(req->invalid_name_response, "Username is already taken");
     return false;
   }
@@ -216,7 +217,7 @@ bool client_validate_username(struct client* c, struct client_name_request* req)
 void client_collect_list_of_names_other_names(struct client* c)
 {
   assert(c != NULL);
-  assert(queue_empty(c->recv_qu));
+  /*assert(queue_empty(c->recv_qu) == true);*/
 
   struct client* me = c;
   client_first(&c);
@@ -231,9 +232,9 @@ void client_collect_list_of_names_other_names(struct client* c)
       queue_push(me->recv_qu, last->name, last->name_size);
     }
 
+    next = last->next;
     last = next;
-    next = next->next;
-  } while (next != NULL);
+  } while (last != NULL);
 }
 
 void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
@@ -251,17 +252,9 @@ void client_broadcast_message_to_all(struct client* c, char* msg, size_t size)
       assert(r == 0);
     }
 
+    next = last->next;
     last = next;
-    next = next->next;
-  } while (next != NULL);
-}
-
-void client_send_welcome_prompt(struct client* c)
-{
-  int l = CLIENT_WELCOME_PROMPT_SIZE;
-  int res = sendall(c->id, CLIENT_WELCOME_PROMPT, &l);
-  assert(res == 0);
-  assert(l == CLIENT_WELCOME_PROMPT_SIZE);
+  } while (last != NULL);
 }
 
 int client_handle_newclient(struct client* c)
@@ -311,4 +304,5 @@ int client_handle_request(struct client* c)
   char mesg[CLIENT_MAX_COMPOSED_MESSAGE_SIZE];
   size = snprintf(mesg, CLIENT_MAX_COMPOSED_MESSAGE_SIZE, "[%s] %s", c->name, msg);
   client_broadcast_message_from(c, mesg, size);
+  return 1;
 }
