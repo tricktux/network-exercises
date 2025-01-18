@@ -3,9 +3,10 @@ const nexlog = @import("nexlog");
 
 pub fn main() !void {
     // Initialize allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
 
     // Create base metadata
     const base_metadata = nexlog.LogMetadata{
@@ -29,10 +30,29 @@ pub fn main() !void {
         .build(allocator);
 
     defer nexlog.deinit();
-
     const logger = nexlog.getDefaultLogger() orelse return error.LoggerNotInitialized;
-
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     try logger.log(.trace, "Hello world!", .{}, base_metadata);
+
+    // Create server
+    var server: std.net.Server = undefined;
+    {
+        const name: []const u8 = "localhost";
+        const addrlist = try std.net.getAddressList(allocator, name, 18888);
+        defer addrlist.deinit();
+        try logger.log(.trace, "Got Addresses: '{s}'!!!", .{addrlist.canon_name.?}, base_metadata);
+
+        for (addrlist.addrs) |addr| {
+            try logger.log(.trace, "Trying to listen...", .{}, base_metadata);
+            // Not intuitive but `listen` calls `socket, bind, and listen`
+            server = addr.listen(.{ .reuse_address = true }) catch continue;
+            break;
+        }
+    }
+
+    try logger.log(.trace, "We are listenning baby!!. Server fd = {}", .{server.stream.handle}, base_metadata);
+
+    // Epoll init
+    // const epollfd: i32 = try std.posix.epoll_create1(0);
+
     try logger.flush();
 }
