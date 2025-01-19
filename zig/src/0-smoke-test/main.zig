@@ -2,7 +2,7 @@ const std = @import("std");
 const linux = std.os.linux;
 const nexlog = @import("nexlog");
 
-const Queue = @import("Queue.zig").Queue;
+const Queue = @import("Queue.zig");
 
 pub fn main() !void {
     // Initialize allocator
@@ -55,18 +55,18 @@ pub fn main() !void {
     const listenerfd = server.stream.handle;
     try logger.log(.trace, "We are listenning baby!!. Listening on fd = {}", .{listenerfd}, base_metadata);
 
-    // Epoll init
+    // Create epoll
     const epollfd: i32 = try std.posix.epoll_create1(0);
-    var epollev = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{.fd = listenerfd} };
+    var epollev = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = listenerfd } };
     try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, listenerfd, &epollev);
     const MAX_EVENTS = 128;
     var epollevents: [MAX_EVENTS]linux.epoll_event = undefined;
 
     // Queue
     const qu = try Queue.init(allocator, @as(u64, 1024));
-    _ = qu;
+    defer qu.deinit();
 
-    while(true) {
+    while (true) {
         try logger.flush();
         try logger.log(.trace, "epoll_waiting...", .{}, base_metadata);
         const num_events = std.posix.epoll_wait(epollfd, &epollevents, -1);
@@ -84,7 +84,7 @@ pub fn main() !void {
                 const newfd = try std.posix.accept(eventfd, &addr.any, &addr_len, flags);
 
                 // Add it to epoll
-                var new_epollev = linux.epoll_event{ .events = linux.EPOLL.IN | linux.EPOLL.ET, .data = .{.fd = newfd} };
+                var new_epollev = linux.epoll_event{ .events = linux.EPOLL.IN | linux.EPOLL.ET, .data = .{ .fd = newfd } };
                 try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, newfd, &new_epollev);
                 try logger.log(.info, "accepted new connection: {}\n", .{newfd}, base_metadata);
                 continue;
@@ -94,5 +94,4 @@ pub fn main() !void {
             try logger.log(.trace, "Handle new data from eventfd: {}\n", .{eventfd}, base_metadata);
         }
     }
-
 }
