@@ -2,6 +2,8 @@ const std = @import("std");
 const linux = std.os.linux;
 const nexlog = @import("nexlog");
 
+const Queue = @import("Queue.zig").Queue;
+
 pub fn main() !void {
     // Initialize allocator
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -60,6 +62,10 @@ pub fn main() !void {
     const MAX_EVENTS = 128;
     var epollevents: [MAX_EVENTS]linux.epoll_event = undefined;
 
+    // Queue
+    const qu = try Queue.init(allocator, @as(u64, 1024));
+    _ = qu;
+
     while(true) {
         try logger.flush();
         try logger.log(.trace, "epoll_waiting...", .{}, base_metadata);
@@ -84,7 +90,8 @@ pub fn main() !void {
                 continue;
             }
 
-
+            // Handle receiving data
+            try logger.log(.trace, "Handle new data from eventfd: {}\n", .{eventfd}, base_metadata);
         }
     }
 
