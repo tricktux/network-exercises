@@ -53,17 +53,19 @@ pub fn main() !void {
     }
 
     const listenerfd = server.stream.handle;
+    defer std.posix.close(listenerfd);
     try logger.log(.trace, "We are listenning baby!!. Listening on fd = {}", .{listenerfd}, base_metadata);
 
     // Create epoll
     const epollfd: i32 = try std.posix.epoll_create1(0);
+    defer std.posix.close(epollfd);
     var epollev = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = listenerfd } };
     try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, listenerfd, &epollev);
     const MAX_EVENTS = 128;
     var epollevents: [MAX_EVENTS]linux.epoll_event = undefined;
 
     // Queue
-    const qu = try Queue.init(allocator, @as(u64, 1024));
+    var qu = try Queue.init(allocator, 1048576);
     defer qu.deinit();
 
     while (true) {
@@ -92,6 +94,18 @@ pub fn main() !void {
 
             // Handle receiving data
             try logger.log(.trace, "Handle new data from eventfd: {}\n", .{eventfd}, base_metadata);
+            const stream = std.net.Stream{ .handle = eventfd };
+            _ = stream;
+            // while(true)
+            //   var data = qu.get_writable_data();
+            //   var bytes = stream.readAll(data);
+            //   qu.push_ex(bytes);
+            //   if (bytes < data.len)
+            //      break
         }
     }
+}
+
+test {
+    _ = @import("Queue.zig");
 }
