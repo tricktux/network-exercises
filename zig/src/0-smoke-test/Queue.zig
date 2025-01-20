@@ -43,10 +43,13 @@ fn expand_capacity(self: *Self, newsize: u64) !void {
     while (true) {
         const newfree = self.capacity - self.size;
         const fill = @as(f64, @floatFromInt(if (newfree < 0) 0 else newfree / self.capacity));
-        if (fill > FREE_CAPACITY) break;
+        if (fill <= FREE_CAPACITY) break;
 
         expand = true;
+        std.debug.print("\t\t\tCurrent capacity: {}\n", .{self.capacity});
+        std.debug.print("\t\t\tAttempting to double capacity\n", .{});
         self.capacity *= 2;
+        std.debug.print("\t\t\tNew capacity: {}\n", .{self.capacity});
     }
     if (!expand) return;
 
