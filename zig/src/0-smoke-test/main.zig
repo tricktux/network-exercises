@@ -3,19 +3,6 @@ const linux = std.os.linux;
 const nexlog = @import("nexlog");
 const debug = std.debug.print;
 
-const Queue = @import("Queue.zig");
-
-fn recv_data(client: std.net.Stream, queue: *Queue) !i32 {
-    while (true) {
-        const data = queue.get_writable_data();
-        const bytes = try client.read(data);
-        debug("\t\t\tpushing bytes = {}\n", .{bytes});
-        try queue.push_ex(bytes);
-        if (bytes == 0) return 0;
-        if (bytes < data.len) return 1;
-    }
-}
-
 pub fn main() !void {
     // Initialize allocator
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -37,14 +24,15 @@ pub fn main() !void {
         debug("Got Addresses: '{s}'!!!\n", .{addrlist.canon_name.?});
 
         for (addrlist.addrs) |addr| {
-            debug("Trying to listen...\n", .{});
+            debug("\tTrying to listen...\n", .{});
             // Not intuitive but `listen` calls `socket, bind, and listen`
             server = addr.listen(.{}) catch continue;
+            debug("\tGot one!\n", .{});
             break;
         }
     }
 
-    var queue = try Queue.init(allocator, buff_size);
+    var data: [buff_size]u8 = undefined;
 
     debug("We are listeninig baby!!!...\n", .{});
     while (true) {
@@ -55,24 +43,15 @@ pub fn main() !void {
         while (true) {
             debug("\twaiting for some data...\n", .{});
             const stream = connection.stream;
-            const r = recv_data(stream, &queue) catch -1;
-            switch (r) {
-                0 => {
-                    debug("\treceived request to close this connection. bye bye\n", .{});
-                    stream.close();
-                    break;
-                },
-                1 => {
-                    const data = queue.pop();
-                    debug("\treceived some data.len = {}!!\n", .{data.len});
-                    try stream.writeAll(data);
-                },
-                else => {
-                    debug("\tERROR: closing this connection\n", .{});
-                    stream.close();
-                    break;
-                }
+            const bytes = stream.read(&data) catch 0;
+            if (bytes == 0) {
+                debug("\tERROR: error, or closing request either way... closing this connection\n", .{});
+                stream.close();
+                break;
             }
+
+            debug("\treceived some data.len = {}!!\n", .{data.len});
+            try stream.writeAll(&data);
         }
     }
 }
