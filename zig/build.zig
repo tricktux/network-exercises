@@ -1,6 +1,6 @@
 const std = @import("std");
 
-fn set_run_cmd(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn set_run_cmd(comptime name: []const u8, b: *std.Build, exe: *std.Build.Step.Compile) void {
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
@@ -21,7 +21,7 @@ fn set_run_cmd(b: *std.Build, exe: *std.Build.Step.Compile) void {
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
     // This will evaluate the `run` step rather than the default, which is "install".
-    const run_step = b.step("run", "Run the app");
+    const run_step = b.step("run " ++ name, "Run " ++ name);
     run_step.dependOn(&run_cmd.step);
 }
 
@@ -40,12 +40,6 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    // Logger
-    const nexlog = b.dependency("nexlog", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     const lib = b.addStaticLibrary(.{
         .name = "libnetzig",
         // In this case the main source file is merely a path, however, in more
@@ -54,14 +48,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    lib.root_module.addImport("nexlog", nexlog.module("nexlog"));
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
     b.installArtifact(lib);
 
-    // 0-Smoke Test
+    // 0 Smoke Test
     const smoke_test = b.addExecutable(.{
         .name = "smoke-test",
         .root_source_file = b.path("src/0-smoke-test/main.zig"),
@@ -69,14 +62,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    smoke_test.root_module.addImport("nexlog", nexlog.module("nexlog"));
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(smoke_test);
 
-    set_run_cmd(b, smoke_test);
+    set_run_cmd("0-smoke-test", b, smoke_test);
 
     // const lib_unit_tests = b.addTest(.{
     //     .root_source_file = b.path("src/root.zig"),
