@@ -5,10 +5,8 @@ const debug = std.debug.print;
 
 pub fn main() !void {
     // Initialize allocator
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
-    const allocator = arena.allocator();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
 
     // Constants
     const name: []const u8 = "0.0.0.0";
