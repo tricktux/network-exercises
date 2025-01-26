@@ -21,7 +21,7 @@ fn set_run_cmd(comptime name: []const u8, b: *std.Build, exe: *std.Build.Step.Co
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
     // This will evaluate the `run` step rather than the default, which is "install".
-    const run_step = b.step("run " ++ name, "Run " ++ name);
+    const run_step = b.step("run-" ++ name, "Run " ++ name);
     run_step.dependOn(&run_cmd.step);
 }
 
@@ -40,20 +40,6 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary(.{
-        .name = "libnetzig",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("src/libnetzig/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // This declares intent for the library to be installed into the standard
-    // location when the user invokes the "install" step (the default step when
-    // running `zig build`).
-    b.installArtifact(lib);
-
     // 0 Smoke Test
     const smoke_test = b.addExecutable(.{
         .name = "smoke-test",
@@ -69,14 +55,6 @@ pub fn build(b: *std.Build) void {
 
     set_run_cmd("0-smoke-test", b, smoke_test);
 
-    // const lib_unit_tests = b.addTest(.{
-    //     .root_source_file = b.path("src/root.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    //
-    // const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
     const smoke_test_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/0-smoke-test/main.zig"),
         .target = target,
@@ -91,4 +69,20 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     // test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_smoke_test_unit_tests.step);
+
+
+    // 1 Prime Time
+    const prime_time = b.addExecutable(.{
+        .name = "prime-time",
+        .root_source_file = b.path("src/1-prime-time/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // This declares intent for the executable to be installed into the
+    // standard location when the user invokes the "install" step (the default
+    // step when running `zig build`).
+    b.installArtifact(prime_time);
+
+    set_run_cmd("1-prime-time", b, prime_time);
 }

@@ -1,24 +1,69 @@
 const std = @import("std");
+const linux = std.os.linux;
+const nexlog = @import("nexlog");
+const debug = std.debug.print;
+
+// Constants
+const name: []const u8 = "0.0.0.0";
+const port = 18888;
+const buff_size = 1048576;
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    // Initialize allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent toQ 
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const allocator = gpa.allocator();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    // Create server
+    var server: std.net.Server = undefined;
+    defer server.deinit();
+    {
+        const addrlist = try std.net.getAddressList(allocator, name, port);
+        defer addrlist.deinit();
+        debug("Got Addresses: '{s}'!!!\n", .{addrlist.canon_name.?});
 
-    try bw.flush(); // don't forget to flush!
+        for (addrlist.addrs) |addr| {
+            debug("\tTrying to listen...\n", .{});
+            // Not intuitive but `listen` calls `socket, bind, and listen`
+            server = addr.listen(.{}) catch continue;
+            debug("\tGot one!\n", .{});
+            break;
+        }
+    }
+
+    const cpus = try std.Thread.getCpuCount();
+    var tp: std.Thread.Pool = undefined;
+    try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
+    defer tp.deinit();
+
+    debug("ThreadPool initialized with {} capacity\n", .{cpus});
+    debug("We are listeninig baby!!!...\n", .{});
+    while (true) {
+        debug("waiting for a new connection...\n", .{});
+        const connection = try server.accept();
+        debug("got new connection!!!\n", .{});
+        try tp.spawn(handle_connection, .{connection});
+    }
 }
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+fn handle_connection(connection: std.net.Server.Connection) void {
+    var data: [buff_size]u8 = undefined;
+    const stream = connection.stream;
+    defer stream.close();
+
+    while (true) {
+        debug("\twaiting for some data...\n", .{});
+        const bytes = stream.read(&data) catch 0;
+        if (bytes == 0) {
+            debug("\tERROR: error, or closing request either way... closing this connection\n", .{});
+            return;
+        }
+
+        debug("\treceived some bytes = {}!!\n", .{bytes});
+        stream.writeAll(data[0..bytes]) catch |err| {
+            debug("\tERROR: error sendAll function {}... closing this connection\n", .{err});
+            return;
+        };
+    }
 }
