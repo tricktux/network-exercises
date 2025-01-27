@@ -6,7 +6,10 @@ const debug = std.debug.print;
 // Constants
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
-const buff_size = 1048576;
+const buff_size = 4096;
+const needle = "\n";
+
+const Queue = @import("utils").queue.Queue;
 
 pub fn main() !void {
     // Initialize allocator
@@ -43,22 +46,69 @@ pub fn main() !void {
         debug("waiting for a new connection...\n", .{});
         const connection = try server.accept();
         debug("got new connection!!!\n", .{});
-        try tp.spawn(handle_connection, .{connection});
+        try tp.spawn(handle_connection, .{ connection, allocator });
     }
 }
 
-fn handle_connection(connection: std.net.Server.Connection) void {
-    var data: [buff_size]u8 = undefined;
+// fn handle_request(req: []const u8, que: Queue, alloc: std.mem.Allocator) []u8 {
+//     if (req.len == 0) return &[_]u8{};
+//
+//     var parsed = std.json.parseFromSlice(u8, alloc, req, .{}) catch {
+//
+//     };
+// }
+
+fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const stream = connection.stream;
     defer stream.close();
 
+    var recvqu = Queue.init(alloc, buff_size) catch {
+        debug("\tERROR: Failed to allocate recvqu memory", .{});
+        return;
+    };
+    defer recvqu.deinit();
+    var sendqu = Queue.init(alloc, buff_size) catch {
+        debug("\tERROR: Failed to allocate sendqu memory", .{});
+        return;
+    };
+    defer sendqu.deinit();
+
     while (true) {
         debug("\twaiting for some data...\n", .{});
-        const bytes = stream.read(&data) catch 0;
+        var data = recvqu.get_writable_data();
+        const bytes = stream.read(data) catch 0;
         if (bytes == 0) {
             debug("\tERROR: error, or closing request either way... closing this connection\n", .{});
             return;
         }
+
+        recvqu.push_ex(bytes) catch {
+            debug("\tERROR: Failed to push_ex", .{});
+            return;
+        };
+
+        // Check if we have a full message
+        const datapeek = recvqu.peek();
+        var idx = std.mem.indexOf(u8, datapeek, needle);
+        if (idx == null) continue;
+
+        // We do have at least 1 full message
+        const dataall = recvqu.pop();
+        var start: usize = 0;
+        // Process all the received messages in order
+        while (true) {
+            // TODO: Process message from dataall[start..idx]
+            // - We got a full message, decode it
+            // TODO: Use the json goodness here
+            // TODO: Queue response
+
+            // TODO: Update start and idx
+            start = idx.? + 1;
+            idx = std.mem.indexOf(u8, dataall[start..], needle);
+            if (idx == null) break;  // No more messages to process
+        }
+
+        // TODO: Send response
 
         debug("\treceived some bytes = {}!!\n", .{bytes});
         stream.writeAll(data[0..bytes]) catch |err| {

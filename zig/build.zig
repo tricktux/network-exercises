@@ -40,6 +40,13 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // Utils
+    const utils = b.addModule("utils", .{
+        .root_source_file = b.path("src/utils/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // 0 Smoke Test
     const smoke_test = b.addExecutable(.{
         .name = "smoke-test",
@@ -55,20 +62,20 @@ pub fn build(b: *std.Build) void {
 
     set_run_cmd("0-smoke-test", b, smoke_test);
 
-    const smoke_test_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/0-smoke-test/main.zig"),
+    const utils_tests = b.addTest(.{
+        .root_source_file = b.path("src/utils/root.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const run_smoke_test_unit_tests = b.addRunArtifact(smoke_test_unit_tests);
+    const run_utils_tests = b.addRunArtifact(utils_tests);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
-    const test_step = b.step("test", "Run unit tests");
+    const utils_test_step = b.step("utils-tests", "Run utils unit tests");
     // test_step.dependOn(&run_lib_unit_tests.step);
-    test_step.dependOn(&run_smoke_test_unit_tests.step);
+    utils_test_step.dependOn(&run_utils_tests.step);
 
 
     // 1 Prime Time
@@ -78,6 +85,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    prime_time.root_module.addImport("utils", utils);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
