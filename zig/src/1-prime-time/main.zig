@@ -101,11 +101,12 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             // - We got a full message, decode it
             // TODO: Use the json goodness here
             // TODO: Queue response
+            const req = parse_request(dataall[start..idx], alloc);
 
             // TODO: Update start and idx
             start = idx.? + 1;
             idx = std.mem.indexOf(u8, dataall[start..], needle);
-            if (idx == null) break;  // No more messages to process
+            if (idx == null) break; // No more messages to process
         }
 
         // TODO: Send response
