@@ -12,6 +12,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
 const Mutex = std.Thread.Mutex;
+const allocator = std.heap.page_allocator;
+const page_size = std.mem.page_size;
 
 const FREE_CAPACITY = 0.5; // Percentage
 
@@ -19,20 +21,18 @@ pub const Queue = struct {
     data: []u8,
     capacity: u64,
     size: u64,
-    allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, capacity: u64) !Queue {
-        const data = try allocator.alloc(u8, capacity);
+    pub fn init() !Queue {
+        const data = try allocator.alloc(u8, page_size);
         return Queue{
             .data = data,
-            .capacity = capacity,
+            .capacity = page_size,
             .size = 0,
-            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Queue) void {
-        self.allocator.free(self.data);
+        allocator.free(self.data);
     }
 
     fn expand_capacity(self: *Queue, newsize: u64) !void {
@@ -49,7 +49,7 @@ pub const Queue = struct {
         }
         if (!expand) return;
 
-        const ndata = try self.allocator.realloc(self.data, self.capacity);
+        const ndata = try allocator.realloc(self.data, self.capacity);
         self.data = ndata;
     }
 
@@ -84,167 +84,17 @@ pub const Queue = struct {
     }
 };
 
-const L = std.SinglyLinkedList(*Queue);
-pub const Pool = struct {
-    queues: L,
-    allocator: std.mem.Allocator,
-    mutex: Mutex,
-    queue_capacity: u64,
-
-    pub fn init(allocator: std.mem.Allocator, initial_queues: usize, queue_capacity: u64) !Pool {
-        var queues = L{};
-
-        // TODO: Need a way to uniquely identify a queue
-        // - Cannot do it without embedding it in the queue itself
-        // - The queue is going to go out
-        // - The pool may resize and change the address
-        // I really like this SinglyLinkedList
-        // - Implement it
-        for (0..initial_queues) |_| {
-            const queue = try allocator.create(Queue);
-            queue.* = try Queue.init(allocator, queue_capacity);
-            const node = try allocator.create(L.Node);
-            node.* = L.Node{ .data = queue };
-
-            queues.prepend(node);
-        }
-
-        return Pool{
-            .queues = queues,
-            .allocator = allocator,
-            .mutex = .{},
-            .queue_capacity = queue_capacity,
-        };
-    }
-
-    pub fn deinit(self: *Pool) void {
-        std.debug.print("\nDeinitializing Pool\n", .{});
-        var count: usize = 0;
-        while (self.queues.popFirst()) | node | {
-            std.debug.print("\nFreeing node {}\n", .{count});
-            node.data.deinit();
-            self.allocator.destroy(node.data);
-            self.allocator.destroy(node);
-            count += 1;
-        }
-        std.debug.print("\nFreed {} nodes\n", .{count});
-    }
-
-    pub fn get_queue(self: *Pool) !*Queue {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        if (self.queues.popFirst()) |node| {
-            return node.data;
-        }
-
-        // Allocate a new queue
-        const queue = try self.allocator.create(Queue);
-        queue.* = try Queue.init(self.allocator, self.queue_capacity);
-        return queue;
-    }
-
-    pub fn return_queue(self: *Pool, queue: *Queue) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        const node = try self.allocator.create(L.Node);
-        node.* = L.Node{ .data = queue };
-        // var node = L.Node{ .data = queue };
-        self.queues.prepend(node);
-    }
-};
-
-// Updated test cases
-test "Queue.Pool initialization and deinitialization" {
-    std.debug.print("[test pool init]: starting...\n", .{});
-    var pool = try Pool.init(testing.allocator, 5, 64);
-    defer pool.deinit();
-
-    try testing.expectEqual(@as(usize, 5), pool.queues.len());
-}
-//
-// test "Queue.Pool get_queue and return_queue with dynamic allocation" {
-//     var pool = try Pool.init(testing.allocator, 3, 64);
-//     defer pool.deinit();
-//
-//     const queue1 = try pool.get_queue();
-//     const queue2 = try pool.get_queue();
-//     const queue3 = try pool.get_queue();
-//     try testing.expectEqual(@as(usize, 0), pool.queues.len());
-//
-//     // This should allocate a new queue
-//     const queue4 = try pool.get_queue();
-//     try testing.expectEqual(@as(usize, 0), pool.queues.len());
-//
-//     try pool.return_queue(queue2);
-//     try testing.expectEqual(@as(usize, 1), pool.queues.len());
-//     const queue5 = try pool.get_queue();
-//     try testing.expectEqual(queue2, queue5);
-//     try testing.expectEqual(@as(usize, 0), pool.queues.len());
-//
-//     try pool.return_queue(queue1);
-//     try testing.expectEqual(@as(usize, 1), pool.queues.len());
-//     try pool.return_queue(queue3);
-//     try testing.expectEqual(@as(usize, 2), pool.queues.len());
-//     try pool.return_queue(queue4);
-//     try testing.expectEqual(@as(usize, 3), pool.queues.len());
-//     try pool.return_queue(queue2);
-//     try testing.expectEqual(@as(usize, 4), pool.queues.len());
-//     try pool.return_queue(queue5);
-//     try testing.expectEqual(@as(usize, 5), pool.queues.len());
-// }
-//
-// test "Queue.Pool thread safety" {
-//     const ThreadContext = struct {
-//         pool: *Pool,
-//         iterations: usize,
-//     };
-//
-//     const thread_fn = struct {
-//         fn func(ctx: *ThreadContext) !void {
-//             var i: usize = 0;
-//             while (i < ctx.iterations) : (i += 1) {
-//                 const queue = try ctx.pool.get_queue();
-//                 try queue.push("test");
-//                 _ = queue.pop();
-//                 try ctx.pool.return_queue(queue);
-//             }
-//         }
-//     }.func;
-//
-//     var pool = try Pool.init(testing.allocator, 5, 64);
-//     defer pool.deinit();
-//
-//     const num_threads = 10;
-//     const iterations_per_thread = 1000;
-//
-//     var threads: [num_threads]std.Thread = undefined;
-//     var contexts: [num_threads]ThreadContext = undefined;
-//
-//     for (&threads, &contexts) |*thread, *ctx| {
-//         ctx.* = .{ .pool = &pool, .iterations = iterations_per_thread };
-//         thread.* = try std.Thread.spawn(.{}, thread_fn, .{ctx});
-//     }
-//
-//     for (threads) |thread| {
-//         thread.join();
-//     }
-//
-//     try testing.expectEqual(@as(u64, 10), pool.queues.len());
-// }
 
 // Tests
 test "Queue initialization and deinitialization" {
-    var queue = try Queue.init(testing.allocator, 64);
+    var queue = try Queue.init();
     defer queue.deinit();
 
-    try testing.expectEqual(@as(u64, 64), queue.capacity);
     try testing.expectEqual(@as(u64, 0), queue.size);
 }
 
 test "Queue push and pop" {
-    var queue = try Queue.init(testing.allocator, 64);
+    var queue = try Queue.init();
     defer queue.deinit();
 
     const data = "Hello, World!";
@@ -259,7 +109,7 @@ test "Queue push and pop" {
 }
 
 test "Queue capacity expansion" {
-    var queue = try Queue.init(testing.allocator, 16);
+    var queue = try Queue.init();
     defer queue.deinit();
 
     const data = "This is a longer string that will cause expansion";
@@ -271,18 +121,21 @@ test "Queue capacity expansion" {
 }
 
 test "Queue push_ex and get_writable_data" {
-    var queue = try Queue.init(testing.allocator, 64);
+    var queue = try Queue.init();
     defer queue.deinit();
 
+    {
+        const writable = queue.get_writable_data();
+        @memcpy(writable[0..10], "0123456789");
+        try queue.push_ex(10);
+    }
     const writable = queue.get_writable_data();
-    @memcpy(writable[0..10], "0123456789");
-    try queue.push_ex(10);
-    try testing.expectEqual(@as(usize, 64), writable.len);
+    try testing.expectEqual(@as(usize, std.mem.page_size - 10), writable.len);
     try testing.expectEqualSlices(u8, "0123456789", queue.peek());
 }
 
 test "Queue multiple pushes" {
-    var queue = try Queue.init(testing.allocator, 64);
+    var queue = try Queue.init();
     defer queue.deinit();
 
     try queue.push("First");
@@ -293,7 +146,7 @@ test "Queue multiple pushes" {
 }
 
 test "Queue empty pop" {
-    var queue = try Queue.init(testing.allocator, 64);
+    var queue = try Queue.init();
     defer queue.deinit();
 
     const empty = queue.pop();
