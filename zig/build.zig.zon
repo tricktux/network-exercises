@@ -23,10 +23,10 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .nexlog = .{
-            .url = "git+https://github.com/chrischtel/nexlog?ref=develop#b0d5e6d3c50df375e005a9ec0f5b93212ae2ecbb",
-            .hash = "1220aa9ef49feb30d9a527af665c0a95e7492c0b5dfd201d3b5bc18934e3ed9d4b7a",
-        },
+        // .nexlog = .{
+        //     .url = "git+https://github.com/chrischtel/nexlog?ref=develop#b0d5e6d3c50df375e005a9ec0f5b93212ae2ecbb",
+        //     .hash = "1220aa9ef49feb30d9a527af665c0a95e7492c0b5dfd201d3b5bc18934e3ed9d4b7a",
+        // },
     },
     .paths = .{
         "build.zig",
