@@ -1,7 +1,7 @@
 const std = @import("std");
 const linux = std.os.linux;
-const nexlog = @import("nexlog");
 const debug = std.debug.print;
+const testing = std.testing;
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -63,37 +63,50 @@ const ParseError = error{
     InvalidMethod,
     MissingNumber,
     InvalidNumber,
-    NotANumber,
 };
 
-fn parse_request(req: []const u8, alloc: std.mem.Allocator) !Request {
+fn parse_request(req: []const u8, alloc: std.mem.Allocator) !i64 {
     if (req.len == 0) return error.EmptyRequest;
 
-    var parsed = try std.json.parseFromSlice(Request, alloc, req, .{ .duplicate_field_behavior = .use_first, .ignore_unknown_fields = true });
+    var parsed = try std.json.parseFromSlice(std.json.Value, alloc, req, .{});
     defer parsed.deinit();
 
-    const request = parsed.value;
-    if (!std.mem.eql(u8, request.method, "method")) return error.InvalidMethod;
-    return request;
+    const expected = "isPrime";
+
+    if (parsed.value != .object) return error.InvalidRequest;
+    
+    // Sanitize method
+    const method = parsed.value.object.get("method") orelse return error.MissingMethod;
+    if (method != .string) return error.InvalidMethod;
+    if (method.string.len != expected.len) return error.InvalidMethod;
+    if (!std.mem.eql(u8, method.string[0..expected.len], expected)) return error.InvalidMethod;
+
+    const number = parsed.value.object.get("number") orelse return error.MissingNumber;
+    if (number != .integer) return error.InvalidNumber;
+
+    return number.integer;
 }
 
 // Make tests for the parse_request function
-// test "parse_request" {
-//     const allocator = std.heap.page_allocator;
-//     const good_request = "{'method': 'method', 'number': 42}";
-//     const bad_request = "{'method': 'method', 'number': '42'}";
-//     const empty_request = "";
-//     // Good request
-//     const good_req = parse_request(good_request, allocator);
-//     testing.expect(good_req) o= Request{ .method = "method", .number = 42 };
-//     // Bad request
-//     const bad_req = parse_request(bad_request, allocator);
-//     testing.expect(bad_req) o= error.bad;
-//     // Empty request
-//     const empty_req = parse_request(empty_request, allocator);
-//     testing.expect(empty_req) o= Request{ .method = null, .number = null };
-// }
-//
+test "parse_request" {
+    const good_request = "{\"method\": \"isPrime\", \"number\": 42}";
+    const good_request2 = "{\"number\": 100000000, \"method\": \"isPrime\"}";
+    const bad_request = "{\"method\": \"method\", \"number\": 42}";
+    const bad_request2 = "{\"method\": \"isPrimeoieoruertert\", \"number\": 42}";
+    const bad_request3 = "{\"method\": \"isPrime\", \"number\": \"42\"}";
+    const bad_request4 = "{\"method\": \"isPrime\", \"number\": 42.45}";
+    const bad_request5 = "";
+    // Good request
+    try testing.expectEqual(parse_request(good_request, testing.allocator), 42);
+    try testing.expectEqual(parse_request(good_request2, testing.allocator), 100000000);
+    // Bad request
+    try testing.expectError(error.InvalidMethod, parse_request(bad_request, testing.allocator));
+    try testing.expectError(error.InvalidMethod, parse_request(bad_request2, testing.allocator));
+    try testing.expectError(error.InvalidNumber, parse_request(bad_request3, testing.allocator));
+    try testing.expectError(error.InvalidNumber, parse_request(bad_request4, testing.allocator));
+    try testing.expectError(error.EmptyRequest, parse_request(bad_request5, testing.allocator));
+}
+
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const stream = connection.stream;
     defer stream.close();
@@ -144,10 +157,15 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             // TODO: Use the json goodness here
             // TODO: Queue response
             const req = parse_request(dataall[start..idx.?], alloc) catch {
-                try sendqu.push("{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n");
+                sendqu.push("{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n") catch {
+                    debug("\tERROR: Failed to push_ex", .{});
+                    return;
+                };
                 malformed = true;
                 break;
             };
+
+            _ = req;
 
             // Update start and idx
             start = idx.? + 1;
@@ -155,8 +173,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             if (idx == null) break; // No more messages to process
         }
 
-        // TODO: Send response
-
+        // Send response
         debug("\treceived some bytes = {}!!\n", .{bytes});
         const resp = sendqu.pop();
         stream.writeAll(resp) catch |err| {

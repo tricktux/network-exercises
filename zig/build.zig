@@ -62,21 +62,19 @@ pub fn build(b: *std.Build) void {
 
     set_run_cmd("0-smoke-test", b, smoke_test);
 
+    // Utils tests
     const utils_tests = b.addTest(.{
         .root_source_file = b.path("src/utils/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-
     const run_utils_tests = b.addRunArtifact(utils_tests);
-
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const utils_test_step = b.step("utils-tests", "Run utils unit tests");
     // test_step.dependOn(&run_lib_unit_tests.step);
     utils_test_step.dependOn(&run_utils_tests.step);
-
 
     // 1 Prime Time
     const prime_time = b.addExecutable(.{
@@ -85,6 +83,18 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const prime_time_tests = b.addTest(.{
+        .root_source_file = b.path("src/1-prime-time/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_prime_time_tests = b.addRunArtifact(prime_time_tests);
+    // Similar to creating the run step earlier, this exposes a `test` step to
+    // the `zig build --help` menu, providing a way for the user to request
+    // running the unit tests.
+    const prime_time_test_step = b.step("prime-time-tests", "Run prime time unit tests");
+    // test_step.dependOn(&run_lib_unit_tests.step);
+    prime_time_test_step.dependOn(&run_prime_time_tests.step);
 
     prime_time.root_module.addImport("utils", utils);
 
