@@ -13,7 +13,7 @@ const Queue = @import("utils").queue.Queue;
 
 pub fn main() !void {
     // Initialize allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }){};
     defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
@@ -35,6 +35,7 @@ pub fn main() !void {
         }
     }
 
+    // Initialize thread pool
     const cpus = try std.Thread.getCpuCount();
     var tp: std.Thread.Pool = undefined;
     try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
@@ -50,35 +51,76 @@ pub fn main() !void {
     }
 }
 
-// fn handle_request(req: []const u8, que: Queue, alloc: std.mem.Allocator) []u8 {
-//     if (req.len == 0) return &[_]u8{};
-//
-//     var parsed = std.json.parseFromSlice(u8, alloc, req, .{}) catch {
-//
-//     };
-// }
+const Request = struct {
+    method: []const u8,
+    number: i64,
+};
 
+const ParseError = error{
+    EmptyRequest,
+    InvalidRequest,
+    MissingMethod,
+    InvalidMethod,
+    MissingNumber,
+    InvalidNumber,
+    NotANumber,
+};
+
+fn parse_request(req: []const u8, alloc: std.mem.Allocator) !Request {
+    if (req.len == 0) return error.EmptyRequest;
+
+    var parsed = try std.json.parseFromSlice(Request, alloc, req, .{ .duplicate_field_behavior = .use_first, .ignore_unknown_fields = true });
+    defer parsed.deinit();
+
+    const request = parsed.value;
+    if (!std.mem.eql(u8, request.method, "method")) return error.InvalidMethod;
+    return request;
+}
+
+// Make tests for the parse_request function
+// test "parse_request" {
+//     const allocator = std.heap.page_allocator;
+//     const good_request = "{'method': 'method', 'number': 42}";
+//     const bad_request = "{'method': 'method', 'number': '42'}";
+//     const empty_request = "";
+//     // Good request
+//     const good_req = parse_request(good_request, allocator);
+//     testing.expect(good_req) o= Request{ .method = "method", .number = 42 };
+//     // Bad request
+//     const bad_req = parse_request(bad_request, allocator);
+//     testing.expect(bad_req) o= error.bad;
+//     // Empty request
+//     const empty_req = parse_request(empty_request, allocator);
+//     testing.expect(empty_req) o= Request{ .method = null, .number = null };
+// }
+//
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const stream = connection.stream;
     defer stream.close();
 
-    var recvqu = Queue.init(alloc, buff_size) catch {
+    var recvqu = Queue.init() catch {
         debug("\tERROR: Failed to allocate recvqu memory", .{});
         return;
     };
     defer recvqu.deinit();
-    var sendqu = Queue.init(alloc, buff_size) catch {
+
+    var sendqu = Queue.init() catch {
         debug("\tERROR: Failed to allocate sendqu memory", .{});
         return;
     };
     defer sendqu.deinit();
 
+    var malformed = false;
+
     while (true) {
         debug("\twaiting for some data...\n", .{});
-        var data = recvqu.get_writable_data();
-        const bytes = stream.read(data) catch 0;
+        const data = recvqu.get_writable_data();
+        const bytes = stream.read(data) catch |err| {
+            debug("\tERROR: error {}... closing this connection\n", .{err});
+            return;
+        };
         if (bytes == 0) {
-            debug("\tERROR: error, or closing request either way... closing this connection\n", .{});
+            debug("\tClient closing this connection\n", .{});
             return;
         }
 
@@ -101,9 +143,13 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             // - We got a full message, decode it
             // TODO: Use the json goodness here
             // TODO: Queue response
-            const req = parse_request(dataall[start..idx], alloc);
+            const req = parse_request(dataall[start..idx.?], alloc) catch {
+                try sendqu.push("{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n");
+                malformed = true;
+                break;
+            };
 
-            // TODO: Update start and idx
+            // Update start and idx
             start = idx.? + 1;
             idx = std.mem.indexOf(u8, dataall[start..], needle);
             if (idx == null) break; // No more messages to process
@@ -112,9 +158,12 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         // TODO: Send response
 
         debug("\treceived some bytes = {}!!\n", .{bytes});
-        stream.writeAll(data[0..bytes]) catch |err| {
+        const resp = sendqu.pop();
+        stream.writeAll(resp) catch |err| {
             debug("\tERROR: error sendAll function {}... closing this connection\n", .{err});
             return;
         };
+
+        if (malformed) return;  // Stop handling request
     }
 }
