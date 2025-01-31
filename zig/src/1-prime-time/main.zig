@@ -74,17 +74,30 @@ fn parse_request(req: []const u8, alloc: std.mem.Allocator) !i64 {
     const expected = "isPrime";
 
     if (parsed.value != .object) return error.InvalidRequest;
-    
+
     // Sanitize method
     const method = parsed.value.object.get("method") orelse return error.MissingMethod;
     if (method != .string) return error.InvalidMethod;
     if (method.string.len != expected.len) return error.InvalidMethod;
     if (!std.mem.eql(u8, method.string[0..expected.len], expected)) return error.InvalidMethod;
 
+    // Sanitize number
     const number = parsed.value.object.get("number") orelse return error.MissingNumber;
     if (number != .integer) return error.InvalidNumber;
 
     return number.integer;
+}
+
+fn is_prime(number: i64) bool {
+    // less than 2 are not prime numbers
+    if (number <= 1) return false;
+
+    for (2..number) |i| {
+        if (number % i == 0) return false;
+        if (i * i > number) break;
+    }
+
+    return true;
 }
 
 // Make tests for the parse_request function
@@ -152,11 +165,8 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         var start: usize = 0;
         // Process all the received messages in order
         while (true) {
-            // TODO: Process message from dataall[start..idx]
-            // - We got a full message, decode it
-            // TODO: Use the json goodness here
-            // TODO: Queue response
-            const req = parse_request(dataall[start..idx.?], alloc) catch {
+            // We got a full message, decode it
+            const number = parse_request(dataall[start..idx.?], alloc) catch {
                 sendqu.push("{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n") catch {
                     debug("\tERROR: Failed to push_ex", .{});
                     return;
@@ -165,7 +175,12 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
                 break;
             };
 
-            _ = req;
+            // is prime?
+            const prime = if (is_prime(number)) "true" else "false";
+            sendqu.push("{\"method\":\"isPrime\",\"prime\":" ++ prime ++ "}\n") catch {
+                debug("\tERROR: Failed to push_ex", .{});
+                return;
+            };
 
             // Update start and idx
             start = idx.? + 1;
@@ -174,13 +189,12 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         }
 
         // Send response
-        debug("\treceived some bytes = {}!!\n", .{bytes});
         const resp = sendqu.pop();
         stream.writeAll(resp) catch |err| {
             debug("\tERROR: error sendAll function {}... closing this connection\n", .{err});
             return;
         };
 
-        if (malformed) return;  // Stop handling request
+        if (malformed) return; // Stop handling request
     }
 }
