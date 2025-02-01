@@ -2,6 +2,7 @@ const std = @import("std");
 const linux = std.os.linux;
 const debug = std.debug.print;
 const testing = std.testing;
+const fmt = std.fmt.format;
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -92,9 +93,9 @@ fn is_prime(number: i64) bool {
     // less than 2 are not prime numbers
     if (number <= 1) return false;
 
-    for (2..number) |i| {
-        if (number % i == 0) return false;
-        if (i * i > number) break;
+    var i: i64 = 2;
+    while (i * i <= number) : (i += 1) {
+        if (@mod(number, i) == 0) return false;
     }
 
     return true;
@@ -137,6 +138,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
     defer sendqu.deinit();
 
     var malformed = false;
+    var buf: [128]u8 = undefined;
 
     while (true) {
         debug("\twaiting for some data...\n", .{});
@@ -177,7 +179,12 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
             // is prime?
             const prime = if (is_prime(number)) "true" else "false";
-            sendqu.push("{\"method\":\"isPrime\",\"prime\":" ++ prime ++ "}\n") catch {
+            const resp = std.fmt.bufPrint(&buf, "{{\"method\":\"isPrime\",\"prime\":{s}}}\n", .{prime}) catch {
+                debug("\tERROR: Failed to format response", .{});
+                return;
+            };
+
+            sendqu.push(resp) catch {
                 debug("\tERROR: Failed to push_ex", .{});
                 return;
             };
