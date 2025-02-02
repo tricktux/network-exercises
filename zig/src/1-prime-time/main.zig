@@ -101,26 +101,6 @@ fn is_prime(number: i64) bool {
     return true;
 }
 
-// Make tests for the parse_request function
-test "parse_request" {
-    const good_request = "{\"method\": \"isPrime\", \"number\": 42}";
-    const good_request2 = "{\"number\": 100000000, \"method\": \"isPrime\"}";
-    const bad_request = "{\"method\": \"method\", \"number\": 42}";
-    const bad_request2 = "{\"method\": \"isPrimeoieoruertert\", \"number\": 42}";
-    const bad_request3 = "{\"method\": \"isPrime\", \"number\": \"42\"}";
-    const bad_request4 = "{\"method\": \"isPrime\", \"number\": 42.45}";
-    const bad_request5 = "";
-    // Good request
-    try testing.expectEqual(parse_request(good_request, testing.allocator), 42);
-    try testing.expectEqual(parse_request(good_request2, testing.allocator), 100000000);
-    // Bad request
-    try testing.expectError(error.InvalidMethod, parse_request(bad_request, testing.allocator));
-    try testing.expectError(error.InvalidMethod, parse_request(bad_request2, testing.allocator));
-    try testing.expectError(error.InvalidNumber, parse_request(bad_request3, testing.allocator));
-    try testing.expectError(error.InvalidNumber, parse_request(bad_request4, testing.allocator));
-    try testing.expectError(error.EmptyRequest, parse_request(bad_request5, testing.allocator));
-}
-
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
@@ -217,4 +197,24 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         send_fifo.discard(resp.len);
         recv_fifo.discard(start);
     }
+}
+
+// Make tests for the parse_request function
+test "parse_request" {
+    const good_request = "{\"method\": \"isPrime\", \"number\": 42}";
+    const good_request2 = "{\"number\": 100000000, \"method\": \"isPrime\"}";
+    const bad_request = "{\"method\": \"method\", \"number\": 42}";
+    const bad_request2 = "{\"method\": \"isPrimeoieoruertert\", \"number\": 42}";
+    const bad_request3 = "{\"method\": \"isPrime\", \"number\": \"42\"}";
+    const bad_request4 = "{\"method\": \"isPrime\", \"number\": 42.45}";
+    const bad_request5 = "";
+    // Good request
+    try testing.expectEqual(parse_request(good_request, testing.allocator), 42);
+    try testing.expectEqual(parse_request(good_request2, testing.allocator), 100000000);
+    // Bad request
+    try testing.expectError(error.InvalidMethod, parse_request(bad_request, testing.allocator));
+    try testing.expectError(error.InvalidMethod, parse_request(bad_request2, testing.allocator));
+    try testing.expectError(error.InvalidNumber, parse_request(bad_request3, testing.allocator));
+    try testing.expectError(error.InvalidNumber, parse_request(bad_request4, testing.allocator));
+    try testing.expectError(error.EmptyRequest, parse_request(bad_request5, testing.allocator));
 }
