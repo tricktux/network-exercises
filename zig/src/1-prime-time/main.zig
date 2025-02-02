@@ -2,12 +2,11 @@ const std = @import("std");
 const linux = std.os.linux;
 const debug = std.debug.print;
 const testing = std.testing;
-const fmt = std.fmt.format;
+const fmt = std.fmt;
 
 // Constants
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
-const buff_size = 4096;
 const needle = "\n";
 
 const Queue = @import("utils").queue.Queue;
@@ -44,10 +43,11 @@ pub fn main() !void {
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
     debug("We are listeninig baby!!!...\n", .{});
+    const thread_id = std.Thread.getCurrentId();
     while (true) {
-        debug("waiting for a new connection...\n", .{});
+        debug("INFO({d}): waiting for a new connection...\n", .{thread_id});
         const connection = try server.accept();
-        debug("got new connection!!!\n", .{});
+        debug("INFO({d}): got new connection!!!\n", .{thread_id});
         try tp.spawn(handle_connection, .{ connection, allocator });
     }
 }
@@ -57,7 +57,7 @@ const Request = struct {
     number: i64,
 };
 
-const ParseError = error{
+const JsonReqParseError = error{
     EmptyRequest,
     InvalidRequest,
     MissingMethod,
@@ -122,17 +122,24 @@ test "parse_request" {
 }
 
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
+    const thread_id = std.Thread.getCurrentId();
+
     const stream = connection.stream;
     defer stream.close();
 
+    var recv_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
+    defer recv_fifo.deinit();
+
     var recvqu = Queue.init() catch {
-        debug("\tERROR: Failed to allocate recvqu memory", .{});
+        debug("\tERROR({d}): Failed to allocate recvqu memory\n", .{thread_id});
         return;
     };
     defer recvqu.deinit();
 
+    var send_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
+    defer send_fifo.deinit();
     var sendqu = Queue.init() catch {
-        debug("\tERROR: Failed to allocate sendqu memory", .{});
+        debug("\tERROR({d}): Failed to allocate sendqu memory\n", .{thread_id});
         return;
     };
     defer sendqu.deinit();
@@ -141,19 +148,26 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
     var buf: [128]u8 = undefined;
 
     while (true) {
-        debug("\twaiting for some data...\n", .{});
-        const data = recvqu.get_writable_data();
+        debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
+        // recv_fifo.ensureTotalCapacity(std.mem.page_size);
+        const data = recv_fifo.writableWithSize(std.mem.page_size);
+        // const data = recvqu.get_writable_data();
         const bytes = stream.read(data) catch |err| {
-            debug("\tERROR: error {}... closing this connection\n", .{err});
+            debug("\tERROR({d}): error {}... closing this connection\n", .{ thread_id, err });
             return;
         };
         if (bytes == 0) {
-            debug("\tClient closing this connection\n", .{});
+            debug("\t\tWARN({d}): Client closing this connection\n", .{
+                thread_id,
+            });
             return;
         }
 
+        recv_fifo.update(bytes);
         recvqu.push_ex(bytes) catch {
-            debug("\tERROR: Failed to push_ex", .{});
+            debug("\tERROR({d}): Failed to push_ex\n", .{
+                thread_id,
+            });
             return;
         };
 
@@ -166,42 +180,52 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         const dataall = recvqu.pop();
         var start: usize = 0;
         // Process all the received messages in order
+        debug("\t\tINFO({d}): processing request of size: '{d}'\n", .{ thread_id, dataall.len });
         while (true) {
             // We got a full message, decode it
-            const number = parse_request(dataall[start..idx.?], alloc) catch {
+            debug("\t\t\tINFO({d}): processing single request: '{s}', start: '{d}', end: '{d}'\n", .{ thread_id, dataall[start..idx.?], start, idx.? });
+            const number = parse_request(dataall[start..idx.?], alloc) catch |err| {
                 sendqu.push("{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n") catch {
-                    debug("\tERROR: Failed to push_ex", .{});
+                    debug("\t\tERROR({d}): Failed to push_ex\n", .{thread_id});
                     return;
                 };
+                // TODO: print malformed request
+                debug("\t\tWARN({d}): err = '{!}', malformed request: '{s}'\n", .{ thread_id, err, dataall[start..idx.?] });
                 malformed = true;
                 break;
             };
 
             // is prime?
             const prime = if (is_prime(number)) "true" else "false";
-            const resp = std.fmt.bufPrint(&buf, "{{\"method\":\"isPrime\",\"prime\":{s}}}\n", .{prime}) catch {
-                debug("\tERROR: Failed to format response", .{});
+            const resp = fmt.bufPrint(&buf, "{{\"method\":\"isPrime\",\"prime\":{s}}}\n", .{prime}) catch {
+                debug("\t\tERROR({d}): Failed to format response\n", .{thread_id});
                 return;
             };
 
             sendqu.push(resp) catch {
-                debug("\tERROR: Failed to push_ex", .{});
+                debug("\t\tERROR({d}): Failed to push_ex\n", .{thread_id});
                 return;
             };
 
             // Update start and idx
             start = idx.? + 1;
+            if (start >= dataall.len) break;
             idx = std.mem.indexOf(u8, dataall[start..], needle);
             if (idx == null) break; // No more messages to process
+            idx.? += start;
         }
 
         // Send response
         const resp = sendqu.pop();
+        debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
         stream.writeAll(resp) catch |err| {
-            debug("\tERROR: error sendAll function {}... closing this connection\n", .{err});
+            debug("\t\tERROR({d}): error sendAll function {}... closing this connection\n", .{ thread_id, err });
             return;
         };
 
-        if (malformed) return; // Stop handling request
+        if (malformed) {
+            debug("\tERROR({d}): malformed request received... closing this connection\n", .{thread_id});
+            return; // Stop handling request
+        }
     }
 }
