@@ -9,7 +9,7 @@ const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
 const needle = "\n";
-const malformed_resp = "{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n";
+const malformed_resp = "{\"malformed request received!!!!\"}\n";
 
 const Queue = @import("utils").queue.Queue;
 
@@ -86,7 +86,18 @@ fn parse_request(req: []const u8, alloc: std.mem.Allocator) !i64 {
 
     // Sanitize number
     const number = parsed.value.object.get("number") orelse return error.MissingNumber;
-    if (number != .integer) return error.InvalidNumber;
+    if (number == .float) return 0; // Float not an invalid request, but it's not prime
+    if (number != .integer) {
+        switch (number) {
+            .string => std.debug.print("\t\tERROR: Number is a string. value: {s}\n", .{number.string}),
+            .bool => std.debug.print("\t\tERROR: Number is a bool. value: {}\n", .{number.bool}),
+            .null => std.debug.print("\t\tERROR: Number is null\n", .{}),
+            .array => std.debug.print("\t\tERROR: Number is an array\n", .{}),
+            .object => std.debug.print("\t\tERROR: Number is an object\n", .{}),
+            else => std.debug.print("\t\tERROR: Number is of some other type\n", .{}),
+        }
+        return error.InvalidNumber;
+    }
 
     return number.integer;
 }
@@ -127,7 +138,7 @@ fn processMessages(messages: []const u8, send_fifo: *u8fifo, alloc: std.mem.Allo
         // We got a full message, decode it
         const resp = try send_fifo.writableWithSize(std.mem.page_size);
 
-        debug("\t\t\tINFO({d}): processing: '{s}', start: '{d}', end: '{d}'\n", .{ thread_id, messages[start..idx.?], start, idx.? });
+        // debug("\t\t\tINFO({d}): processing: '{s}', start: '{d}', end: '{d}'\n", .{ thread_id, messages[start..idx.?], start, idx.? });
         const number = parse_request(messages[start..idx.?], alloc) catch |err| {
             @memcpy(resp[0..malformed_resp.len], malformed_resp);
             debug("\t\tWARN({d}): err = '{!}', malformed request: '{s}'\n", .{ thread_id, err, messages[start..idx.?] });
@@ -139,7 +150,7 @@ fn processMessages(messages: []const u8, send_fifo: *u8fifo, alloc: std.mem.Allo
         const prime = if (is_prime(number)) "true" else "false";
         const response = try fmt.bufPrint(resp, "{{\"method\":\"isPrime\",\"prime\":{s}}}\n", .{prime});
 
-        debug("\t\t\tINFO({d}): response: '{s}'\n", .{ thread_id, response[0 .. response.len - 1] });
+        // debug("\t\t\tINFO({d}): response: '{s}'\n", .{ thread_id, response[0 .. response.len - 1] });
         send_fifo.update(response.len);
 
         // Update start and idx
@@ -194,7 +205,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         const datapeek = recv_fifo.readableSlice(0);
         var idx = std.mem.lastIndexOf(u8, datapeek, needle);
         if (idx == null) continue;
-        idx.? += 1;  // Include the very last message there
+        idx.? += 1; // Include the very last message there
 
         log_file.writer().print("Request: {s}\n", .{datapeek}) catch {};
         // Pass along only full messages
@@ -209,7 +220,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         const resp = send_fifo.readableSlice(0);
         if (resp.len > 0) {
             log_file.writer().print("Response: {s}\n", .{resp}) catch {};
-            debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
+            // debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
             stream.writeAll(resp) catch |err| {
                 debug("\t\tERROR({d}): error sendAll function {}... closing this connection\n", .{ thread_id, err });
                 return;
@@ -333,19 +344,5 @@ test "processMessages" {
             \\
         , response);
         send_fifo.discard(response.len);
-
-        // Simulate a second call to processMessages with the rest of the incomplete message
-        // const remaining_message =
-        //     \\}
-        //     \\
-        // ;
-        // const result2 = try processMessages(remaining_message, &send_fifo, allocator);
-        // try testing.expect(!result2);
-        // const response2 = send_fifo.readableSlice(0);
-        // try testing.expectEqualStrings(
-        //     \\{"method":"isPrime","prime":true}
-        //     \\
-        // , response2);
-        // send_fifo.discard(response2.len);
     }
 }
