@@ -172,7 +172,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
-        const data = recv_fifo.writableWithSize(std.mem.page_size) catch |err| {
+        const data = recv_fifo.writableWithSize(std.mem.page_size * 4) catch |err| {
             debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
             return;
         };
