@@ -103,6 +103,16 @@ fn is_prime(number: i64) bool {
     return true;
 }
 
+fn getThreadLogFile(thread_id: std.Thread.Id, allocator: std.mem.Allocator) !std.fs.File {
+    const filename = try std.fmt.allocPrint(allocator, "/tmp/prime-time-thread-{d}-log.txt", .{thread_id});
+    defer allocator.free(filename);
+
+    return std.fs.cwd().createFile(filename, .{ .read = true, .truncate = false }) catch |err| switch (err) {
+        error.PathAlreadyExists => try std.fs.cwd().openFile(filename, .{ .mode = .read_write }),
+        else => return err,
+    };
+}
+
 fn processMessages(messages: []const u8, send_fifo: *u8fifo, alloc: std.mem.Allocator) !bool {
     var start: usize = 0;
     const thread_id = std.Thread.getCurrentId();
@@ -143,6 +153,12 @@ fn processMessages(messages: []const u8, send_fifo: *u8fifo, alloc: std.mem.Allo
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
+    var log_file = getThreadLogFile(thread_id, alloc) catch |err| {
+        debug("\tERROR({d}): Failed to create log file: {!}\n", .{ thread_id, err });
+        return;
+    };
+    defer log_file.close();
+
     const stream = connection.stream;
     defer stream.close();
 
@@ -180,6 +196,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         if (idx == null) continue;
         idx.? += 1;  // Include the very last message there
 
+        log_file.writer().print("Request: {s}\n", .{datapeek}) catch {};
         // Pass along only full messages
         malformed = processMessages(datapeek[0..idx.?], &send_fifo, alloc) catch {
             debug("\t\tWARN({d}): Error while processMessages\n", .{
@@ -190,11 +207,14 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
         // Send response
         const resp = send_fifo.readableSlice(0);
-        debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
-        stream.writeAll(resp) catch |err| {
-            debug("\t\tERROR({d}): error sendAll function {}... closing this connection\n", .{ thread_id, err });
-            return;
-        };
+        if (resp.len > 0) {
+            log_file.writer().print("Response: {s}\n", .{resp}) catch {};
+            debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
+            stream.writeAll(resp) catch |err| {
+                debug("\t\tERROR({d}): error sendAll function {}... closing this connection\n", .{ thread_id, err });
+                return;
+            };
+        }
 
         if (malformed) {
             debug("\tERROR({d}): malformed request received... closing this connection\n", .{thread_id});
