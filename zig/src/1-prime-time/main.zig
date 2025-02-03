@@ -3,11 +3,13 @@ const linux = std.os.linux;
 const debug = std.debug.print;
 const testing = std.testing;
 const fmt = std.fmt;
+const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
 
 // Constants
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
 const needle = "\n";
+const malformed_resp = "{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n";
 
 const Queue = @import("utils").queue.Queue;
 
@@ -101,6 +103,43 @@ fn is_prime(number: i64) bool {
     return true;
 }
 
+fn processMessages(messages: []const u8, send_fifo: *u8fifo, alloc: std.mem.Allocator) !bool {
+    var start: usize = 0;
+    const thread_id = std.Thread.getCurrentId();
+    var idx: ?usize = undefined;
+
+    while (true) {
+        idx = std.mem.indexOf(u8, messages[start..], "\n");
+        if (idx == null) break;
+
+        idx.? += start;
+
+        // We got a full message, decode it
+        const resp = try send_fifo.writableWithSize(std.mem.page_size);
+
+        debug("\t\t\tINFO({d}): processing: '{s}', start: '{d}', end: '{d}'\n", .{ thread_id, messages[start..idx.?], start, idx.? });
+        const number = parse_request(messages[start..idx.?], alloc) catch |err| {
+            @memcpy(resp[0..malformed_resp.len], malformed_resp);
+            debug("\t\tWARN({d}): err = '{!}', malformed request: '{s}'\n", .{ thread_id, err, messages[start..idx.?] });
+            send_fifo.update(malformed_resp.len);
+            return true;
+        };
+
+        // is prime?
+        const prime = if (is_prime(number)) "true" else "false";
+        const response = try fmt.bufPrint(resp, "{{\"method\":\"isPrime\",\"prime\":{s}}}\n", .{prime});
+
+        debug("\t\t\tINFO({d}): response: '{s}'\n", .{ thread_id, response[0 .. response.len - 1] });
+        send_fifo.update(response.len);
+
+        // Update start and idx
+        start = idx.? + 1;
+        if (start >= messages.len) break;
+    }
+
+    return false;
+}
+
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
@@ -114,7 +153,6 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
     defer send_fifo.deinit();
 
     var malformed = false;
-    var start: usize = 0;
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
@@ -138,49 +176,17 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
         // Check if we have a full message
         const datapeek = recv_fifo.readableSlice(0);
-        var idx = std.mem.indexOf(u8, datapeek, needle);
+        var idx = std.mem.lastIndexOf(u8, datapeek, needle);
         if (idx == null) continue;
+        idx.? += 1;  // Include the very last message there
 
-        // We do have at least 1 full message
-        start = 0;
-        // Process all the received messages in order
-        debug("\t\tINFO({d}): processing request of size: '{d}'\n", .{ thread_id, datapeek.len });
-        while (true) {
-            // We got a full message, decode it
-            debug("\t\t\tINFO({d}): processing: '{s}', start: '{d}', end: '{d}'\n", .{ thread_id, datapeek[start..idx.?], start, idx.? });
-            const number = parse_request(datapeek[start..idx.?], alloc) catch |err| {
-                send_fifo.write("{\"method\":\"isPrime\",\"prime\":\"invalid request received!!!!\"}\n") catch {
-                    debug("\t\tERROR({d}): Failed to send_fifo.write\n", .{thread_id});
-                    return;
-                };
-                // TODO: print malformed request
-                debug("\t\tWARN({d}): err = '{!}', malformed request: '{s}'\n", .{ thread_id, err, datapeek[start..idx.?] });
-                malformed = true;
-                break;
-            };
-
-            // is prime?
-            const prime = if (is_prime(number)) "true" else "false";
-            // const buf = send_fifo.writableWithSize(std.mem.page_size) catch |err| {
-            //     debug("\tERROR({d}): error while send_fifo.writableWithSize: {!}\n", .{ thread_id, err });
-            //     return;
-            // };
-            const resp = send_fifo.writableWithSize(std.mem.page_size) catch unreachable;
-            const response = fmt.bufPrint(resp, "{{\"method\":\"isPrime\",\"prime\":{s}}}\n", .{prime}) catch {
-                debug("\t\tERROR({d}): Failed to format response\n", .{thread_id});
-                return;
-            };
-
-            debug("\t\t\tINFO({d}): response: '{s}'\n", .{ thread_id, response[0 .. response.len - 1] });
-            send_fifo.update(response.len);
-
-            // Update start and idx
-            start = idx.? + 1;
-            if (start >= datapeek.len) break;
-            idx = std.mem.indexOf(u8, datapeek[start..], needle);
-            if (idx == null) break; // No more messages to process
-            idx.? += start;
-        }
+        // Pass along only full messages
+        malformed = processMessages(datapeek[0..idx.?], &send_fifo, alloc) catch {
+            debug("\t\tWARN({d}): Error while processMessages\n", .{
+                thread_id,
+            });
+            return;
+        };
 
         // Send response
         const resp = send_fifo.readableSlice(0);
@@ -195,7 +201,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             return; // Stop handling request
         }
         send_fifo.discard(resp.len);
-        recv_fifo.discard(start);
+        recv_fifo.discard(idx.?);
     }
 }
 
@@ -217,4 +223,109 @@ test "parse_request" {
     try testing.expectError(error.InvalidNumber, parse_request(bad_request3, testing.allocator));
     try testing.expectError(error.InvalidNumber, parse_request(bad_request4, testing.allocator));
     try testing.expectError(error.EmptyRequest, parse_request(bad_request5, testing.allocator));
+}
+
+test "processMessages" {
+    const allocator = std.testing.allocator;
+
+    var send_fifo = u8fifo.init(allocator);
+    defer send_fifo.deinit();
+
+    // Test valid single message
+    {
+        const messages =
+            \\{"method":"isPrime","number":7}
+            \\
+        ;
+        const result = try processMessages(messages, &send_fifo, allocator);
+        try testing.expect(!result);
+        const response = send_fifo.readableSlice(0);
+        try testing.expectEqualStrings(
+            \\{"method":"isPrime","prime":true}
+            \\
+        , response);
+        send_fifo.discard(response.len);
+    }
+
+    // Test valid multiple messages
+    {
+        const messages =
+            \\{"method":"isPrime","number":4}
+            \\{"method":"isPrime","number":11}
+            \\
+        ;
+        const result = try processMessages(messages, &send_fifo, allocator);
+        try testing.expect(!result);
+        const response = send_fifo.readableSlice(0);
+        try testing.expectEqualStrings(
+            \\{"method":"isPrime","prime":false}
+            \\{"method":"isPrime","prime":true}
+            \\
+        , response);
+        send_fifo.discard(response.len);
+    }
+
+    // Test invalid message
+    {
+        const messages =
+            \\{"method":"notIsPrime","number":7}
+            \\
+        ;
+        const result = try processMessages(messages, &send_fifo, allocator);
+        try testing.expect(result);
+        const response = send_fifo.readableSlice(0);
+        try testing.expectEqualStrings(malformed_resp, response);
+        send_fifo.discard(response.len);
+    }
+
+    // Test mixed valid and invalid messages
+    {
+        const messages =
+            \\{"method":"isPrime","number":2}
+            \\{"invalid":"json"}
+            \\{"method":"isPrime","number":9}
+            \\
+        ;
+        const result = try processMessages(messages, &send_fifo, allocator);
+        try testing.expect(result);
+        const response = send_fifo.readableSlice(0);
+        try testing.expectEqualStrings(
+            \\{"method":"isPrime","prime":true}
+            \\{"method":"isPrime","prime":"invalid request received!!!!"}
+            \\
+        , response);
+        send_fifo.discard(response.len);
+    }
+
+    // Test complete messages followed by an incomplete one
+    {
+        const messages =
+            \\{"method":"isPrime","number":3}
+            \\{"method":"isPrime","number":6}
+            \\{"method":"isPrime","number":13
+        ;
+        const result = try processMessages(messages, &send_fifo, allocator);
+        try testing.expect(!result);
+        const response = send_fifo.readableSlice(0);
+        try testing.expectEqualStrings(
+            \\{"method":"isPrime","prime":true}
+            \\{"method":"isPrime","prime":false}
+            \\
+        , response);
+        send_fifo.discard(response.len);
+
+        // Simulate a second call to processMessages with the rest of the incomplete message
+        // const remaining_message =
+        //     \\}
+        //     \\
+        // ;
+        // const result2 = try processMessages(remaining_message, &send_fifo, allocator);
+        // try testing.expect(!result2);
+        // const response2 = send_fifo.readableSlice(0);
+        // try testing.expectEqualStrings(
+        //     \\{"method":"isPrime","prime":true}
+        //     \\
+        // , response2);
+        // send_fifo.discard(response2.len);
+    }
 }
