@@ -87,17 +87,8 @@ fn parse_request(req: []const u8, alloc: std.mem.Allocator) !i64 {
     // Sanitize number
     const number = parsed.value.object.get("number") orelse return error.MissingNumber;
     if (number == .float) return 0; // Float not an invalid request, but it's not prime
-    if (number != .integer) {
-        switch (number) {
-            .string => std.debug.print("\t\tERROR: Number is a string. value: {s}\n", .{number.string}),
-            .bool => std.debug.print("\t\tERROR: Number is a bool. value: {}\n", .{number.bool}),
-            .null => std.debug.print("\t\tERROR: Number is null\n", .{}),
-            .array => std.debug.print("\t\tERROR: Number is an array\n", .{}),
-            .object => std.debug.print("\t\tERROR: Number is an object\n", .{}),
-            else => std.debug.print("\t\tERROR: Number is of some other type\n", .{}),
-        }
-        return error.InvalidNumber;
-    }
+    if (number == .number_string) return 0; // Huge or odd number not an invalid request, but it's not prime
+    if (number != .integer) return error.InvalidNumber;
 
     return number.integer;
 }
