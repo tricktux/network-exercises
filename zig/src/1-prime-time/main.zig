@@ -236,14 +236,16 @@ test "parse_request" {
     const bad_request3 = "{\"method\": \"isPrime\", \"number\": \"42\"}";
     const bad_request4 = "{\"method\": \"isPrime\", \"number\": 42.45}";
     const bad_request5 = "";
+    const bad_request6 = "{\"method\":\"isPrime\",\"number\":10401633275388669772807280224026505894939462093848274768,\"bignumber\":true}";
     // Good request
-    try testing.expectEqual(parse_request(good_request, testing.allocator), 42);
-    try testing.expectEqual(parse_request(good_request2, testing.allocator), 100000000);
+    try testing.expectEqual(42, parse_request(good_request, testing.allocator));
+    try testing.expectEqual(100000000, parse_request(good_request2, testing.allocator));
+    try testing.expectEqual(@as(i64, 0), parse_request(bad_request4, testing.allocator));
+    try testing.expectEqual(@as(i64, 0), parse_request(bad_request6, testing.allocator));
     // Bad request
     try testing.expectError(error.InvalidMethod, parse_request(bad_request, testing.allocator));
     try testing.expectError(error.InvalidMethod, parse_request(bad_request2, testing.allocator));
     try testing.expectError(error.InvalidNumber, parse_request(bad_request3, testing.allocator));
-    try testing.expectError(error.InvalidNumber, parse_request(bad_request4, testing.allocator));
     try testing.expectError(error.EmptyRequest, parse_request(bad_request5, testing.allocator));
 }
 
@@ -313,7 +315,7 @@ test "processMessages" {
         const response = send_fifo.readableSlice(0);
         try testing.expectEqualStrings(
             \\{"method":"isPrime","prime":true}
-            \\{"method":"isPrime","prime":"invalid request received!!!!"}
+            \\{"malformed request received!!!!"}
             \\
         , response);
         send_fifo.discard(response.len);
