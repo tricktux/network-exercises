@@ -86,11 +86,11 @@ fn parse_request(req: []const u8, alloc: std.mem.Allocator) !i64 {
 
     // Sanitize number
     const number = parsed.value.object.get("number") orelse return error.MissingNumber;
-    if (number == .float) return 0; // Float not an invalid request, but it's not prime
-    if (number == .number_string) return 0; // Huge or odd number not an invalid request, but it's not prime
-    if (number != .integer) return error.InvalidNumber;
-
-    return number.integer;
+    switch (number) {
+        .number_string, .float => return 0, // Float not an invalid request, but it's not prime
+        .integer => return number.integer,
+        else => return error.InvalidNumber,
+    }
 }
 
 fn is_prime(number: i64) bool {
