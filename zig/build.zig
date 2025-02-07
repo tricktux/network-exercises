@@ -57,9 +57,28 @@ pub fn build(b: *std.Build) void {
 
     // 1 Prime Time Tests
     const prime_time_tests = b.addTest(.{
+        .name = "prime-time-tests",
         .root_source_file = b.path("src/1-prime-time/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     b.installArtifact(prime_time_tests);
+
+    // 2 Means to an end
+    const means2an_end = b.addExecutable(.{
+        .name = "means-to-an-end",
+        .root_source_file = b.path("src/2-means-to-an-end/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(means2an_end);
+
+    // 2 Means to an end Tests
+    const means2an_end_tests = b.addTest(.{
+        .name = "means-to-an-end-tests",
+        .root_source_file = b.path("src/2-means-to-an-end/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(means2an_end_tests);
 }
