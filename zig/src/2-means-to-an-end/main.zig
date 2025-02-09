@@ -89,12 +89,22 @@ fn messages_parse(messages: []const u8, response: *u8fifo, assets: *AssetsDataba
         switch (msg_type) {
             message_insert => {
                 try assets.append(AssetPrice{ .timestamp = first_word, .price = second_word });
-                try response.write("I {d} {d}\n");
             },
             message_query => {
-                // const query = AssetPriceQuery{ .mintime = first_word, .maxtime = second_word };
-                // Implement query logic here
-                try response.write("Q {d} {d}\n");
+                const query = AssetPriceQuery{ .mintime = first_word, .maxtime = second_word };
+                var avg: i64 = 0;
+                var count: i64 = 0;
+                for (assets.items) |asset| {
+                    if (asset.timestamp >= query.mintime and asset.timestamp <= query.maxtime) {
+                        avg += asset.price;
+                        count += 1;
+                    }
+                }
+
+                // Need to convert to result to big endian
+                const result = if (count == 0) 0 else @as(i32, @intCast(@divFloor(avg, count)));
+                const result_big = std.mem.nativeToBig(i32, result);
+                try response.write(std.mem.asBytes(&result_big));
             },
             else => {
                 // Handle unknown message type
@@ -150,6 +160,8 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         // Check if we have a full message
         if (recv_fifo.readableLength() % message_size != 0) continue;
         const datapeek = recv_fifo.readableSlice(0);
+        const num_msgs = datapeek.len / message_size;
+        debug("\tTRACE({d}): processing '{}' messages\n", .{ thread_id, num_msgs });
         messages_parse(datapeek, &send_fifo, &assets) catch |err| {
             debug("\tERROR({d}): error while parsing messages: {!}\n", .{ thread_id, err });
             return;
@@ -174,24 +186,41 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
     }
 }
 
-test "messages_parse inserts assets correctly" {
+test "messages_parse inserts assets correctly and handles queries" {
     var assets = std.ArrayList(AssetPrice).init(testing.allocator);
     defer assets.deinit();
 
-    // var response = std.io.fixedBufferStream(([_]u8{0} ** 1024)).writer();
     var send_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(testing.allocator);
     defer send_fifo.deinit();
 
     const test_messages = [_]u8{
         'I', 0, 0, 0x03, 0xE8, 0, 0, 0, 100,    // type: 'I', timestamp: 1000 (0x03E8), price: 100
         'I', 0, 0, 0x07, 0xD0, 0, 0, 0, 200,    // type: 'I', timestamp: 2000 (0x07D0), price: 200
-        'I', 0, 0, 0x0B, 0xB8, 0, 0, 0, 229     // type: 'I', timestamp: 3000 (0x0BB8), price: 300 (0x12C)
+        'I', 0, 0, 0x0B, 0xB8, 0, 0, 0, 229,    // type: 'I', timestamp: 3000 (0x0BB8), price: 229
+        'Q', 0, 0, 0x03, 0xE8, 0, 0, 0x0B, 0xB8, // type: 'Q', mintime: 1000, maxtime: 3000
+        'Q', 0, 0, 0x07, 0xD0, 0, 0, 0x0B, 0xB8, // type: 'Q', mintime: 2000, maxtime: 3000
+        'Q', 0, 0, 0x0B, 0xB9, 0, 0, 0x0F, 0xA0  // type: 'Q', mintime: 3001, maxtime: 4000
     };
 
     try messages_parse(std.mem.asBytes(&test_messages), &send_fifo, &assets);
 
+    // Test asset insertions
     try testing.expectEqual(@as(usize, 3), assets.items.len);
     try testing.expectEqual(AssetPrice{ .timestamp = 1000, .price = 100 }, assets.items[0]);
     try testing.expectEqual(AssetPrice{ .timestamp = 2000, .price = 200 }, assets.items[1]);
     try testing.expectEqual(AssetPrice{ .timestamp = 3000, .price = 229 }, assets.items[2]);
+
+    // Test query results
+    var result_buffer: [4]u8 = undefined;
+    _ = send_fifo.read(&result_buffer);
+    try testing.expectEqual(@as(i32, 176), std.mem.readVarInt(i32, &result_buffer, .big)); // Average of 100, 200, 229
+
+    _ = send_fifo.read(&result_buffer);
+    try testing.expectEqual(@as(i32, 214), std.mem.readVarInt(i32, &result_buffer, .big)); // Average of 200, 229
+
+    _ = send_fifo.read(&result_buffer);
+    try testing.expectEqual(@as(i32, 0), std.mem.readVarInt(i32, &result_buffer, .big)); // No prices in this range
+
+    // Ensure no more data in the FIFO
+    try testing.expectEqual(@as(usize, 0), send_fifo.readableLength());
 }
