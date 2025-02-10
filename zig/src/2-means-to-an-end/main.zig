@@ -116,12 +116,6 @@ fn messages_parse(messages: []const u8, response: *u8fifo, assets: *AssetsDataba
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
-    var log_file = getThreadLogFile(thread_id, alloc) catch |err| {
-        debug("\tERROR({d}): Failed to create log file: {!}\n", .{ thread_id, err });
-        return;
-    };
-    defer log_file.close();
-
     var assets = AssetsDatabase.initCapacity(alloc, 32) catch |err| {
         debug("\tERROR({d}): Failed to create assets database: {!}\n", .{ thread_id, err });
         return;
@@ -167,21 +161,17 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             return;
         };
 
-        // log_file.writer().print("Request: {s}\n", .{datapeek}) catch {};
-        // Pass along only full messages
-
         // Send response
         const resp = send_fifo.readableSlice(0);
         if (resp.len > 0) {
-            log_file.writer().print("Response: {s}\n", .{resp}) catch {};
             // debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
             stream.writeAll(resp) catch |err| {
                 debug("\t\tERROR({d}): error sendAll function {}... closing this connection\n", .{ thread_id, err });
                 return;
             };
+            send_fifo.discard(resp.len);
         }
 
-        send_fifo.discard(resp.len);
         recv_fifo.discard(recv_fifo.readableLength());
     }
 }
