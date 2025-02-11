@@ -81,4 +81,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     b.installArtifact(means2an_end_tests);
+
+    // 3 Budget Chat
+    const budget_chat = b.addExecutable(.{
+        .name = "budget_chat",
+        .root_source_file = b.path("src/3-budget-chat/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(budget_chat);
+
+    // 3 Budget Chat
+    const budget_chat_tests = b.addTest(.{
+        .name = "budget-chat-tests",
+        .root_source_file = b.path("src/3-budget-chat/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(budget_chat_tests);
 }
