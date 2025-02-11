@@ -54,24 +54,67 @@ pub fn main() !void {
 }
 
 const Clients = struct {
-    clients: std.ArrayHashMapWithAllocator = undefined,
-    mutex: std.Mutex = std.Mutex.init,
+    clients: std.StringArrayHashMap(Client) = undefined,
+    mutex: std.Thread.Mutex = .{},
 
-    pub fn init(allocator: *std.mem.Allocator) Clients {
+    pub fn init(allocator: std.mem.Allocator) Clients {
         return Clients{ .clients = std.StringArrayHashMap(Client).init(allocator) };
     }
 
     pub fn deinit(self: *Clients) void {
         self.clients.deinit();
     }
-    pub fn try_add(self: *Clients, client: *Client) void {
-        self.clients.put(client.username, client);
+
+    pub fn exists(self: *Clients, username: []const u8) bool {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.clients.contains(username);
     }
 
-    // TODO: Add remove function
-    // pub fn try_remove(self: *Clients, username: []const u8) void {
-    //     self.clients.remove(username);
-    // }
+    pub fn add(self: *Clients, client: Client) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        try self.clients.put(&client.username, client);
+    }
+
+    pub fn get_usernames(self: *Clients) []const []const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.clients.keys();
+    }
+
+    pub fn remove(self: *Clients, username: []const u8) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        _ = self.clients.swapRemove(username);
+    }
+
+    pub fn send_message(self: *Clients, message: []const u8) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        for (self.clients.values()) |client| {
+            if (client.joined) {
+                client.stream.writeAll(message) catch |err| {
+                    debug("\tERROR: error while send_fifo.writer.print: {!}\n", .{ err });
+                    return;
+                };
+            }
+        }
+    }
+
+    pub fn send_message_from(self: *Clients, from: Client, message: []const u8) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        for (self.clients.values()) |client| {
+            if (client == from) continue;
+            if (client.joined) {
+                client.stream.writeAll(message) catch |err| {
+                    debug("\tERROR: error while send_fifo.writer.print: {!}\n", .{ err });
+                    return;
+                };
+            }
+        }
+    }
 };
 
 const Client = struct {
@@ -186,4 +229,45 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
         recv_fifo.discard(recv_fifo.readableLength());
     }
+}
+
+
+test "Clients and Client" {
+    const allocator = std.testing.allocator;
+    var clients = Clients.init(allocator);
+    defer clients.deinit();
+
+    // Test Client
+    // var stream = try std.net.tcpConnectToHost(allocator, "localhost", 8080);
+    // defer stream.close();
+    const stream = undefined;
+    var client = Client.init(stream);
+
+    try testing.expect(!client.validate_username(""));
+    try testing.expect(!client.validate_username("a" ** 33));
+    try testing.expect(!client.validate_username("invalid@username"));
+    try testing.expect(client.validate_username("validUsername123"));
+    try testing.expectEqualStrings("validUsername123", client.username[0..15]);
+    try testing.expect(client.joined);
+
+    // Test Clients
+    try testing.expect(!clients.exists("validUsername123"));
+    try clients.add(client);
+    try testing.expect(clients.exists("validUsername123"));
+
+    const usernames = clients.get_usernames();
+    try testing.expectEqual(@as(usize, 1), usernames.len);
+    try testing.expectEqualStrings("validUsername123", usernames[0]);
+
+    clients.remove("validUsername123");
+    try testing.expect(!clients.exists("validUsername123"));
+
+    // Test message sending (this is more of a mock test)
+    var client2 = Client.init(stream);
+    _ = client2.validate_username("anotherUser");
+    try clients.add(client);
+    try clients.add(client2);
+
+    // clients.send_message("Hello, everyone!");
+    // clients.send_message_from(client, "Hello from validUsername123");
 }
