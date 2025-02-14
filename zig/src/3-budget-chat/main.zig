@@ -68,13 +68,13 @@ const Clients = struct {
     pub fn exists(self: *Clients, username: []const u8) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.clients.contains(username);
+        return self.clients.contains(username[0..username.len]);
     }
 
-    pub fn add(self: *Clients, client: Client) !void {
+    pub fn add(self: *Clients, client: *Client) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        try self.clients.put(&client.username, client);
+        try self.clients.put(client.get_username(), client.*);
     }
 
     pub fn get_usernames(self: *Clients) []const []const u8 {
@@ -120,7 +120,8 @@ const Clients = struct {
 const Client = struct {
     stream: std.net.Stream = undefined,
     joined: bool = false,
-    username: [32]u8 = undefined,
+    username: [32:0]u8 = undefined,
+    username_len: usize = 0,
 
     pub fn init(stream: std.net.Stream) Client {
         return Client{ .stream = stream };
@@ -132,10 +133,15 @@ const Client = struct {
         for (username) |c| {
             if (!std.ascii.isAlphanumeric(c)) return false;
         }
-        // self.username = username;
+
         @memcpy(self.username[0..username.len], username);
+        self.username_len = username.len;
         self.joined = true;
         return true;
+    }
+
+    pub fn get_username(self: *Client) []const u8 {
+        return self.username[0..self.username_len :0];
     }
 };
 
@@ -247,12 +253,12 @@ test "Clients and Client" {
     try testing.expect(!client.validate_username("a" ** 33));
     try testing.expect(!client.validate_username("invalid@username"));
     try testing.expect(client.validate_username("validUsername123"));
-    try testing.expectEqualStrings("validUsername123", client.username[0..15]);
+    try testing.expectEqualStrings("validUsername123", client.get_username());
     try testing.expect(client.joined);
 
     // Test Clients
     try testing.expect(!clients.exists("validUsername123"));
-    try clients.add(client);
+    try clients.add(&client);
     try testing.expect(clients.exists("validUsername123"));
 
     const usernames = clients.get_usernames();
@@ -265,8 +271,8 @@ test "Clients and Client" {
     // Test message sending (this is more of a mock test)
     var client2 = Client.init(stream);
     _ = client2.validate_username("anotherUser");
-    try clients.add(client);
-    try clients.add(client2);
+    try clients.add(&client);
+    try clients.add(&client2);
 
     // clients.send_message("Hello, everyone!");
     // clients.send_message_from(client, "Hello from validUsername123");
