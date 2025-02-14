@@ -50,7 +50,7 @@ pub fn main() !void {
         debug("INFO({d}): waiting for a new connection...\n", .{thread_id});
         const connection = try server.accept();
         debug("INFO({d}): got new connection!!!\n", .{thread_id});
-        try tp.spawn(handle_connection, .{ connection, allocator });
+        try tp.spawn(handle_connection, .{ connection, &clients, allocator });
     }
 }
 
@@ -69,13 +69,13 @@ const Clients = struct {
     pub fn exists(self: *Clients, client: *Client) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.clients.contains(client.get_username());
+        return self.clients.contains(client.username.constSlice());
     }
 
     pub fn add(self: *Clients, client: *Client) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        try self.clients.put(client.get_username(), client.*);
+        try self.clients.put(client.username.constSlice(), client.*);
     }
 
     pub fn get_usernames(self: *Clients) []const []const u8 {
@@ -87,32 +87,26 @@ const Clients = struct {
     pub fn remove(self: *Clients, client: *Client) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        _ = self.clients.swapRemove(client.get_username());
+        _ = self.clients.swapRemove(client.username.constSlice());
     }
 
-    pub fn send_message(self: *Clients, message: []const u8) void {
+    pub fn send_message(self: *Clients, message: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
         for (self.clients.values()) |client| {
             if (client.joined) {
-                client.stream.writeAll(message) catch |err| {
-                    debug("\tERROR: error while send_fifo.writer.print: {!}\n", .{ err });
-                    return;
-                };
+                try client.stream.writeAll(message);
             }
         }
     }
 
-    pub fn send_message_from(self: *Clients, from: Client, message: []const u8) void {
+    pub fn send_message_from(self: *Clients, from: Client, message: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
         for (self.clients.values()) |client| {
             if (client == from) continue;
             if (client.joined) {
-                client.stream.writeAll(message) catch |err| {
-                    debug("\tERROR: error while send_fifo.writer.print: {!}\n", .{ err });
-                    return;
-                };
+                try client.stream.writeAll(message);
             }
         }
     }
@@ -121,8 +115,7 @@ const Clients = struct {
 const Client = struct {
     stream: std.net.Stream = undefined,
     joined: bool = false,
-    username: [32:0]u8 = undefined,
-    username_len: usize = 0,
+    username: std.BoundedArray(u8, 32) = undefined,
 
     pub fn init(stream: std.net.Stream) Client {
         return Client{ .stream = stream };
@@ -135,15 +128,11 @@ const Client = struct {
             if (!std.ascii.isAlphanumeric(c)) return false;
         }
 
-        @memcpy(self.username[0..username.len], username);
-        self.username_len = username.len;
+        self.username.appendSlice(username) catch unreachable;
         self.joined = true;
         return true;
     }
 
-    pub fn get_username(self: *Client) []const u8 {
-        return self.username[0..self.username_len :0];
-    }
 };
 
 // TODO: Add argument to handle_connection to pass the clients struct
@@ -166,7 +155,10 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
     };
     defer clients.remove(&client);
 
-    var msg_buffer: [1024:0]u8 = undefined;
+    var msg_buffer = std.BoundedArray(u8, 1024).init(0) catch |err| {
+        debug("\tERROR({d}): error while initializing msg_buffer: {!}\n", .{ thread_id, err });
+        return;
+    };
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
@@ -205,37 +197,41 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
                 return;
             }
 
-            msg_buffer += std.fmt.format("Welcome, {}!\n", .{ client.get_username() });
-            // Send client members
-            std.fmt.format(&msg_buffer, "* The room contains: ", .{ client.get_username() });
-            var send_writer = send_fifo.writer();
-            _ = send_writer.write("* The room contains: ") catch |err| {
-                debug("\tERROR({d}): error while send_fifo.writer.print: {!}\n", .{ thread_id, err });
-                return;
-            };
-
+            // Message new client with friends in the chat
+            msg_buffer.clear();
+            msg_buffer.appendSlice("* The room contains: ") catch unreachable;
             var first: bool = false;
             const usernames = clients.get_usernames();
             for (usernames) |username| {
-                _ = send_writer.write("* The room contains: ") catch |err| {
-                    debug("\tERROR({d}): error while send_fifo.writer.print: {!}\n", .{ thread_id, err });
-                    return;
-                };
+                if (!first) {
+                    first = true;
+                } else {
+                    msg_buffer.appendSlice(", ") catch unreachable;
+                }
+                msg_buffer.appendSlice(username) catch unreachable;
             }
-            send_writer.write(client.username) catch |err| {
-                debug("\tERROR({d}): error while send_fifo.writer.write: {!}\n", .{ thread_id, err });
+            msg_buffer.appendSlice("\n") catch unreachable;
+            stream.writeAll(msg_buffer.constSlice()) catch |err| {
+                debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
                 return;
             };
-            // var friends = send_fifo.writableWithSize(1024) catch |err| {
-            //     debug("\tERROR({d}): error while send_fifo.writableWithSize: {!}\n", .{ thread_id, err });
-            //     return;
-            // };
-            // friends.append("* The room contains: ");
-            // friends.
+
+            // Message existing friends about the new friend in the chat
+            msg_buffer.clear();
+            _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {} has entered the room\n", .{ client.username }) catch |err| {
+                debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
+                return;
+            };
+            clients.send_message(msg_buffer.constSlice()) catch |err| {
+                debug("\tERROR({d}): error while sending message: {!}\n", .{ thread_id, err });
+                return;
+            };
+
             // Add to list of clients
-            clients.add(&client);
-
-
+            clients.add(&client) catch |err| {
+                debug("\tERROR({d}): error while adding client to clients: {!}\n", .{ thread_id, err });
+                return;
+            };
         }
 
         // Send response
@@ -265,24 +261,24 @@ test "Clients and Client" {
     const stream = undefined;
     var client = Client.init(stream);
 
-    try testing.expect(!client.validate_username(""));
-    try testing.expect(!client.validate_username("a" ** 33));
-    try testing.expect(!client.validate_username("invalid@username"));
-    try testing.expect(client.validate_username("validUsername123"));
-    try testing.expectEqualStrings("validUsername123", client.get_username());
+    try testing.expectEqual(false, client.validate_username(""));
+    try testing.expectEqual(false, client.validate_username("a" ** 33));
+    try testing.expectEqual(false, client.validate_username("invalid@username"));
+    try testing.expectEqual(true, client.validate_username("validUsername123"));
+    try testing.expectEqualStrings("validUsername123", client.username.constSlice());
     try testing.expect(client.joined);
 
     // Test Clients
-    try testing.expect(!clients.exists("validUsername123"));
+    try testing.expect(!clients.exists(&client));
     try clients.add(&client);
-    try testing.expect(clients.exists("validUsername123"));
+    try testing.expect(clients.exists(&client));
 
     const usernames = clients.get_usernames();
     try testing.expectEqual(@as(usize, 1), usernames.len);
     try testing.expectEqualStrings("validUsername123", usernames[0]);
 
-    clients.remove("validUsername123");
-    try testing.expect(!clients.exists("validUsername123"));
+    clients.remove(&client);
+    try testing.expect(!clients.exists(&client));
 
     // Test message sending (this is more of a mock test)
     var client2 = Client.init(stream);
