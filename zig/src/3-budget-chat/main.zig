@@ -40,7 +40,8 @@ pub fn main() !void {
     try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
     defer tp.deinit();
 
-    // TODO: Initialize clients
+    var clients = Clients.init(allocator);
+    defer clients.deinit();
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
     debug("We are listeninig baby!!!...\n", .{});
@@ -65,10 +66,10 @@ const Clients = struct {
         self.clients.deinit();
     }
 
-    pub fn exists(self: *Clients, username: []const u8) bool {
+    pub fn exists(self: *Clients, client: *Client) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.clients.contains(username[0..username.len]);
+        return self.clients.contains(client.get_username());
     }
 
     pub fn add(self: *Clients, client: *Client) !void {
@@ -83,10 +84,10 @@ const Clients = struct {
         return self.clients.keys();
     }
 
-    pub fn remove(self: *Clients, username: []const u8) void {
+    pub fn remove(self: *Clients, client: *Client) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        _ = self.clients.swapRemove(username);
+        _ = self.clients.swapRemove(client.get_username());
     }
 
     pub fn send_message(self: *Clients, message: []const u8) void {
@@ -146,7 +147,7 @@ const Client = struct {
 };
 
 // TODO: Add argument to handle_connection to pass the clients struct
-fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
+fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
     const stream = connection.stream;
@@ -163,6 +164,9 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
         return;
     };
+    defer clients.remove(&client);
+
+    var msg_buffer: [1024:0]u8 = undefined;
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
@@ -201,17 +205,27 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
                 return;
             }
 
+            msg_buffer += std.fmt.format("Welcome, {}!\n", .{ client.get_username() });
             // Send client members
+            std.fmt.format(&msg_buffer, "* The room contains: ", .{ client.get_username() });
             var send_writer = send_fifo.writer();
             _ = send_writer.write("* The room contains: ") catch |err| {
                 debug("\tERROR({d}): error while send_fifo.writer.print: {!}\n", .{ thread_id, err });
                 return;
             };
 
-            // send_writer.write(client.username) catch |err| {
-            //     debug("\tERROR({d}): error while send_fifo.writer.write: {!}\n", .{ thread_id, err });
-            //     return;
-            // };
+            var first: bool = false;
+            const usernames = clients.get_usernames();
+            for (usernames) |username| {
+                _ = send_writer.write("* The room contains: ") catch |err| {
+                    debug("\tERROR({d}): error while send_fifo.writer.print: {!}\n", .{ thread_id, err });
+                    return;
+                };
+            }
+            send_writer.write(client.username) catch |err| {
+                debug("\tERROR({d}): error while send_fifo.writer.write: {!}\n", .{ thread_id, err });
+                return;
+            };
             // var friends = send_fifo.writableWithSize(1024) catch |err| {
             //     debug("\tERROR({d}): error while send_fifo.writableWithSize: {!}\n", .{ thread_id, err });
             //     return;
@@ -219,6 +233,8 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
             // friends.append("* The room contains: ");
             // friends.
             // Add to list of clients
+            clients.add(&client);
+
 
         }
 
