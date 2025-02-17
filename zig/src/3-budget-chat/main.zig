@@ -77,7 +77,7 @@ const Clients = struct {
     pub fn add(self: *Clients, client: *Client) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        // TODO: avoid conflict here
+        if (self.clients.contains(client.username.constSlice())) return error.ClientAlreadyExists;
         try self.clients.put(client.username.constSlice(), client.*);
     }
 
@@ -223,6 +223,16 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
                 };
 
                 debug("\t\tWARN({d}): Invalid username: '{s}'. Closing connection.\n", .{ thread_id, msg });
+                return;
+            }
+
+            // Ensure unique usernames
+            if (clients.exists(&client)) {
+                stream.writeAll("Username already taken. Please try again.\n") catch |err| {
+                    debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
+                    return;
+                };
+                debug("\t\tWARN({d}): Username already taken: '{s}'. Closing connection.\n", .{ thread_id, msg });
                 return;
             }
 
