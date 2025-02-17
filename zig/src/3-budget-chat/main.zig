@@ -169,15 +169,17 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
     };
 
     defer {
-        debug("\t\tWARN({d}): Client: {s} leaving chat...\n", .{ thread_id, client.username.constSlice() });
-        // TODO: format the message
-        _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has left the room\n", .{ client.username.constSlice() }) catch |err| {
-            debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
-        };
-        clients.send_message_from(client, msg_buffer.constSlice()) catch |err| {
-            debug("\tERROR({d}): error while sending message: {!}\n", .{ thread_id, err });
-        };
-        clients.remove(&client);
+        if (client.joined) {
+            debug("\t\tWARN({d}): Client: {s} leaving chat...\n", .{ thread_id, client.username.constSlice() });
+            // TODO: format the message
+            _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has left the room\n", .{ client.username.constSlice() }) catch |err| {
+                debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
+            };
+            clients.send_message_from(client, msg_buffer.constSlice()) catch |err| {
+                debug("\tERROR({d}): error while sending message: {!}\n", .{ thread_id, err });
+            };
+            clients.remove(&client);
+        }
     }
 
     while (true) {
