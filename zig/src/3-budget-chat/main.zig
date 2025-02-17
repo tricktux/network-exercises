@@ -77,6 +77,7 @@ const Clients = struct {
     pub fn add(self: *Clients, client: *Client) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
+        // TODO: avoid conflict here
         try self.clients.put(client.username.constSlice(), client.*);
     }
 
@@ -105,8 +106,17 @@ const Clients = struct {
     pub fn send_message_from(self: *Clients, from: Client, message: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        for (self.clients.values()) |client| {
-            if (client == from) continue;
+        // TODO: Optimize this
+        // Get the index of the client
+        // Iterate in order
+        const idx = self.clients.getIndex(from.username.constSlice());
+        if (idx == null) return error.ClientNotFound;
+
+        var it     = self.clients.iterator();
+        var count: usize = 0;
+        while (it.next()) |entry| : (count += 1) {
+            if (count == idx.?) continue;
+            const client = entry.value_ptr.*;
             if (client.joined) {
                 try client.stream.writeAll(message);
             }
@@ -152,12 +162,23 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
         debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
         return;
     };
-    defer clients.remove(&client);
 
     var msg_buffer = std.BoundedArray(u8, 1024).init(0) catch |err| {
         debug("\tERROR({d}): error while initializing msg_buffer: {!}\n", .{ thread_id, err });
         return;
     };
+
+    defer {
+        debug("\t\tWARN({d}): Client: {s} leaving chat...\n", .{ thread_id, client.username.constSlice() });
+        // TODO: format the message
+        _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has left the room\n", .{ client.username.constSlice() }) catch |err| {
+            debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
+        };
+        clients.send_message_from(client, msg_buffer.constSlice()) catch |err| {
+            debug("\tERROR({d}): error while sending message: {!}\n", .{ thread_id, err });
+        };
+        clients.remove(&client);
+    }
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
@@ -227,7 +248,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
             // Message existing friends about the new friend in the chat
             debug("\t\tINFO({d}): Sending message to existing clients about new client...\n", .{ thread_id });
             msg_buffer.clear();
-            _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {} has entered the room\n", .{ client.username }) catch |err| {
+            _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has entered the room\n", .{ client.username.constSlice() }) catch |err| {
                 debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
                 return;
             };
@@ -248,7 +269,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
 
         debug("\t\tINFO({d}): Sending message: {s} to all clients...\n", .{ thread_id, msg });
         // TODO: format the message
-        _ = std.fmt.bufPrint(&msg_buffer.buffer, "[{}] {}\n", .{ client.username, msg }) catch |err| {
+        _ = std.fmt.bufPrint(&msg_buffer.buffer, "[{s}] {s}\n", .{ client.username.constSlice(), msg }) catch |err| {
             debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
             return;
         };
