@@ -3,6 +3,8 @@ const linux = std.os.linux;
 const debug = std.debug.print;
 const testing = std.testing;
 const fmt = std.fmt;
+const time = std.time;
+const Thread = std.Thread;
 const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
 
 // Constants
