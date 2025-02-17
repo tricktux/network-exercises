@@ -84,7 +84,7 @@ pub fn build(b: *std.Build) void {
 
     // 3 Budget Chat
     const budget_chat = b.addExecutable(.{
-        .name = "budget_chat",
+        .name = "budget-chat",
         .root_source_file = b.path("src/3-budget-chat/main.zig"),
         .target = target,
         .optimize = optimize,
