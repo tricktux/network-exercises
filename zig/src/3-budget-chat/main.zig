@@ -103,6 +103,7 @@ const Clients = struct {
         }
     }
 
+    // TODO: Not working. Needs test
     pub fn send_message_from(self: *Clients, from: Client, message: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
