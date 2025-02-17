@@ -147,11 +147,8 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
     var recv_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
     defer recv_fifo.deinit();
 
-    var send_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
-    defer send_fifo.deinit();
-
     var client = Client.init(stream);
-    stream.writeAll("Welcome to budgetchat! What shall I call you?") catch |err| {
+    stream.writeAll("Welcome to budgetchat! What shall I call you?\n") catch |err| {
         debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
         return;
     };
@@ -184,23 +181,32 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
 
         // Check if we have a full message
         const datapeek = recv_fifo.readableSlice(0);
+        // TODO: Maybe switch to using readUntilDelimiterOrEnd
+        // Danger here of sending out more than one message
         const idx = std.mem.lastIndexOf(u8, datapeek, needle);
         if (idx == null) continue;
 
+        // Clean up
+        defer recv_fifo.discard(recv_fifo.readableLength());
+        defer msg_buffer.clear();
+
+        const msg = datapeek[0..idx.?];
+
         // Validate username?
         if (!client.joined) {
-            if (!client.validate_username(datapeek[0..idx.?])) {
-                stream.writeAll("Invalid username. Please try again.") catch |err| {
+            debug("\t\tINFO({d}): Validating username...\n", .{ thread_id });
+            if (!client.validate_username(msg)) {
+                stream.writeAll("Invalid username. Please try again.\n") catch |err| {
                     debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
                     return;
                 };
 
-                debug("\t\tWARN({d}): Invalid username: '{s}'. Closing connection.\n", .{ thread_id, datapeek[0..idx.?] });
+                debug("\t\tWARN({d}): Invalid username: '{s}'. Closing connection.\n", .{ thread_id, msg });
                 return;
             }
 
             // Message new client with friends in the chat
-            msg_buffer.clear();
+            debug("\t\tINFO({d}): Sending room contents to new client...\n", .{ thread_id });
             msg_buffer.appendSlice("* The room contains: ") catch unreachable;
             var first: bool = false;
             const usernames = clients.get_usernames();
@@ -219,6 +225,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
             };
 
             // Message existing friends about the new friend in the chat
+            debug("\t\tINFO({d}): Sending message to existing clients about new client...\n", .{ thread_id });
             msg_buffer.clear();
             _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {} has entered the room\n", .{ client.username }) catch |err| {
                 debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
@@ -230,24 +237,25 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
             };
 
             // Add to list of clients
+            debug("\t\tINFO({d}): Adding client.username: {s} to clients...\n", .{ thread_id, client.username.constSlice() });
             clients.add(&client) catch |err| {
                 debug("\tERROR({d}): error while adding client to clients: {!}\n", .{ thread_id, err });
                 return;
             };
+
+            continue;
         }
 
-        // Send response
-        const resp = send_fifo.readableSlice(0);
-        if (resp.len > 0) {
-            // debug("\t\tINFO({d}): sending response of size: '{d}'\n", .{ thread_id, resp.len });
-            stream.writeAll(resp) catch |err| {
-                debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
-                return;
-            };
-            send_fifo.discard(resp.len);
-        }
-
-        recv_fifo.discard(recv_fifo.readableLength());
+        debug("\t\tINFO({d}): Sending message: {s} to all clients...\n", .{ thread_id, msg });
+        // TODO: format the message
+        _ = std.fmt.bufPrint(&msg_buffer.buffer, "[{}] {}\n", .{ client.username, msg }) catch |err| {
+            debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
+            return;
+        };
+        clients.send_message_from(client, msg) catch |err| {
+            debug("\tERROR({d}): error while sending message: {!}\n", .{ thread_id, err });
+            return;
+        };
     }
 }
 
@@ -290,4 +298,53 @@ test "Clients and Client" {
 
     // clients.send_message("Hello, everyone!");
     // clients.send_message_from(client, "Hello from validUsername123");
+}
+
+// Import the main function and other necessary components
+const main_module = @import("main.zig");
+
+fn runServer() !void {
+    try main_module.main();
+}
+
+fn simulateClient(allocator: std.mem.Allocator) !void {
+    // Wait a bit for the server to start
+    // Wait for 2 seconds
+    time.sleep(2000000000);
+
+    var client = try std.net.tcpConnectToHost(allocator, "127.0.0.1", 18888);
+    defer client.close();
+
+    var buffer: [1024]u8 = undefined;
+
+    // Read welcome message
+    const welcome_msg = try client.reader().readUntilDelimiter(&buffer, '\n');
+    try testing.expectEqualStrings("Welcome to budgetchat! What shall I call you?", welcome_msg);
+
+    // Send username
+    try client.writer().writeAll("testuser\n");
+
+    // Read room contents
+    const room_msg = try client.reader().readUntilDelimiter(&buffer, '\n');
+    try testing.expect(std.mem.startsWith(u8, room_msg, "* The room contains:"));
+
+    // Send a message
+    try client.writer().writeAll("Hello, world!\n");
+
+    // Close the connection
+    client.close();
+}
+
+test "Server and Client Integration Test" {
+    const allocator = std.testing.allocator;
+
+    // Start the server in a separate thread
+    var server_thread = try Thread.spawn(.{}, runServer, .{});
+
+    // Run the client simulation
+    try simulateClient(allocator);
+
+    // Note: In a real scenario, you'd want to gracefully shut down the server.
+    // For this test, we'll just detach the thread and let it run.
+    server_thread.detach();
 }
