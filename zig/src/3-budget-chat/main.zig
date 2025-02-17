@@ -106,12 +106,12 @@ const Clients = struct {
     pub fn send_message_from(self: *Clients, from: Client, message: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        // TODO: Optimize this
+
         // Get the index of the client
-        // Iterate in order
         const idx = self.clients.getIndex(from.username.constSlice());
         if (idx == null) return error.ClientNotFound;
 
+        // Iterate in order
         var it     = self.clients.iterator();
         var count: usize = 0;
         while (it.next()) |entry| : (count += 1) {
