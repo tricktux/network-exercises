@@ -98,12 +98,12 @@ const Clients = struct {
         defer self.mutex.unlock();
         for (self.clients.values()) |client| {
             if (client.joined) {
+                // debug("\t\t\tDEBUG: send_message: '{s}' to: {s}\n", .{message, client.username.constSlice()});
                 try client.stream.writeAll(message);
             }
         }
     }
 
-    // TODO: Not working. Needs test
     pub fn send_message_from(self: *Clients, from: Client, message: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -113,12 +113,10 @@ const Clients = struct {
         if (idx == null) return error.ClientNotFound;
 
         // Iterate in order
-        var it = self.clients.iterator();
-        var count: usize = 0;
-        while (it.next()) |entry| : (count += 1) {
-            if (count == idx.?) continue;
-            const client = entry.value_ptr.*;
+        for (self.clients.values(), 0..) |client, i|  {
+            if (i == idx.?) continue;
             if (client.joined) {
+                // debug("\t\t\tDEBUG: send_message_from: '{s}' to: {s}\n", .{message, client.username.constSlice()});
                 try client.stream.writeAll(message);
             }
         }
@@ -170,7 +168,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
     defer {
         if (client.joined) {
             debug("\t\tWARN({d}): Client: {s} leaving chat...\n", .{ thread_id, client.username.constSlice() });
-            _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has left the room\n", .{client.username.constSlice()}) catch |err| {
+            std.fmt.format(msg_buffer.writer().any(), "* {s} has left the room\n", .{client.username.constSlice()}) catch |err| {
                 debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
             };
             clients.send_message_from(client, msg_buffer.constSlice()) catch |err| {
@@ -215,7 +213,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
 
         // Validate username?
         if (!client.joined) {
-            debug("\t\tINFO({d}): Validating username...\n", .{thread_id});
+            debug("\t\tINFO({d}): Validating username: '{s}'\n", .{thread_id, msg});
             if (!client.validate_username(msg)) {
                 stream.writeAll("Invalid username. Please try again.\n") catch |err| {
                     debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
@@ -237,7 +235,6 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
             }
 
             // Message new client with friends in the chat
-            debug("\t\tINFO({d}): Sending room contents to new client...\n", .{thread_id});
             msg_buffer.appendSlice("* The room contains: ") catch unreachable;
             var first: bool = false;
             const usernames = clients.get_usernames();
@@ -250,6 +247,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
                 msg_buffer.appendSlice(username) catch unreachable;
             }
             msg_buffer.appendSlice("\n") catch unreachable;
+            debug("\t\tINFO({d}): Sending room contents to new client: '{s}'\n", .{thread_id, msg_buffer.constSlice()});
             stream.writeAll(msg_buffer.constSlice()) catch |err| {
                 debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
                 return;
@@ -258,7 +256,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
             // Message existing friends about the new friend in the chat
             debug("\t\tINFO({d}): Sending message to existing clients about new client...\n", .{thread_id});
             msg_buffer.clear();
-            _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has entered the room\n", .{client.username.constSlice()}) catch |err| {
+            std.fmt.format(msg_buffer.writer().any(), "* {s} has entered the room\n", .{client.username.constSlice()}) catch |err| {
                 debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
                 return;
             };
@@ -278,12 +276,11 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
         }
 
         debug("\t\tINFO({d}): Sending message: {s} to all clients...\n", .{ thread_id, msg });
-        // TODO: format the message
-        _ = std.fmt.bufPrint(&msg_buffer.buffer, "[{s}] {s}\n", .{ client.username.constSlice(), msg }) catch |err| {
+        std.fmt.format(msg_buffer.writer().any(), "[{s}] {s}\n", .{ client.username.constSlice(), msg }) catch |err| {
             debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
             return;
         };
-        clients.send_message_from(client, msg) catch |err| {
+        clients.send_message_from(client, msg_buffer.constSlice()) catch |err| {
             debug("\tERROR({d}): error while sending message: {!}\n", .{ thread_id, err });
             return;
         };
