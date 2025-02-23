@@ -126,7 +126,7 @@ const Clients = struct {
 const Client = struct {
     stream: std.net.Stream = undefined,
     joined: bool = false,
-    username: std.BoundedArray(u8, 32) = undefined,
+    username: std.BoundedArray(u8, 32) = std.BoundedArray(u8, 32).init(0) catch unreachable,
 
     pub fn init(stream: std.net.Stream) Client {
         return Client{ .stream = stream };
