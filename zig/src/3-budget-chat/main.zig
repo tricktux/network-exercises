@@ -147,7 +147,6 @@ const Client = struct {
     }
 };
 
-// TODO: Add argument to handle_connection to pass the clients struct
 fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
@@ -171,7 +170,6 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
     defer {
         if (client.joined) {
             debug("\t\tWARN({d}): Client: {s} leaving chat...\n", .{ thread_id, client.username.constSlice() });
-            // TODO: format the message
             _ = std.fmt.bufPrint(&msg_buffer.buffer, "* {s} has left the room\n", .{client.username.constSlice()}) catch |err| {
                 debug("\tERROR({d}): error while formatting message: {!}\n", .{ thread_id, err });
             };
