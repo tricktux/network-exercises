@@ -99,4 +99,23 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     b.installArtifact(budget_chat_tests);
+
+
+    // 4 Unusual Database Program
+    const unusual_database = b.addExecutable(.{
+        .name = "unusual-database",
+        .root_source_file = b.path("src/4-unusual-database/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(unusual_database);
+
+    // 4 Unusual Database Program
+    const unusual_database_tests = b.addTest(.{
+        .name = "unusual-database-tests",
+        .root_source_file = b.path("src/4-unusual-database/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(unusual_database_tests);
 }
