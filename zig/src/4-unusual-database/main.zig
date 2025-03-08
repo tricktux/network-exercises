@@ -55,21 +55,24 @@ pub fn main() !void {
 
 const DatabaseError = error{
     AttemptedToInsertReservedKey,
+    KeyLengthExceeded,
+    ValueLengthExceeded,
 };
 
 const Database = struct {
     comptime version_key: []const u8 = "version",
     comptime version_value: []const u8 = "ReinaldoKeyValueStore1.0",
     comptime empty: []const u8 = "ReinaldoMolina204355E=2G5x~uVlHie=C",
-    kb: std.BoundedArray(u8, 1024) = undefined,
-    vb: std.BoundedArray(u8, 1024) = undefined,
+    comptime max_key_length: usize = 1024,
+    kb: std.BoundedArray(u8, Database.max_key_length) = undefined,
+    vb: std.BoundedArray(u8, Database.max_key_length) = undefined,
     store: std.StringArrayHashMap([]const u8) = undefined,
 
     pub fn init(allocator: std.mem.Allocator) !Database {
         var r = Database{
             .store = std.StringArrayHashMap([]const u8).init(allocator),
-            .kb = try std.BoundedArray(u8, 1024).init(0),
-            .vb = try std.BoundedArray(u8, 1024).init(0),
+            .kb = try std.BoundedArray(u8, Database.max_key_length).init(0),
+            .vb = try std.BoundedArray(u8, Database.max_key_length).init(0),
         };
         try r.store.put(r.version_key, r.version_value);
         return r;
@@ -80,7 +83,10 @@ const Database = struct {
     }
 
     pub fn insert(self: *Database, key: []const u8, value: []const u8) !void {
+        if (key.len > Database.max_key_length) return DatabaseError.KeyLengthExceeded;
+        if (value.len > Database.max_key_length) return DatabaseError.ValueLengthExceeded;
         if (std.mem.eql(u8, key, self.version_key)) return DatabaseError.AttemptedToInsertReservedKey;
+
         self.kb.clear();
         self.vb.clear();
 
@@ -99,6 +105,8 @@ const Database = struct {
     }
 
     pub fn retrieve(self: *Database, key: []const u8) !?[]const u8 {
+        if (key.len > Database.max_key_length) return DatabaseError.KeyLengthExceeded;
+
         self.kb.clear();
 
         if (std.mem.eql(u8, key, "")) {
@@ -110,13 +118,13 @@ const Database = struct {
         const r = self.store.get(self.kb.constSlice());
         if (r == null) return null;
 
-        self.vb.clear();
         if (std.mem.eql(u8, r.?, "")) {
+            self.vb.clear();
             try self.vb.appendSlice(self.empty);
-        } else {
-            try self.vb.appendSlice(r.?);
+            return self.vb.constSlice();
         }
-        return self.vb.constSlice();
+
+        return r;
     }
 };
 
