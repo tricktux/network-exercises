@@ -59,20 +59,24 @@ const DatabaseError = error{
     ValueLengthExceeded,
 };
 
+const max_key_length: usize = 1024;
+
 const Database = struct {
+    const Self = @This();
+
     comptime version_key: []const u8 = "version",
     comptime version_value: []const u8 = "ReinaldoKeyValueStore1.0",
     comptime empty: []const u8 = "ReinaldoMolina204355E=2G5x~uVlHie=C",
-    comptime max_key_length: usize = 1024,
-    kb: std.BoundedArray(u8, Database.max_key_length) = undefined,
-    vb: std.BoundedArray(u8, Database.max_key_length) = undefined,
+
+    kb: std.BoundedArray(u8, max_key_length) = undefined,
+    vb: std.BoundedArray(u8, max_key_length) = undefined,
     store: std.StringArrayHashMap([]const u8) = undefined,
 
     pub fn init(allocator: std.mem.Allocator) !Database {
         var r = Database{
             .store = std.StringArrayHashMap([]const u8).init(allocator),
-            .kb = try std.BoundedArray(u8, Database.max_key_length).init(0),
-            .vb = try std.BoundedArray(u8, Database.max_key_length).init(0),
+            .kb = try std.BoundedArray(u8, max_key_length).init(0),
+            .vb = try std.BoundedArray(u8, max_key_length).init(0),
         };
         try r.store.put(r.version_key, r.version_value);
         return r;
@@ -83,8 +87,8 @@ const Database = struct {
     }
 
     pub fn insert(self: *Database, key: []const u8, value: []const u8) !void {
-        if (key.len > Database.max_key_length) return DatabaseError.KeyLengthExceeded;
-        if (value.len > Database.max_key_length) return DatabaseError.ValueLengthExceeded;
+        if (key.len > max_key_length) return DatabaseError.KeyLengthExceeded;
+        if (value.len > max_key_length) return DatabaseError.ValueLengthExceeded;
         if (std.mem.eql(u8, key, self.version_key)) return DatabaseError.AttemptedToInsertReservedKey;
 
         self.kb.clear();
@@ -105,7 +109,7 @@ const Database = struct {
     }
 
     pub fn retrieve(self: *Database, key: []const u8) !?[]const u8 {
-        if (key.len > Database.max_key_length) return DatabaseError.KeyLengthExceeded;
+        if (key.len > max_key_length) return DatabaseError.KeyLengthExceeded;
 
         self.kb.clear();
 
@@ -180,4 +184,73 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
         // const msg = datapeek[0..idx.?];
     }
+}
+
+test "Database - initialization and version" {
+    const allocator = std.testing.allocator;
+    var db = try Database.init(allocator);
+    defer db.deinit();
+
+    const version = try db.retrieve("version");
+    try testing.expectEqualStrings("ReinaldoKeyValueStore1.0", version.?);
+}
+
+test "Database - insert and retrieve" {
+    const allocator = std.testing.allocator;
+    var db = try Database.init(allocator);
+    defer db.deinit();
+
+    try db.insert("key1", "value1");
+    try db.insert("key2", "value2");
+
+    const value1 = try db.retrieve("key1");
+    try testing.expectEqualStrings("value1", value1.?);
+
+    const value2 = try db.retrieve("key2");
+    try testing.expectEqualStrings("value2", value2.?);
+}
+
+test "Database - empty key and value" {
+    const allocator = std.testing.allocator;
+    var db = try Database.init(allocator);
+    defer db.deinit();
+
+    try db.insert("", "emptykey");
+    try db.insert("emptyvalue", "");
+
+    const emptyKeyValue = try db.retrieve("");
+    try testing.expectEqualStrings("emptykey", emptyKeyValue.?);
+
+    const emptyValue = try db.retrieve("emptyvalue");
+    try testing.expectEqualStrings(db.empty, emptyValue.?);
+}
+
+test "Database - overwrite value" {
+    const allocator = std.testing.allocator;
+    var db = try Database.init(allocator);
+    defer db.deinit();
+
+    try db.insert("key", "value1");
+    try db.insert("key", "value2");
+
+    const value = try db.retrieve("key");
+    try testing.expectEqualStrings("value2", value.?);
+}
+
+test "Database - retrieve non-existent key" {
+    const allocator = std.testing.allocator;
+    var db = try Database.init(allocator);
+    defer db.deinit();
+
+    const value = try db.retrieve("nonexistent");
+    try testing.expect(value == null);
+}
+
+test "Database - insert reserved key" {
+    const allocator = std.testing.allocator;
+    var db = try Database.init(allocator);
+    defer db.deinit();
+
+    const result = db.insert("version", "newversion");
+    try testing.expectError(error.AttemptedToInsertReservedKey, result);
 }
