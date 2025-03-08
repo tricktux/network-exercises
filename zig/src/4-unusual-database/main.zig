@@ -56,9 +56,9 @@ pub fn main() !void {
 const Database = struct {
     store: std.StringArrayHashMap([]const u8) = undefined,
 
-    pub fn init(allocator: std.mem.Allocator) Database {
+    pub fn init(allocator: std.mem.Allocator) !Database {
         const r = Database{ .store = std.StringArrayHashMap([]const u8).init(allocator) };
-        // TODO: insert version here
+        try r.store.put("version", "ReinaldoKeyValueStore1.0");
         return r;
     }
 
