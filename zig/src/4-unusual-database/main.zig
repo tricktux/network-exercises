@@ -53,12 +53,25 @@ pub fn main() !void {
     }
 }
 
+const DatabaseError = error{
+    AttemptedToInsertReservedKey,
+};
+
 const Database = struct {
+    comptime version_key: []const u8 = "version",
+    comptime version_value: []const u8 = "ReinaldoKeyValueStore1.0",
+    comptime empty: []const u8 = "ReinaldoMolina204355E=2G5x~uVlHie=C",
+    kb: std.BoundedArray(u8, 1024) = undefined,
+    vb: std.BoundedArray(u8, 1024) = undefined,
     store: std.StringArrayHashMap([]const u8) = undefined,
 
     pub fn init(allocator: std.mem.Allocator) !Database {
-        const r = Database{ .store = std.StringArrayHashMap([]const u8).init(allocator) };
-        try r.store.put("version", "ReinaldoKeyValueStore1.0");
+        var r = Database{
+            .store = std.StringArrayHashMap([]const u8).init(allocator),
+            .kb = try std.BoundedArray(u8, 1024).init(0),
+            .vb = try std.BoundedArray(u8, 1024).init(0),
+        };
+        try r.store.put(r.version_key, r.version_value);
         return r;
     }
 
@@ -67,13 +80,44 @@ const Database = struct {
     }
 
     pub fn insert(self: *Database, key: []const u8, value: []const u8) !void {
-        try self.store.put(key, value);
+        if (std.mem.eql(u8, key, self.version_key)) return DatabaseError.AttemptedToInsertReservedKey;
+        self.kb.clear();
+        self.vb.clear();
+
+        if (std.mem.eql(u8, key, "")) {
+            try self.kb.appendSlice(self.empty);
+        } else {
+            try self.kb.appendSlice(key);
+        }
+        if (std.mem.eql(u8, value, "")) {
+            try self.vb.appendSlice(self.empty);
+        } else {
+            try self.vb.appendSlice(value);
+        }
+
+        try self.store.put(self.kb.constSlice(), self.vb.constSlice());
     }
 
-    pub fn retrieve(self: *Database, key: []const u8) ?[]const u8 {
-        return self.store.get(key);
-    }
+    pub fn retrieve(self: *Database, key: []const u8) !?[]const u8 {
+        self.kb.clear();
 
+        if (std.mem.eql(u8, key, "")) {
+            try self.kb.appendSlice(self.empty);
+        } else {
+            try self.kb.appendSlice(key);
+        }
+
+        const r = self.store.get(self.kb.constSlice());
+        if (r == null) return null;
+
+        self.vb.clear();
+        if (std.mem.eql(u8, r.?, "")) {
+            try self.vb.appendSlice(self.empty);
+        } else {
+            try self.vb.appendSlice(r.?);
+        }
+        return self.vb.constSlice();
+    }
 };
 
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
