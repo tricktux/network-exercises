@@ -100,10 +100,7 @@ const Database = struct {
         const r = self.store.get(k);
         if (r == null) return null;
 
-        if (std.mem.eql(u8, r.?, self.empty)) {
-            return "";
-        }
-
+        if (std.mem.eql(u8, r.?, self.empty)) return "";
         return r;
     }
 };
