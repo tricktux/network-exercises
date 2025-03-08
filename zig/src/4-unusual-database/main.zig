@@ -53,6 +53,33 @@ pub fn main() !void {
     }
 }
 
+const Database = struct {
+    store: std.StringArrayHashMap([]const u8) = undefined,
+    mutex: std.Thread.Mutex = .{},
+
+    pub fn init(allocator: std.mem.Allocator) Database {
+        const r = Database{ .store = std.StringArrayHashMap([]const u8).init(allocator) };
+        // TODO: insert version here
+        return r;
+    }
+
+    pub fn deinit(self: *Database) void {
+        self.store.deinit();
+    }
+
+    pub fn insert(self: *Database, key: []const u8, value: []const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        try self.store.put(key, value);
+    }
+
+    pub fn retrieve(self: *Database, key: []const u8) ?[]const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.store.get(key);
+    }
+
+};
 
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
