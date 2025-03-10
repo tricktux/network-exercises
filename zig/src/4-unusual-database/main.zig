@@ -10,7 +10,7 @@ const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
 // Constants
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
-const needle = "\n";
+const needle = "=";
 
 pub fn main() !void {
     // Initialize allocator
@@ -52,7 +52,7 @@ pub fn main() !void {
         if (result == 0) continue;
 
         const resp = buff[0..result];
-        const eqidx = std.mem.indexOf(u8, resp, "=");
+        const eqidx = std.mem.indexOf(u8, resp, needle);
         if (eqidx) |idx| {
             // TODO: Insert request
             const key = resp[0..idx];
@@ -72,7 +72,7 @@ pub fn main() !void {
             if (value) |val| {
                 // TODO: format response '{s}={s}', .{resp, value}
                 debug("INFO: retrieving key: '{s}', value: '{s}'\n", .{resp, val});
-                std.fmt.format(msg_buffer.writer().any(), "{s}={s}\n", .{resp, val}) catch |err| {
+                std.fmt.format(msg_buffer.writer().any(), "{s}={s}", .{resp, val}) catch |err| {
                     debug("ERROR: formatting response: '{s}={s}', error: {!}\n", .{resp, val, err});
                     continue;
                 };
@@ -139,43 +139,6 @@ const Database = struct {
     }
 };
 
-
-test "UDP client-server interaction" {
-    // Start the server in a separate thread
-    const server_thread = try std.Thread.spawn(.{}, main, .{});
-    defer server_thread.join();
-
-    // Give the server some time to start
-    time.sleep(time.ns_per_s / 10);
-    // const sl: std.posix.socklen_t = @sizeOf(std.posix.sockaddr.in);
-
-    // Create a UDP client
-    const server_addr = try std.net.Address.parseIp(name, port);
-    const sock = try std.posix.socket(std.posix.AF.INET, std.posix.SOCK.DGRAM, std.posix.IPPROTO.UDP);
-    defer std.posix.close(sock);
-
-    // Test inserting a key-value pair
-    _ = std.posix.sendto(sock, "test_key=test_value", 0, &server_addr.any, server_addr.getOsSockLen()) catch unreachable;
-
-    // Test retrieving the value
-    // try client.send("test_key");
-    // var recv_buf: [1024]u8 = undefined;
-    // const bytes_received = try client.receive(&recv_buf);
-    // const response = recv_buf[0..bytes_received];
-    // try testing.expectEqualStrings("test_key=test_value\n", response);
-    //
-    // // Test inserting and retrieving an empty value
-    // try client.send("empty_value=");
-    // try client.send("empty_value");
-    // const empty_bytes_received = try client.receive(&recv_buf);
-    // const empty_response = recv_buf[0..empty_bytes_received];
-    // try testing.expectEqualStrings("empty_value=\n", empty_response);
-    //
-    // // Test retrieving a non-existent key
-    // try client.send("non_existent_key");
-    // const non_existent_bytes_received = try client.receive(&recv_buf);
-    // try testing.expect(non_existent_bytes_received == 0);
-}
 
 test "StringArrayHashMap" {
     const allocator = std.testing.allocator;
@@ -257,3 +220,49 @@ test "Database - insert reserved key" {
     const result = db.insert("version", "newversion");
     try testing.expectError(error.AttemptedToInsertReservedKey, result);
 }
+
+test "UDP client-server interaction" {
+    // Start the server in a separate thread
+    const server_thread = try std.Thread.spawn(.{}, main, .{});
+    defer server_thread.join();
+
+    // Give the server some time to start
+    time.sleep(time.ns_per_s / 10);
+    // const sl: std.posix.socklen_t = @sizeOf(std.posix.sockaddr.in);
+
+    // Create a UDP client
+    var server_addr = try std.net.Address.parseIp(name, port);
+    const sock = try std.posix.socket(std.posix.AF.INET, std.posix.SOCK.DGRAM, std.posix.IPPROTO.UDP);
+    defer std.posix.close(sock);
+
+    // Test inserting a key-value pair
+    _ = std.posix.sendto(sock, "test_key=test_value", 0, &server_addr.any, server_addr.getOsSockLen()) catch unreachable;
+
+    // Test retrieving the value
+    // try client.send("test_key");
+    var recv_buf: [1024]u8 = undefined;
+    // var recv_buf = std.BoundedArray(u8, 1024).init(1024) catch unreachable;
+    var sl_copy = server_addr.getOsSockLen();
+    _ = std.posix.sendto(sock, "test_key", 0, &server_addr.any, server_addr.getOsSockLen()) catch unreachable;
+    const recvnum = try std.posix.recvfrom(sock, &recv_buf, 0, &server_addr.any, &sl_copy);
+    debug("TEST: testing test_key\n", .{});
+    // recv_buf.append('\0') catch unreachable;
+    // const response = recv_buf.constSlice();
+    try testing.expectEqualStrings("test_key=test_value", recv_buf[0..recvnum]);
+
+    // Test inserting and retrieving an empty value
+    debug("TEST: inserting empty value\n", .{});
+    _ = std.posix.sendto(sock, "empty_value=", 0, &server_addr.any, server_addr.getOsSockLen()) catch unreachable;
+    _ = std.posix.sendto(sock, "empty_value", 0, &server_addr.any, server_addr.getOsSockLen()) catch unreachable;
+    var recv_buf2: [1024]u8 = undefined;
+    const recvnum2 = std.posix.recvfrom(sock, &recv_buf2, 0, &server_addr.any, &sl_copy) catch unreachable;
+    // const empty_response = recv_buf.constSlice();
+    try testing.expectEqualStrings("empty_value=", recv_buf2[0..recvnum2]);
+
+
+    // // Test retrieving a non-existent key
+    // try client.send("non_existent_key");
+    // const non_existent_bytes_received = try client.receive(&recv_buf);
+    // try testing.expect(non_existent_bytes_received == 0);
+}
+
