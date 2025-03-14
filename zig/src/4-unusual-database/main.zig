@@ -43,44 +43,48 @@ pub fn main() !void {
     while (true) {
         @memset(@as([*]u8, @ptrCast(&sa))[0..@sizeOf(std.net.Address)], 0);
         sl_copy = sl;
-        debug("INFO: waiting for request\n", .{});
+        debug("INFO: waiting for request...\n", .{});
         const result = std.posix.recvfrom(sock, &buff, 0, &sa.any, &sl_copy) catch |err| {
             debug("ERROR: recvfrom failed: {!}\n", .{err});
             return err;
         };
 
         if (result == 0) continue;
+        msg_buffer.clear();
 
+        debug("\tINFO: received request: '{s}'\n", .{buff[0..result]});
         const resp = buff[0..result];
         const eqidx = std.mem.indexOf(u8, resp, needle);
         if (eqidx) |idx| {
             // TODO: Insert request
             const key = resp[0..idx];
             const value = resp[idx + 1..];
-            debug("INFO: inserting key: '{s}', value: '{s}'\n", .{key, value});
+            debug("\tINFO: inserting key: '{s}', value: '{s}'\n", .{key, value});
             db.insert(key, value) catch |err| {
-                debug("ERROR: inserting key: '{s}', value: '{s}', error: {!}\n", .{key, value, err});
+                debug("\tERROR: inserting key: '{s}', value: '{s}', error: {!}\n", .{key, value, err});
                 continue;
             };
         } else {
             // TODO: Retrieve request
             const value = db.retrieve(resp) catch |err| {
-                debug("ERROR: retrieving key: '{s}', error: {!}\n", .{resp, err});
+                debug("\tERROR: retrieving key: '{s}', error: {!}\n", .{resp, err});
                 continue;
             };
 
             if (value) |val| {
                 // TODO: format response '{s}={s}', .{resp, value}
-                debug("INFO: retrieving key: '{s}', value: '{s}'\n", .{resp, val});
+                debug("\tINFO: retrieved key: '{s}', with value: '{s}'\n", .{resp, val});
                 std.fmt.format(msg_buffer.writer().any(), "{s}={s}", .{resp, val}) catch |err| {
-                    debug("ERROR: formatting response: '{s}={s}', error: {!}\n", .{resp, val, err});
+                    debug("\tERROR: formatting response: '{s}={s}', error: {!}\n", .{resp, val, err});
                     continue;
                 };
                 // TODO: Use this to respond
                 _ = std.posix.sendto(sock, msg_buffer.constSlice(), 0, &sa.any, sl) catch |err| {
-                    debug("ERROR: sendto failed: {!}\n", .{err});
+                    debug("\tERROR: sendto failed: {!}\n", .{err});
                     return err;
                 };
+            } else {
+                debug("\tINFO: key: '{s}' not found\n", .{resp});
             }
         }
 
@@ -103,16 +107,23 @@ const Database = struct {
     comptime empty: []const u8 = "ReinaldoMolina204355E=2G5x~uVlHie=C",
 
     store: std.StringArrayHashMap([]const u8) = undefined,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !Database {
         var r = Database{
             .store = std.StringArrayHashMap([]const u8).init(allocator),
+            .allocator = allocator,
         };
         try r.store.put(r.version_key, r.version_value);
         return r;
     }
 
     pub fn deinit(self: *Database) void {
+        var it = self.store.iterator();
+        while (it.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            self.allocator.free(entry.value_ptr.*);
+        }
         self.store.deinit();
     }
 
@@ -124,7 +135,17 @@ const Database = struct {
         const k = if (key.len == 0) self.empty else key;
         const v = if (value.len == 0) self.empty else value;
 
-        try self.store.put(k, v);
+        const k_duped = try self.allocator.dupe(u8, k);
+        errdefer self.allocator.free(k_duped);
+        const v_duped = try self.allocator.dupe(u8, v);
+
+        const gop = try self.store.getOrPut(k_duped);
+        if (gop.found_existing) {
+            self.allocator.free(gop.key_ptr.*);
+            self.allocator.free(gop.value_ptr.*);
+        }
+        gop.key_ptr.* = k_duped;
+        gop.value_ptr.* = v_duped;
     }
 
     pub fn retrieve(self: *Database, key: []const u8) !?[]const u8 {
