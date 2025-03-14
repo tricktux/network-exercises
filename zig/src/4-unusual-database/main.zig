@@ -49,14 +49,12 @@ pub fn main() !void {
             return err;
         };
 
-        if (result == 0) continue;
         msg_buffer.clear();
 
         debug("\tINFO: received request: '{s}'\n", .{buff[0..result]});
         const resp = buff[0..result];
         const eqidx = std.mem.indexOf(u8, resp, needle);
         if (eqidx) |idx| {
-            // TODO: Insert request
             const key = resp[0..idx];
             const value = resp[idx + 1..];
             debug("\tINFO: inserting key: '{s}', value: '{s}'\n", .{key, value});
@@ -65,20 +63,17 @@ pub fn main() !void {
                 continue;
             };
         } else {
-            // TODO: Retrieve request
             const value = db.retrieve(resp) catch |err| {
                 debug("\tERROR: retrieving key: '{s}', error: {!}\n", .{resp, err});
                 continue;
             };
 
             if (value) |val| {
-                // TODO: format response '{s}={s}', .{resp, value}
                 debug("\tINFO: retrieved key: '{s}', with value: '{s}'\n", .{resp, val});
                 std.fmt.format(msg_buffer.writer().any(), "{s}={s}", .{resp, val}) catch |err| {
                     debug("\tERROR: formatting response: '{s}={s}', error: {!}\n", .{resp, val, err});
                     continue;
                 };
-                // TODO: Use this to respond
                 _ = std.posix.sendto(sock, msg_buffer.constSlice(), 0, &sa.any, sl) catch |err| {
                     debug("\tERROR: sendto failed: {!}\n", .{err});
                     return err;
