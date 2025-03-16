@@ -61,7 +61,7 @@ fn find_and_replace_boguscoin_address(msg: *std.BoundedArray(u8, 1024)) !void {
     const boguscoin_start = "7";
     const boguscoin_max_len = 35;
     const boguscoin_min_len = 26;
-    const boguscoint_address = "7YWHMfk9JZe0LM0g1ZauHuiSxhI";
+    const boguscoin_address = "7YWHMfk9JZe0LM0g1ZauHuiSxhI";
 
     var start: usize = 0;
     while (start < msg.len) {
@@ -69,32 +69,35 @@ fn find_and_replace_boguscoin_address(msg: *std.BoundedArray(u8, 1024)) !void {
         const idx = std.mem.indexOf(u8, cslice, boguscoin_start);
         if (idx == null) return;
 
-        start = idx.? + 1;
+        start += idx.? + 1;
         // Discard if too short
         if (idx.? + boguscoin_min_len > cslice.len) return;
         // Check start of address
         if (idx.? != 0 and cslice[idx.? - 1] != ' ') continue;
 
         // Start walking the address
-        var end = idx.? + 1;
         var nidx = idx.?;
+        var alpanum = false;
         while (nidx < cslice.len) {
-            // Check that is alpha numeric
-            if (!std.ascii.isAlphanumeric(cslice[nidx])) break;
             // Check end of address
-            if (cslice[nidx] == ' ' or cslice[nidx] == '\n') {
-                end = nidx;
+            if (cslice[nidx] == ' ' or cslice[nidx] == '\n') break;
+
+            // Check that is alpha numeric
+            if (!std.ascii.isAlphanumeric(cslice[nidx])) {
+                alpanum = true;
                 break;
             }
             nidx += 1;
         }
 
-        if (end - idx.? < boguscoin_min_len or end - idx.? > boguscoin_max_len) continue;
+        if (alpanum) continue;
+        const len = nidx - idx.?;
+        if (len < boguscoin_min_len or len > boguscoin_max_len) continue;
 
-        // Now we have a valid address
-        start = end;
-        // TODO: properly replace the slice
-        try msg.replaceRange(idx.?, end - idx.?, boguscoint_address);
+        // Now we have a valid address. Replace it.
+        // Remove offset by one in case of continue branch
+        try msg.replaceRange(start - 1, len, boguscoin_address);
+        start += len + 1;  // Not supporting nested addresses
     }
 }
 
@@ -241,7 +244,7 @@ test "find_and_replace_boguscoin_address" {
         const address2 = "7iKDZEwPZSqIvDnHvVN2r0hUWXD5rHX";
         var msg = try std.BoundedArray(u8, 1024).fromSlice("The addresses " ++ address1 ++ " and " ++ address2 ++ " are valid");
         try find_and_replace_boguscoin_address(&msg);
-        try testing.expectEqualSlices(u8, "The addresses " ++ boguscoin_replacement ++ " and " ++ address2 ++ " are valid", msg.slice());
+        try testing.expectEqualSlices(u8, "The addresses " ++ boguscoin_replacement ++ " and " ++ boguscoin_replacement ++ " are valid", msg.slice());
     }
 
     // Test: Address not separated by spaces
