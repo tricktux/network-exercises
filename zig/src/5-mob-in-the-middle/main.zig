@@ -10,6 +10,8 @@ const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
 // Constants
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
+const server_name: []const u8 = "chat.protohackers.com:16963";
+const server_port = 16963;
 const needle = "\n";
 
 pub fn main() !void {
