@@ -55,6 +55,40 @@ pub fn main() !void {
     }
 }
 
+fn find_and_replace_boguscoin_address(msg: std.BoundedArray(u8, 1024)) !void {
+    if (msg.len == 0) return;
+
+    const boguscoin_start = "7";
+    const boguscoin_max_len = 35;
+    const boguscoin_min_len = 26;
+    const boguscoint_address = "7YWHMfk9JZe0LM0g1ZauHuiSxhI";
+
+    const idx = std.mem.indexOf(u8, msg, boguscoin_start);
+    if (idx == null) return;
+
+    // Discard if too short
+    if (idx + boguscoin_min_len > msg.len) return;
+    // Check start of address
+    if (idx != 0 and msg[idx - 1] != ' ') return;
+    // Start walking the address
+    var end = idx + 1;
+    var nidx = idx;
+    while (nidx < msg.len) {
+        // Check that is alpha numeric
+        if (!std.ascii.isAlphanumeric(msg[nidx])) return;
+        if (msg[nidx] == ' ' or msg[nidx] == '\n') {
+            end = nidx;
+            break;
+        }
+        nidx += 1;
+    }
+
+    if (end - idx < boguscoin_min_len or end - idx > boguscoin_max_len) return;
+
+    // Now we have a valid address
+    msg.replaceSlice(boguscoint_address, idx, end);
+}
+
 fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
@@ -69,7 +103,12 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         return;
     };
 
-    // TODO: Make upstream connection
+    // Make upstream connection
+    const upstream = std.net.tcpConnectToHost(alloc, server_name, server_port) catch |err| {
+        debug("\tERROR({d}): error while connecting to upstream: {!}\n", .{ thread_id, err });
+        return;
+    };
+    defer upstream.close();
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
@@ -105,5 +144,110 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         const msg = datapeek[0..idx.?];
         _ = msg;
 
+        // TODO: search and replace bogus address
+        // TODO: send to upstream
+    }
+}
+
+
+test "find_and_replace_boguscoin_address" {
+    const boguscoin_replacement = "7YWHMfk9JZe0LM0g1ZauHuiSxhI";
+
+    // Test: Empty message
+{
+        var msg = try std.BoundedArray(u8, 1024).init(0);
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "", msg.slice());
+    }
+
+    // Test: Message with no Boguscoin address
+{
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("This message has no Boguscoin address");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "This message has no Boguscoin address", msg.slice());
+    }
+
+    // Test: Message with a '7' but no valid address
+{
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("This message has a 7 but no address");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "This message has a 7 but no address", msg.slice());
+    }
+
+    // Test: Valid address at the beginning
+{
+        const address = "7F1u3wSD5RbOHQmupo9nx4TnhQ";
+        var msg = try std.BoundedArray(u8, 1024).fromSlice(address ++ " is a Boguscoin address");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, boguscoin_replacement ++ " is a Boguscoin address", msg.slice());
+    }
+
+    // Test: Valid address in the middle
+{
+        const address = "7iKDZEwPZSqIvDnHvVN2r0hUWXD5rHX";
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address " ++ address ++ " is valid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address " ++ boguscoin_replacement ++ " is valid", msg.slice());
+    }
+
+    // Test: Valid address at the end
+{
+        const address = "7LOrwbDlS8NujgjddyogWgIM93MV5N2VR";
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address is " ++ address);
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address is " ++ boguscoin_replacement, msg.slice());
+    }
+
+    // Test: Valid address followed by newline
+{
+        const address = "7adNeSwJkMakpEcln9HEtthSRtxdmEHOT8T";
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address is " ++ address ++ "\nAnd this is a new line");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address is " ++ boguscoin_replacement ++ "\nAnd this is a new line", msg.slice());
+    }
+
+    // Test: Address too short
+{
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address 7short is invalid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address 7short is invalid", msg.slice());
+    }
+
+    // Test: Address too long
+{
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address 7thisisaverylongaddressmorethan35chars is invalid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address 7thisisaverylongaddressmorethan35chars is invalid", msg.slice());
+    }
+
+    // Test: Address doesn't start with 7
+{
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address 8F1u3wSD5RbOHQmupo9nx4TnhQ is invalid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address 8F1u3wSD5RbOHQmupo9nx4TnhQ is invalid", msg.slice());
+    }
+
+    // Test: Multiple addresses (only first should be replaced)
+{
+        const address1 = "7F1u3wSD5RbOHQmupo9nx4TnhQ";
+        const address2 = "7iKDZEwPZSqIvDnHvVN2r0hUWXD5rHX";
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The addresses " ++ address1 ++ " and " ++ address2 ++ " are valid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The addresses " ++ boguscoin_replacement ++ " and " ++ address2 ++ " are valid", msg.slice());
+    }
+
+    // Test: Address not separated by spaces
+{
+        const address = "7F1u3wSD5RbOHQmupo9nx4TnhQ";
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address" ++ address ++ "is invalid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address" ++ address ++ "is invalid", msg.slice());
+    }
+
+    // Test: Address with non-alphanumeric characters
+{
+        var msg = try std.BoundedArray(u8, 1024).fromSlice("The address 7F1u3wSD5RbOHQmupo9nx4TnhQ! is invalid");
+        try find_and_replace_boguscoin_address(msg);
+        try testing.expectEqualSlices(u8, "The address 7F1u3wSD5RbOHQmupo9nx4TnhQ! is invalid", msg.slice());
     }
 }
