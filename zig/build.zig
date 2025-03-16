@@ -118,4 +118,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     b.installArtifact(unusual_database_tests);
+
+    // 5 Mob in the Middle
+    const mob_in_them_middle = b.addExecutable(.{
+        .name = "mob-in-the-middle",
+        .root_source_file = b.path("src/5-mob-in-the-middle/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(mob_in_them_middle);
+
+    // 4 Unusual Database Program
+    const mob_in_them_middle_tests = b.addTest(.{
+        .name = "mob-in-the-middle-tests",
+        .root_source_file = b.path("src/5-mob-in-the-middle/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(mob_in_them_middle_tests);
 }
