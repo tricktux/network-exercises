@@ -33,7 +33,12 @@ pub fn main() !void {
         for (addrlist.addrs) |addr| {
             debug("\tTrying to listen...\n", .{});
             // Not intuitive but `listen` calls `socket, bind, and listen`
-            server = addr.listen(.{}) catch continue;
+            server = addr.listen(.{
+                .kernel_backlog = 256,
+                .reuse_address = true,
+                .force_nonblocking = true,
+            }) catch continue;
+
             debug("\tGot one!\n", .{});
             break;
         }
@@ -44,6 +49,18 @@ pub fn main() !void {
     var tp: std.Thread.Pool = undefined;
     try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
     defer tp.deinit();
+
+    // Epoll creation
+    const epollfd = try std.posix.epoll_create1(0);
+    defer std.posix.close(epollfd);
+
+    const serverfd = server.stream.handle;
+
+    // Monitor our main proxy server
+    {
+        var event = linux.epoll_event{.events = linux.EPOLL.IN, .data = .{.fd = serverfd}};
+        try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, serverfd, &event);
+    }
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
     debug("We are listeninig baby!!!...\n", .{});
@@ -169,7 +186,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         };
 
         // TODO: send to upstream
-        upstream.write(msg_buffer.slice()) catch |err| {
+        upstream.writeAll(msg_buffer.slice()) catch |err| {
             debug("\tERROR({d}): error while writing to upstream: {!}\n", .{ thread_id, err });
             return;
         };
