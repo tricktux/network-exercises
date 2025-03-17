@@ -123,9 +123,13 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
     };
     defer upstream.close();
 
+    // TODO receive upstream welcome message
+    // TODO send client stream welcome message
+    // The communication is started by the upstream then the loop
+
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
-        const data = recv_fifo.writableWithSize(std.mem.page_size * 4) catch |err| {
+        const data = recv_fifo.writableWithSize(std.mem.page_size) catch |err| {
             debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
             return;
         };
@@ -154,11 +158,21 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
         defer recv_fifo.discard(recv_fifo.readableLength());
         defer msg_buffer.clear();
 
-        const msg = datapeek[0..idx.?];
-        _ = msg;
+        // Search and replace bogus address
+        msg_buffer.appendSlice(datapeek) catch |err| {
+            debug("\tERROR({d}): error while appending to msg_buffer: {!}\n", .{ thread_id, err });
+            return;
+        };
+        find_and_replace_boguscoin_address(&msg_buffer) catch |err| {
+            debug("\tERROR({d}): error while replacing boguscoin address: {!}\n", .{ thread_id, err });
+            return;
+        };
 
-        // TODO: search and replace bogus address
         // TODO: send to upstream
+        upstream.write(msg_buffer.slice()) catch |err| {
+            debug("\tERROR({d}): error while writing to upstream: {!}\n", .{ thread_id, err });
+            return;
+        };
     }
 }
 
