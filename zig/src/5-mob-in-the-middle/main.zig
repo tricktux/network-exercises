@@ -6,6 +6,8 @@ const fmt = std.fmt;
 const time = std.time;
 const Thread = std.Thread;
 const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
+const u8boundarray = std.BoundedArray(u8, 1024);
+const ClientServerHashMap = std.AutoHashMap(std.net.Server.Connection, std.net.Server.Connection);
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -13,7 +15,7 @@ const port = 18888;
 const server_name: []const u8 = "chat.protohackers.com:16963";
 const server_port = 16963;
 const needle = "\n";
-const u8boundarray = std.BoundedArray(u8, 1024);
+const kernel_backlog = 256;
 
 pub fn main() !void {
     // Initialize allocator
@@ -34,7 +36,7 @@ pub fn main() !void {
             debug("\tTrying to listen...\n", .{});
             // Not intuitive but `listen` calls `socket, bind, and listen`
             server = addr.listen(.{
-                .kernel_backlog = 256,
+                .kernel_backlog = kernel_backlog,
                 .reuse_address = true,
                 .force_nonblocking = true,
             }) catch continue;
@@ -58,20 +60,70 @@ pub fn main() !void {
 
     // Monitor our main proxy server
     {
-        var event = linux.epoll_event{.events = linux.EPOLL.IN, .data = .{.fd = serverfd}};
+        var event = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = serverfd } };
         try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, serverfd, &event);
     }
+
+    var map = ClientServerHashMap.init(allocator);
+    var ready_list: [kernel_backlog]linux.epoll_event = undefined;
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
     debug("We are listeninig baby!!!...\n", .{});
     const thread_id = std.Thread.getCurrentId();
     while (true) {
         debug("INFO({d}): waiting for a new connection...\n", .{thread_id});
-        const connection = try server.accept();
-        debug("INFO({d}): got new connection!!!\n", .{thread_id});
-        try tp.spawn(handle_connection, .{ connection, allocator });
+        // try tp.spawn(handle_connection, .{ connection, allocator });
+        const ready_count = std.posix.epoll_wait(epollfd, &ready_list, -1);
+        for (ready_list[0..ready_count]) |ready| {
+            const ready_socket = ready.data.fd;
+            if (ready_socket == serverfd) {
+                debug("INFO({d}): got new connection!!!\n", .{thread_id});
+                // TODO: Arguments to handle_connection
+                // struct context
+                // - serverfd
+                // - epollfd
+                // - ready_socket
+                // TODO: Make an upstream connection
+                var accepted_addr: std.net.Address = undefined;
+                var addr_len: std.posix.socklen_t = @sizeOf(std.net.Address);
+                const client_socket = try std.posix.accept(serverfd, &accepted_addr.any, &addr_len, std.posix.SOCK.NONBLOCK);
+                errdefer std.posix.close(client_socket);
+                var event = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = client_socket } };
+                try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, client_socket, &event);
+                const clientconnection = std.net.Server.Connection{
+                    .stream = .{ .handle = client_socket },
+                    .address = accepted_addr,
+                };
+            } else {
+                var closed = false;
+                var buf: [4096]u8 = undefined;
+                const read = std.posix.read(ready_socket, &buf) catch 0;
+                if (read == 0) {
+                    closed = true;
+                } else {
+                    debug("[{d}] got: {any}\n", .{ ready_socket, buf[0..read] });
+                }
+
+                if (closed or ready.events & linux.EPOLL.RDHUP == linux.EPOLL.RDHUP) {
+                    std.posix.close(ready_socket);
+                }
+            }
+        }
     }
 }
+
+// TODO: ClientServerHashMap
+// Duplicate entries
+// We don't need to differentiate between client and server
+const Context = struct {
+    // struct context
+    // - serverfd
+    // - epollfd
+    // - ready_socket
+    epollfd: i32,
+    serverfd: std.posix.socket_t,
+    clientfd: std.posix.socket_t,
+};
 
 fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
     if (msg.len == 0) return;
@@ -115,11 +167,11 @@ fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
         // Now we have a valid address. Replace it.
         // Remove offset by one in case of continue branch
         try msg.replaceRange(start - 1, len, boguscoin_address);
-        start += len + 1;  // Not supporting nested addresses
+        start += len + 1; // Not supporting nested addresses
     }
 }
 
-fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Allocator) void {
+fn handle_connection(map: *ClientServerHashMap, ctx: Context) void {
     const thread_id = std.Thread.getCurrentId();
 
     const stream = connection.stream;
