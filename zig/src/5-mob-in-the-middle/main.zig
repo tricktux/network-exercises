@@ -12,7 +12,7 @@ const ClientServerHashMap = std.AutoHashMap(std.net.Stream, std.net.Stream);
 // Constants
 const name: []const u8 = "0.0.0.0";
 const port = 18888;
-const server_name: []const u8 = "chat.protohackers.com:16963";
+const server_name: []const u8 = "chat.protohackers.com";
 const server_port = 16963;
 const needle = "\n";
 const kernel_backlog = 256;
@@ -38,6 +38,7 @@ pub fn main() !void {
             server = addr.listen(.{
                 .kernel_backlog = kernel_backlog,
                 .reuse_address = true,
+                // TODO: should this be nonblocking??
                 .force_nonblocking = true,
             }) catch continue;
 
@@ -62,38 +63,136 @@ pub fn main() !void {
 
     // Monitor our main proxy server
     {
-        var event = linux.epoll_event{ .events = linux.EPOLL.IN | linux.EPOLL.ET, .data = .{ .fd = serverfd } };
+        // var event = linux.epoll_event{ .events = linux.EPOLL.IN | linux.EPOLL.ET, .data = .{ .fd = serverfd } };
+        var event = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = serverfd } };
         try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, serverfd, &event);
     }
 
     var ready_list: [kernel_backlog]linux.epoll_event = undefined;
 
     // TODO: ctx doesn't need clientfd
-    var ctx = Context{ .serverfd = serverfd, .epollfd = epollfd, .clientfd = undefined, .event = undefined };
+    var ctx = Context{ .serverfd = serverfd, .epollfd = epollfd, .clientfd = undefined };
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
     debug("We are listeninig baby!!!...\n", .{});
     const thread_id = std.Thread.getCurrentId();
     while (true) {
-        debug("INFO({d}): waiting for a new connection...\n", .{thread_id});
+        debug("INFO({d}): waiting for a new event...\n", .{thread_id});
         // try tp.spawn(handle_connection, .{ connection, allocator });
         const ready_count = std.posix.epoll_wait(epollfd, &ready_list, -1);
         for (ready_list[0..ready_count]) |ready| {
             const ready_socket = ready.data.fd;
             if (ready_socket == serverfd) {
-                debug("INFO({d}): got new connection!!!\n", .{thread_id});
+                debug("\tINFO({d}): got new connection!!!\n", .{thread_id});
                 // TODO: Arguments to handle_connection
                 // struct context
                 // - serverfd
                 // - epollfd
                 // - ready_socket
                 // TODO: Make an upstream connection
-                try tp.spawn(handle_connection, .{ &map, &ctx, allocator });
+                // try tp.spawn(handle_connection, .{ &map, &ctx, allocator });
+                const client_socket = std.posix.accept(ctx.serverfd, null, null, std.posix.SOCK.NONBLOCK) catch |err| {
+                    debug("\tERROR({d}): error while accepting connection: {!}\n", .{ thread_id, err });
+                    continue;
+                };
+                errdefer std.posix.close(client_socket);
+                var event = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = client_socket } };
+                std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, client_socket, &event) catch |err| {
+                    debug("\tERROR({d}): error while adding client to epoll: {!}\n", .{ thread_id, err });
+                    continue;
+                };
+                const client = std.net.Stream{ .handle = client_socket };
+
+                // Make upstream connection
+                const upstream = std.net.tcpConnectToHost(allocator, server_name, server_port) catch |err| {
+                    debug("\tERROR({d}): error while connecting to upstream: {!}\n", .{ thread_id, err });
+                    continue;
+                };
+
+                std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, upstream.handle, &event) catch |err| {
+                    debug("\tERROR({d}): error while adding upstream to epoll: {!}\n", .{ thread_id, err });
+                    continue;
+                };
+                debug("\tINFO({d}): new client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.handle });
+                map.add(client, upstream) catch |err| {
+                    debug("\tERROR({d}): error while adding to map: {!}\n", .{ thread_id, err });
+                    continue;
+                };
             } else {
                 // TODO: call handle_messge
                 ctx.clientfd = ready_socket;
-                ctx.event = ready;
-                try tp.spawn(handle_messge, .{ &map, &ctx });
+                debug("\tINFO({d}): got data from client: {d}!!!\n", .{thread_id, ready_socket});
+                // try tp.spawn(handle_messge, .{ &map, &ctx, allocator });
+                var recv_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(allocator);
+                defer recv_fifo.deinit();
+
+                const client = std.net.Stream{ .handle = ctx.clientfd };
+                const upstream = map.get(client) catch |err| {
+                    debug("ERROR: error while getting upstream: {!}\n", .{err});
+                    continue;
+                };
+
+                if (upstream == null) {
+                    debug("ERROR: no upstream found\n", .{});
+                    continue;
+                }
+
+                debug("\tINFO({d}): client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.?.handle });
+                const buf = recv_fifo.writableWithSize(2048) catch |err| {
+                    debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
+                    continue;
+                };
+                const bytes = client.read(buf) catch |err| {
+                    debug("ERROR: error while reading from client: {!}\n", .{err});
+                    // switch (err) {
+                    //     .WouldBlock => return,
+                    //     else => return,
+                    // }
+                    continue;
+                };
+
+                // TODO: handle closig connection
+                // Remove from epoll first
+                // Then close the socket
+                // Then remove from map
+                if (bytes == 0) {
+                    debug("WARN: Client closing this connection\n", .{});
+                    map.remove(client) catch |err| {
+                        debug("ERROR: error while removing from map: {!}\n", .{err});
+                    };
+                    std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, client.handle, null) catch |err| {
+                        debug("ERROR: error while removing client from epoll: {!}\n", .{err});
+                    };
+                    std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, upstream.?.handle, null) catch |err| {
+                        debug("ERROR: error while removing upstream from epoll: {!}\n", .{err});
+                    };
+
+                    std.posix.close(client.handle);
+                    std.posix.close(upstream.?.handle);
+                    continue;
+                }
+
+                recv_fifo.update(bytes);
+                const datapeek = recv_fifo.readableSlice(0);
+                const idx = std.mem.lastIndexOf(u8, datapeek, needle);
+                if (idx == null) {
+                    debug("ERROR: no needle found\n", .{});
+                    continue;
+                }
+
+                var msg_buffer = u8boundarray.fromSlice(datapeek) catch |err| {
+                    debug("ERROR: error while appending to msg_buffer: {!}\n", .{err});
+                    continue;
+                };
+                find_and_replace_boguscoin_address(&msg_buffer) catch |err| {
+                    debug("ERROR: error while finding and replacing Boguscoin address: {!}\n", .{err});
+                    continue;
+                };
+
+                upstream.?.writeAll(msg_buffer.constSlice()) catch |err| {
+                    debug("ERROR: error while writing to upstream: {!}\n", .{err});
+                    continue;
+                };
             }
         }
     }
@@ -135,7 +234,6 @@ const ConnectionHashMap = struct {
     }
 };
 
-// TODO: add epoll event here
 // TODO: also leave the clientfd alone, do not remove it
 // We don't need to differentiate between client and server
 const Context = struct {
@@ -146,7 +244,6 @@ const Context = struct {
     epollfd: i32,
     serverfd: std.posix.socket_t,
     clientfd: std.posix.socket_t,
-    event: linux.epoll_event,
 };
 
 fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
@@ -216,71 +313,28 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
         return;
     };
 
+    std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, upstream.handle, &event) catch |err| {
+        debug("\tERROR({d}): error while adding upstream to epoll: {!}\n", .{ thread_id, err });
+        return;
+    };
+    debug("\tINFO({d}): connected to upstream\n", .{ thread_id });
     map.add(client, upstream) catch |err| {
         debug("\tERROR({d}): error while adding to map: {!}\n", .{ thread_id, err });
         return;
     };
-
-    // defer upstream.close();
-    //
-    // // TODO receive upstream welcome message
-    // // TODO send client stream welcome message
-    // // The communication is started by the upstream then the loop
-    //
-    // while (true) {
-    //     debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
-    //     const data = recv_fifo.writableWithSize(std.mem.page_size) catch |err| {
-    //         debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
-    //         return;
-    //     };
-    //
-    //     const bytes = stream.read(data) catch |err| {
-    //         debug("\tERROR({d}): error {!}... closing this connection\n", .{ thread_id, err });
-    //         return;
-    //     };
-    //     if (bytes == 0) {
-    //         debug("\t\tWARN({d}): Client closing this connection\n", .{
-    //             thread_id,
-    //         });
-    //         return;
-    //     }
-    //
-    //     recv_fifo.update(bytes);
-    //
-    //     // Check if we have a full message
-    //     const datapeek = recv_fifo.readableSlice(0);
-    //     // TODO: Maybe switch to using readUntilDelimiterOrEnd
-    //     // Danger here of sending out more than one message
-    //     const idx = std.mem.lastIndexOf(u8, datapeek, needle);
-    //     if (idx == null) continue;
-    //
-    //     // Clean up
-    //     defer recv_fifo.discard(recv_fifo.readableLength());
-    //     defer msg_buffer.clear();
-    //
-    //     // Search and replace bogus address
-    //     msg_buffer.appendSlice(datapeek) catch |err| {
-    //         debug("\tERROR({d}): error while appending to msg_buffer: {!}\n", .{ thread_id, err });
-    //         return;
-    //     };
-    //     find_and_replace_boguscoin_address(&msg_buffer) catch |err| {
-    //         debug("\tERROR({d}): error while replacing boguscoin address: {!}\n", .{ thread_id, err });
-    //         return;
-    //     };
-    //
-    //     // TODO: send to upstream
-    //     upstream.writeAll(msg_buffer.slice()) catch |err| {
-    //         debug("\tERROR({d}): error while writing to upstream: {!}\n", .{ thread_id, err });
-    //         return;
-    //     };
-    // }
 }
 
 // TODO: remove the streams and pass the map
 // TODO: you can get client and stream from ctx.clientfd
 // You need the map to be able to remove people when a connection is closed
-fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
-    var buf: [2048]u8 = undefined;
+fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocator) void {
+    const thread_id = std.Thread.getCurrentId();
+    // var msg_buffer = std.BoundedArray(u8, 1024).init(1024) catch |err| {
+    //     debug("\tERROR({d}): error while initializing msg_buffer: {!}\n", .{ thread_id, err });
+    //     return;
+    // };
+    var recv_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
+    defer recv_fifo.deinit();
 
     const client = std.net.Stream{ .handle = ctx.clientfd };
     const upstream = map.get(client) catch |err| {
@@ -293,8 +347,17 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
         return;
     }
 
-    const bytes = client.read(&buf) catch |err| {
+    debug("\tINFO({d}): client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.?.handle });
+    const buf = recv_fifo.writableWithSize(2048) catch |err| {
+        debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
+        return;
+    };
+    const bytes = client.read(buf) catch |err| {
         debug("ERROR: error while reading from client: {!}\n", .{err});
+        // switch (err) {
+        //     .WouldBlock => return,
+        //     else => return,
+        // }
         return;
     };
 
@@ -307,23 +370,36 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
         map.remove(client) catch |err| {
             debug("ERROR: error while removing from map: {!}\n", .{err});
         };
-        std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, ctx.clientfd, null) catch |err| {
-            debug("ERROR: error while removing from epoll: {!}\n", .{err});
+        std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, client.handle, null) catch |err| {
+            debug("ERROR: error while removing client from epoll: {!}\n", .{err});
         };
+        std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, upstream.?.handle, null) catch |err| {
+            debug("ERROR: error while removing upstream from epoll: {!}\n", .{err});
+        };
+
+        std.posix.close(client.handle);
+        std.posix.close(upstream.?.handle);
         return;
     }
 
-    // _ = bytes;
-
-    const idx = std.mem.lastIndexOf(u8, &buf, needle);
+    recv_fifo.update(bytes);
+    const datapeek = recv_fifo.readableSlice(0);
+    const idx = std.mem.lastIndexOf(u8, datapeek, needle);
     if (idx == null) {
         debug("ERROR: no needle found\n", .{});
         return;
     }
 
-    // find_and_replace_boguscoin_address(&buf);
+    var msg_buffer = u8boundarray.fromSlice(datapeek) catch |err| {
+        debug("ERROR: error while appending to msg_buffer: {!}\n", .{err});
+        return;
+    };
+    find_and_replace_boguscoin_address(&msg_buffer) catch |err| {
+        debug("ERROR: error while finding and replacing Boguscoin address: {!}\n", .{err});
+        return;
+    };
 
-    upstream.?.writeAll(&buf) catch |err| {
+    upstream.?.writeAll(msg_buffer.constSlice()) catch |err| {
         debug("ERROR: error while writing to upstream: {!}\n", .{err});
         return;
     };
