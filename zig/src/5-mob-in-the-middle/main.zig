@@ -68,7 +68,8 @@ pub fn main() !void {
 
     var ready_list: [kernel_backlog]linux.epoll_event = undefined;
 
-    var ctx = Context{.serverfd = serverfd, .epollfd = epollfd, .clientfd = undefined};
+    // TODO: ctx doesn't need clientfd
+    var ctx = Context{ .serverfd = serverfd, .epollfd = epollfd, .clientfd = undefined, .event = undefined };
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
     debug("We are listeninig baby!!!...\n", .{});
@@ -87,21 +88,12 @@ pub fn main() !void {
                 // - epollfd
                 // - ready_socket
                 // TODO: Make an upstream connection
-                try tp.spawn(handle_connection, .{&map, &ctx, allocator});
+                try tp.spawn(handle_connection, .{ &map, &ctx, allocator });
             } else {
+                // TODO: call handle_messge
                 ctx.clientfd = ready_socket;
-                var closed = false;
-                var buf: [4096]u8 = undefined;
-                const read = std.posix.read(ready_socket, &buf) catch 0;
-                if (read == 0) {
-                    closed = true;
-                } else {
-                    debug("[{d}] got: {any}\n", .{ ready_socket, buf[0..read] });
-                }
-
-                if (closed or ready.events & linux.EPOLL.RDHUP == linux.EPOLL.RDHUP) {
-                    std.posix.close(ready_socket);
-                }
+                ctx.event = ready;
+                try tp.spawn(handle_messge, .{ &map, &ctx });
             }
         }
     }
@@ -132,8 +124,8 @@ const ConnectionHashMap = struct {
         defer self.mutex.unlock();
         const upstream = self.map.get(client);
         if (upstream == null) return;
-        try self.map.remove(client);
-        try self.map.remove(upstream);
+        _ = self.map.remove(client);
+        _ = self.map.remove(upstream.?);
     }
 
     pub fn get(self: *ConnectionHashMap, client: std.net.Stream) !?std.net.Stream {
@@ -143,8 +135,8 @@ const ConnectionHashMap = struct {
     }
 };
 
-// TODO: ClientServerHashMap
-// Duplicate entries
+// TODO: add epoll event here
+// TODO: also leave the clientfd alone, do not remove it
 // We don't need to differentiate between client and server
 const Context = struct {
     // struct context
@@ -154,6 +146,7 @@ const Context = struct {
     epollfd: i32,
     serverfd: std.posix.socket_t,
     clientfd: std.posix.socket_t,
+    event: linux.epoll_event,
 };
 
 fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
@@ -283,23 +276,54 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     // }
 }
 
-fn handle_messge(stream: std.net.Stream, upstream: std.net.Stream) void {
+// TODO: remove the streams and pass the map
+// TODO: you can get client and stream from ctx.clientfd
+// You need the map to be able to remove people when a connection is closed
+fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
     var buf: [2048]u8 = undefined;
 
-    stream.readAll(buf) catch |err| {
-        debug("ERROR: error while reading from stream: {!}\n", .{err});
+    const client = std.net.Stream{ .handle = ctx.clientfd };
+    const upstream = map.get(client) catch |err| {
+        debug("ERROR: error while getting upstream: {!}\n", .{err});
         return;
     };
 
-    const idx = std.mem.lastIndexOf(u8, buf, needle);
+    if (upstream == null) {
+        debug("ERROR: no upstream found\n", .{});
+        return;
+    }
+
+    const bytes = client.read(&buf) catch |err| {
+        debug("ERROR: error while reading from client: {!}\n", .{err});
+        return;
+    };
+
+    // TODO: handle closig connection
+    // Remove from epoll first
+    // Then close the socket
+    // Then remove from map
+    if (bytes == 0) {
+        debug("WARN: Client closing this connection\n", .{});
+        map.remove(client) catch |err| {
+            debug("ERROR: error while removing from map: {!}\n", .{err});
+        };
+        std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, ctx.clientfd, null) catch |err| {
+            debug("ERROR: error while removing from epoll: {!}\n", .{err});
+        };
+        return;
+    }
+
+    // _ = bytes;
+
+    const idx = std.mem.lastIndexOf(u8, &buf, needle);
     if (idx == null) {
         debug("ERROR: no needle found\n", .{});
         return;
     }
 
-    find_and_replace_boguscoin_address(&buf);
+    // find_and_replace_boguscoin_address(&buf);
 
-    upstream.writeAll(buf) catch |err| {
+    upstream.?.writeAll(&buf) catch |err| {
         debug("ERROR: error while writing to upstream: {!}\n", .{err});
         return;
     };
