@@ -197,27 +197,26 @@ fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
 
         // Start walking the address
         var nidx = idx.?;
-        var alpanum = false;
+        var alphanum = false;
         while (nidx < cslice.len) {
             // Check end of address
             if (cslice[nidx] == ' ' or cslice[nidx] == '\n') break;
 
             // Check that is alpha numeric
-            if (!std.ascii.isAlphanumeric(cslice[nidx])) {
-                alpanum = true;
-                break;
-            }
+            if (!std.ascii.isAlphanumeric(cslice[nidx])) alphanum = true;
             nidx += 1;
         }
 
-        if (alpanum) continue;
         const len = nidx - idx.?;
-        if (len < boguscoin_min_len or len > boguscoin_max_len) continue;
+        if (alphanum or len < boguscoin_min_len or len > boguscoin_max_len) {
+            start += len; // Not supporting nested addresses
+            continue;
+        }
 
         // Now we have a valid address. Replace it.
         // Remove offset by one in case of continue branch
         try msg.replaceRange(start - 1, len, boguscoin_address);
-        start += len + 1; // Not supporting nested addresses
+        start += boguscoin_address.len; // Not supporting nested addresses
     }
 }
 
@@ -474,5 +473,12 @@ test "find_and_replace_boguscoin_address" {
         var msg = try u8boundarray.fromSlice("The address 7F1u3wSD5RbOHQmupo9nx4TnhQ! is invalid");
         try find_and_replace_boguscoin_address(&msg);
         try testing.expectEqualSlices(u8, "The address 7F1u3wSD5RbOHQmupo9nx4TnhQ! is invalid", msg.slice());
+    }
+
+    // Test from actual data
+    {
+        var msg = try u8boundarray.fromSlice("Please pay the ticket price of 15 Boguscoins to one of these addresses: 79XTJ0kjDSj74S3JzaPwG6H99q3D3gIbx 7KgQ43NyUuVFoCYoUL7hffAFQk8L2H 7fCg2CEiztOqwPAg8F9kdoGdVgzT4ee0A");
+        try find_and_replace_boguscoin_address(&msg);
+        try testing.expectEqualSlices(u8, "Please pay the ticket price of 15 Boguscoins to one of these addresses: 7YWHMfk9JZe0LM0g1ZauHuiSxhI 7YWHMfk9JZe0LM0g1ZauHuiSxhI 7YWHMfk9JZe0LM0g1ZauHuiSxhI", msg.slice());
     }
 }
