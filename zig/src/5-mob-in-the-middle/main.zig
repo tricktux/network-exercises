@@ -342,8 +342,8 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocato
         return;
     }
 
-    recv_fifo.update(bytes);
     const datapeek = recv_fifo.readableSlice(0);
+    debug("\tINFO({d}): received message: {s}\n", .{ thread_id, datapeek });
     const idx = std.mem.lastIndexOf(u8, datapeek, needle);
     if (idx == null) {
         debug("ERROR: no needle found\n", .{});
