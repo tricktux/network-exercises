@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const linux = std.os.linux;
 const debug = std.debug.print;
 const testing = std.testing;
@@ -215,10 +216,43 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     const client = std.net.Stream{ .handle = client_socket };
 
     // Make upstream connection
-    const upstream = std.net.tcpConnectToHost(alloc, server_name, server_port) catch |err| {
-        debug("\tERROR({d}): error while connecting to upstream: {!}\n", .{ thread_id, err });
-        return;
-    };
+    // TODO: this is a blocking connection
+    // const upstream = std.net.tcpConnectToHost(alloc, server_name, server_port) catch |err| {
+    //     debug("\tERROR({d}): error while connecting to upstream: {!}\n", .{ thread_id, err });
+    //     return;
+    // };
+    var upstream: std.net.Stream = undefined;
+    {
+        const list = std.net.getAddressList(alloc, name, port) catch |err| {
+            debug("\tERROR({d}): error while getting address list: {!}\n", .{ thread_id, err });
+            return;
+        };
+        defer list.deinit();
+
+        if (list.addrs.len == 0) {
+            debug("\tERROR({d}): no address found\n", .{thread_id});
+            return;
+        }
+
+        var found = false;
+        for (list.addrs) |addr| {
+            const sock_flags = std.posix.SOCK.STREAM | std.posix.SOCK.NONBLOCK |
+                (if (builtin.os.tag == .windows) 0 else std.posix.SOCK.CLOEXEC);
+            const sockfd = std.posix.socket(addr.any.family, sock_flags, std.posix.IPPROTO.TCP) catch continue;
+            errdefer std.net.Stream.close(.{ .handle = sockfd });
+
+            std.posix.connect(sockfd, &addr.any, addr.getOsSockLen()) catch continue;
+
+            upstream = std.net.Stream{ .handle = sockfd };
+            found = true;
+            break;
+        }
+
+        if (found == false) {
+            debug("\tERROR({d}): error while connecting to upstream\n", .{thread_id});
+            return;
+        }
+    }
 
     var event2 = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = upstream.handle } };
     std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, upstream.handle, &event2) catch |err| {
@@ -232,8 +266,6 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     };
 }
 
-// TODO: remove the streams and pass the map
-// TODO: you can get client and stream from ctx.clientfd
 // You need the map to be able to remove people when a connection is closed
 fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
@@ -258,26 +290,25 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocato
     debug("\tINFO({d}): client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.?.handle });
     var bytes: usize = 0;
     // _ = bytes;
-    // while (true) {
-    const buf = recv_fifo.writableWithSize(2048) catch |err| {
-        debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
-        return;
-    };
-    bytes = client.read(buf) catch |err| {
-        debug("ERROR: error while reading from client: {!}\n", .{err});
-        return;
-        // switch (err) {
-        //     error.WouldBlock => return,
-        //     else => {
-        //         // debug("ERROR: error while reading from client: {!}\n", .{err});
-        //         return;
-        //     },
-        // }
-    };
-    // recv_fifo.update(bytes);
-    // }
+    while (true) {
+        const buf = recv_fifo.writableWithSize(2048) catch |err| {
+            debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
+            return;
+        };
+        bytes = client.read(buf) catch |err| {
+            debug("ERROR: error while reading from client: {!}\n", .{err});
+            // return;
+            switch (err) {
+                error.WouldBlock => break,
+                else => {
+                    // debug("ERROR: error while reading from client: {!}\n", .{err});
+                    return;
+                },
+            }
+        };
+        recv_fifo.update(bytes);
+    }
 
-    // TODO: handle closig connection
     // Remove from epoll first
     // Then close the socket
     // Then remove from map
