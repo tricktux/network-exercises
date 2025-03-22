@@ -9,6 +9,7 @@ const Thread = std.Thread;
 const u8fifo = std.fifo.LinearFifo(u8, .Dynamic);
 const u8boundarray = std.BoundedArray(u8, 1024);
 const ClientServerHashMap = std.AutoHashMap(std.net.Stream, std.net.Stream);
+const StreamFifoHashMap = std.AutoHashMap(std.net.Stream, u8fifo);
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -92,8 +93,8 @@ pub fn main() !void {
             } else {
                 ctx.clientfd = ready_socket;
                 debug("\tINFO({d}): got new message!!!\n", .{thread_id});
-                // try tp.spawn(handle_messge, .{ &map, &ctx, allocator });
-                handle_messge(&map, &ctx, allocator);
+                // try tp.spawn(handle_messge, .{ &map, &ctx });
+                handle_messge(&map, &ctx);
             }
         }
     }
@@ -101,14 +102,25 @@ pub fn main() !void {
 
 const ConnectionHashMap = struct {
     map: ClientServerHashMap,
+    streamfifomap: StreamFifoHashMap,
     mutex: std.Thread.Mutex = .{},
     alloc: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) ConnectionHashMap {
         return .{
             .map = ClientServerHashMap.init(allocator),
+            .streamfifomap = StreamFifoHashMap.init(allocator),
             .alloc = allocator,
         };
+    }
+
+    pub fn deinit(self: *ConnectionHashMap) void {
+        var it = self.streamfifomap.iterator();
+        for (it.next()) |entry| {
+            entry.value.deinit();
+        }
+        self.map.deinit();
+        self.streamfifomap.deinit();
     }
 
     pub fn add(self: *ConnectionHashMap, client: std.net.Stream, upstream: std.net.Stream) !void {
@@ -116,22 +128,43 @@ const ConnectionHashMap = struct {
         defer self.mutex.unlock();
 
         try self.map.put(client, upstream);
+        try self.streamfifomap.put(client, u8fifo.init(self.alloc));
         try self.map.put(upstream, client);
+        try self.streamfifomap.put(upstream, u8fifo.init(self.alloc));
     }
 
     pub fn remove(self: *ConnectionHashMap, client: std.net.Stream) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
+
+        // TODO: turn all of this naked returns into error.X returns
+        // Get pair
         const upstream = self.map.get(client);
         if (upstream == null) return;
+
+        // Remove client
         _ = self.map.remove(client);
+        const cfkv = self.streamfifomap.fetchRemove(client);
+        if (cfkv == null) return;
+        cfkv.?.value.deinit();
+
+        // Remove upstream
         _ = self.map.remove(upstream.?);
+        const ufkv = self.streamfifomap.fetchRemove(upstream.?);
+        if (ufkv == null) return;
+        ufkv.?.value.deinit();
     }
 
-    pub fn get(self: *ConnectionHashMap, client: std.net.Stream) !?std.net.Stream {
+    pub fn get_stream(self: *ConnectionHashMap, client: std.net.Stream) ?std.net.Stream {
         self.mutex.lock();
         defer self.mutex.unlock();
         return self.map.get(client);
+    }
+
+    pub fn get_fifo(self: *ConnectionHashMap, client: std.net.Stream) ?*u8fifo {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.streamfifomap.getPtr(client);
     }
 };
 
@@ -262,42 +295,40 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     };
 }
 
-fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocator) void {
+fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
     const thread_id = std.Thread.getCurrentId();
-    var recv_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
-    defer recv_fifo.deinit();
 
     const client = std.net.Stream{ .handle = ctx.clientfd };
-    const upstream = map.get(client) catch |err| {
-        debug("ERROR: error while getting upstream: {!}\n", .{err});
-        return;
-    };
-
+    const upstream = map.get_stream(client);
     if (upstream == null) {
         debug("ERROR: no upstream found\n", .{});
         return;
     }
 
+    var recv_fifo = map.get_fifo(client);
+    if (recv_fifo == null) {
+        debug("ERROR: no fifo found\n", .{});
+        return;
+    }
+
     debug("\tINFO({d}): client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.?.handle });
+    debug("\tINFO({d}): client: {d}, fifo: {d} size\n", .{ thread_id, client.handle, recv_fifo.?.readableLength() });
     var bytes: usize = 0;
-    // _ = bytes;
     while (true) {
-        const buf = recv_fifo.writableWithSize(2048) catch |err| {
+        const buf = recv_fifo.?.writableWithSize(2048) catch |err| {
             debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
             return;
         };
         bytes = client.read(buf) catch |err| {
-            debug("ERROR: error while reading from client: {!}\n", .{err});
-            // return;
             switch (err) {
                 error.WouldBlock => break,
                 else => {
-                    // debug("ERROR: error while reading from client: {!}\n", .{err});
+                    debug("\tERROR: error while reading from client: {!}\n", .{err});
                     return;
                 },
             }
         };
-        recv_fifo.update(bytes);
+        recv_fifo.?.update(bytes);
     }
 
     if (bytes == 0) {
@@ -317,23 +348,27 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocato
         return;
     }
 
-    const datapeek = recv_fifo.readableSlice(0);
+    const datapeek = recv_fifo.?.readableSlice(0);
     debug("\tINFO({d}): received message: {s}\n", .{ thread_id, datapeek });
     const idx = std.mem.lastIndexOf(u8, datapeek, needle);
     if (idx == null) {
-        debug("ERROR: no needle found\n", .{});
+        debug("\tWARN: no full message found\n", .{});
         return;
     }
+
+    defer recv_fifo.?.discard(recv_fifo.?.readableLength());
 
     var msg_buffer = u8boundarray.fromSlice(datapeek) catch |err| {
         debug("ERROR: error while appending to msg_buffer: {!}\n", .{err});
         return;
     };
+
     find_and_replace_boguscoin_address(&msg_buffer) catch |err| {
         debug("ERROR: error while finding and replacing Boguscoin address: {!}\n", .{err});
         return;
     };
 
+    debug("\tINFO({d}): sending message: {s}\n", .{ thread_id, msg_buffer.slice() });
     upstream.?.writeAll(msg_buffer.constSlice()) catch |err| {
         debug("ERROR: error while writing to upstream: {!}\n", .{err});
         return;
