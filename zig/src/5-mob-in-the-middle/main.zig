@@ -312,7 +312,6 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
     }
 
     debug("\tINFO({d}): client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.?.handle });
-    debug("\tINFO({d}): client: {d}, fifo: {d} size\n", .{ thread_id, client.handle, recv_fifo.?.readableLength() });
     var bytes: usize = 0;
     while (true) {
         const buf = recv_fifo.?.writableWithSize(2048) catch |err| {
@@ -328,6 +327,7 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
                 },
             }
         };
+        if (bytes == 0) break;
         recv_fifo.?.update(bytes);
     }
 
