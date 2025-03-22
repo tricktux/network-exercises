@@ -87,16 +87,9 @@ pub fn main() !void {
             debug("INFO: socket '{d}' has the events\n", .{ready_socket});
             if (ready_socket == serverfd) {
                 debug("\tINFO({d}): got new connection!!!\n", .{thread_id});
-                // TODO: Arguments to handle_connection
-                // struct context
-                // - serverfd
-                // - epollfd
-                // - ready_socket
-                // TODO: Make an upstream connection
                 // try tp.spawn(handle_connection, .{ &map, &ctx, allocator });
                 handle_connection(&map, &ctx, allocator);
             } else {
-                // TODO: call handle_messge
                 ctx.clientfd = ready_socket;
                 debug("\tINFO({d}): got new message!!!\n", .{thread_id});
                 // try tp.spawn(handle_messge, .{ &map, &ctx, allocator });
@@ -142,13 +135,8 @@ const ConnectionHashMap = struct {
     }
 };
 
-// TODO: also leave the clientfd alone, do not remove it
 // We don't need to differentiate between client and server
 const Context = struct {
-    // struct context
-    // - serverfd
-    // - epollfd
-    // - ready_socket
     epollfd: i32,
     serverfd: std.posix.socket_t,
     clientfd: std.posix.socket_t,
@@ -216,11 +204,6 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     const client = std.net.Stream{ .handle = client_socket };
 
     // Make upstream connection
-    // TODO: this is a blocking connection
-    // const upstream = std.net.tcpConnectToHost(alloc, server_name, server_port) catch |err| {
-    //     debug("\tERROR({d}): error while connecting to upstream: {!}\n", .{ thread_id, err });
-    //     return;
-    // };
     var upstream: std.net.Stream = undefined;
     {
         const list = std.net.getAddressList(alloc, server_name, server_port) catch |err| {
@@ -249,7 +232,7 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
                 continue;
             };
 
-            // TODO: avoid waiting for connect
+            // Avoid waiting for connect async
             // set socket nonblocking
             _ = std.posix.fcntl(sockfd, std.posix.F.SETFL, sock_flags | std.posix.SOCK.NONBLOCK) catch |err| {
                 debug("\t\tERROR({d}): error while setting socket nonblocking: {!}\n", .{thread_id, err});
@@ -279,13 +262,8 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     };
 }
 
-// You need the map to be able to remove people when a connection is closed
 fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
-    // var msg_buffer = std.BoundedArray(u8, 1024).init(1024) catch |err| {
-    //     debug("\tERROR({d}): error while initializing msg_buffer: {!}\n", .{ thread_id, err });
-    //     return;
-    // };
     var recv_fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
     defer recv_fifo.deinit();
 
@@ -322,9 +300,6 @@ fn handle_messge(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocato
         recv_fifo.update(bytes);
     }
 
-    // Remove from epoll first
-    // Then close the socket
-    // Then remove from map
     if (bytes == 0) {
         debug("WARN: Client closing this connection\n", .{});
         map.remove(client) catch |err| {
