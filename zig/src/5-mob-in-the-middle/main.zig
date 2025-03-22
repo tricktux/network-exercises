@@ -17,6 +17,7 @@ const server_name: []const u8 = "chat.protohackers.com";
 const server_port = 16963;
 const needle = "\n";
 const kernel_backlog = 256;
+const epoll_event_flags = linux.EPOLL.IN | linux.EPOLL.ET;
 
 pub fn main() !void {
     // Initialize allocator
@@ -64,8 +65,7 @@ pub fn main() !void {
 
     // Monitor our main proxy server
     {
-        // var event = linux.epoll_event{ .events = linux.EPOLL.IN | linux.EPOLL.ET, .data = .{ .fd = serverfd } };
-        var event = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = serverfd } };
+        var event = linux.epoll_event{ .events = epoll_event_flags, .data = .{ .fd = serverfd } };
         try std.posix.epoll_ctl(epollfd, linux.EPOLL.CTL_ADD, serverfd, &event);
     }
 
@@ -208,7 +208,7 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
         return;
     };
     errdefer std.posix.close(client_socket);
-    var event = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = client_socket } };
+    var event = linux.epoll_event{ .events = epoll_event_flags, .data = .{ .fd = client_socket } };
     std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, client_socket, &event) catch |err| {
         debug("\tERROR({d}): error while adding client to epoll: {!}\n", .{ thread_id, err });
         return;
@@ -267,7 +267,7 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
         }
     }
 
-    var event2 = linux.epoll_event{ .events = linux.EPOLL.IN, .data = .{ .fd = upstream.handle } };
+    var event2 = linux.epoll_event{ .events = epoll_event_flags, .data = .{ .fd = upstream.handle } };
     std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, upstream.handle, &event2) catch |err| {
         debug("\tERROR({d}): error while adding upstream to epoll: {!}\n", .{ thread_id, err });
         return;
