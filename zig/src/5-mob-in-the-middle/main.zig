@@ -72,7 +72,6 @@ pub fn main() !void {
 
     var ready_list: [kernel_backlog]linux.epoll_event = undefined;
 
-    // TODO: ctx doesn't need clientfd
     var ctx = Context{ .serverfd = serverfd, .epollfd = epollfd, .clientfd = undefined };
 
     debug("ThreadPool initialized with {} capacity\n", .{cpus});
@@ -88,13 +87,11 @@ pub fn main() !void {
             debug("INFO: socket '{d}' has the events\n", .{ready_socket});
             if (ready_socket == serverfd) {
                 debug("\tINFO({d}): got new connection!!!\n", .{thread_id});
-                // try tp.spawn(handle_connection, .{ &map, &ctx, allocator });
-                handle_connection(&map, &ctx, allocator);
+                try tp.spawn(handle_connection, .{ &map, ctx, allocator });
             } else {
                 ctx.clientfd = ready_socket;
                 debug("\tINFO({d}): got new message!!!\n", .{thread_id});
-                // try tp.spawn(handle_messge, .{ &map, &ctx });
-                handle_messge(&map, &ctx);
+                try tp.spawn(handle_messge, .{ &map, ctx });
             }
         }
     }
@@ -220,7 +217,7 @@ fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
     }
 }
 
-fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocator) void {
+fn handle_connection(map: *ConnectionHashMap, ctx: Context, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
     const client_socket = std.posix.accept(ctx.serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
@@ -294,7 +291,7 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     };
 }
 
-fn handle_messge(map: *ConnectionHashMap, ctx: *Context) void {
+fn handle_messge(map: *ConnectionHashMap, ctx: Context) void {
     const thread_id = std.Thread.getCurrentId();
 
     const client = std.net.Stream{ .handle = ctx.clientfd };
