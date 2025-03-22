@@ -203,7 +203,7 @@ fn find_and_replace_boguscoin_address(msg: *u8boundarray) !void {
 fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
 
-    const client_socket = std.posix.accept(ctx.serverfd, null, null, std.posix.SOCK.NONBLOCK) catch |err| {
+    const client_socket = std.posix.accept(ctx.serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
         debug("\tERROR({d}): error while accepting connection: {!}\n", .{ thread_id, err });
         return;
     };
@@ -223,7 +223,7 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
     // };
     var upstream: std.net.Stream = undefined;
     {
-        const list = std.net.getAddressList(alloc, name, port) catch |err| {
+        const list = std.net.getAddressList(alloc, server_name, server_port) catch |err| {
             debug("\tERROR({d}): error while getting address list: {!}\n", .{ thread_id, err });
             return;
         };
@@ -236,12 +236,25 @@ fn handle_connection(map: *ConnectionHashMap, ctx: *Context, alloc: std.mem.Allo
 
         var found = false;
         for (list.addrs) |addr| {
-            const sock_flags = std.posix.SOCK.STREAM | std.posix.SOCK.NONBLOCK |
+            const sock_flags = std.posix.SOCK.STREAM |
                 (if (builtin.os.tag == .windows) 0 else std.posix.SOCK.CLOEXEC);
-            const sockfd = std.posix.socket(addr.any.family, sock_flags, std.posix.IPPROTO.TCP) catch continue;
+            const sockfd = std.posix.socket(addr.any.family, sock_flags, std.posix.IPPROTO.TCP) catch {
+                debug("\t\tERROR({d}): error while creating socket\n", .{thread_id});
+                continue;
+            };
             errdefer std.net.Stream.close(.{ .handle = sockfd });
 
-            std.posix.connect(sockfd, &addr.any, addr.getOsSockLen()) catch continue;
+            std.posix.connect(sockfd, &addr.any, addr.getOsSockLen()) catch |err| {
+                debug("\t\tERROR({d}): error while connecting to upstream: {!}\n", .{thread_id, err});
+                continue;
+            };
+
+            // TODO: avoid waiting for connect
+            // set socket nonblocking
+            _ = std.posix.fcntl(sockfd, std.posix.F.SETFL, sock_flags | std.posix.SOCK.NONBLOCK) catch |err| {
+                debug("\t\tERROR({d}): error while setting socket nonblocking: {!}\n", .{thread_id, err});
+                continue;
+            };
 
             upstream = std.net.Stream{ .handle = sockfd };
             found = true;
