@@ -146,7 +146,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(speed_daemon);
 
-    // 4 Unusual Database Program
+    // 6 Speed Daemon
     const speed_daemon_tests = b.addTest(.{
         .name = "speed-daemon-tests",
         .root_source_file = b.path("src/6-speed-daemon/main.zig"),

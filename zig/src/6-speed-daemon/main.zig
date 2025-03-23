@@ -1,15 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const logger = @import("logger.zig");
+
 const linux = std.os.linux;
-
-// Set this to false to disable all debug prints
-const enable_debug = true;
-
-// Define a no-op function with the same signature as std.debug.print
-fn noop_print(comptime fmt_: []const u8, args: anytype) void { _ = fmt_; _ = args; }
-
-// Choose the appropriate function based on enable_debug
-const debug = if (enable_debug) std.debug.print else noop_print;
 const testing = std.testing;
 const fmt = std.fmt;
 const time = std.time;
@@ -28,12 +21,24 @@ const needle = "\n";
 const kernel_backlog = 256;
 const epoll_event_flags = linux.EPOLL.IN | linux.EPOLL.ET;
 
+// Configure logging at the root level
+pub const std_options: std.Options = .{
+    .log_level = switch (builtin.mode) {
+        .Debug => .debug,
+        else => .debug,
+    },
+    .logFn = logger.customLogFn,
+};
+
 pub fn main() !void {
     // Initialize allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }){};
     defer _ = gpa.deinit();
-
     const allocator = gpa.allocator();
+
+    // Initialize the logger
+    try logger.init();
+    defer logger.deinit();
 
     // Create server
     var server: std.net.Server = undefined;
@@ -41,10 +46,9 @@ pub fn main() !void {
     {
         const addrlist = try std.net.getAddressList(allocator, name, port);
         defer addrlist.deinit();
-        debug("Got Addresses: '{s}'!!!\n", .{addrlist.canon_name.?});
-
+        std.log.debug("Got Addresses: '{s}'!!!", .{addrlist.canon_name.?});
         for (addrlist.addrs) |addr| {
-            debug("\tTrying to listen...\n", .{});
+            std.log.debug("Trying to listen...", .{});
             // Not intuitive but `listen` calls `socket, bind, and listen`
             server = addr.listen(.{
                 .kernel_backlog = kernel_backlog,
@@ -52,7 +56,7 @@ pub fn main() !void {
                 .force_nonblocking = true,
             }) catch continue;
 
-            debug("\tGot one!\n", .{});
+            std.log.debug("Got one!", .{});
             break;
         }
     }
@@ -81,22 +85,22 @@ pub fn main() !void {
 
     var ctx = Context{ .serverfd = serverfd, .epollfd = epollfd, .clientfd = undefined };
 
-    debug("ThreadPool initialized with {} capacity\n", .{cpus});
-    debug("We are listeninig baby!!!...\n", .{});
+    std.log.debug("ThreadPool initialized with {} capacity", .{cpus});
+    std.log.debug("We are listeninig baby!!!...", .{});
     const thread_id = std.Thread.getCurrentId();
     while (true) {
-        debug("INFO({d}): waiting for a new event...\n", .{thread_id});
+        std.log.debug("({d}): waiting for a new event...", .{thread_id});
         // try tp.spawn(handle_connection, .{ connection, allocator });
         const ready_count = std.posix.epoll_wait(epollfd, &ready_list, -1);
-        debug("INFO: got '{d}' events\n", .{ready_count});
+        std.log.debug("got '{d}' events", .{ready_count});
         for (ready_list[0..ready_count]) |ready| {
             const ready_socket = ready.data.fd;
             if (ready_socket == serverfd) {
-                debug("\tINFO({d}): got new connection!!!\n", .{thread_id});
+                std.log.debug("({d}): got new connection!!!", .{thread_id});
                 try tp.spawn(handle_connection, .{ &map, ctx, allocator });
             } else {
                 ctx.clientfd = ready_socket;
-                debug("\tINFO({d}): got new message!!!\n", .{thread_id});
+                std.log.debug("({d}): got new message!!!", .{thread_id});
                 try tp.spawn(handle_messge, .{ &map, ctx });
             }
         }
@@ -227,13 +231,13 @@ fn handle_connection(map: *ConnectionHashMap, ctx: Context, alloc: std.mem.Alloc
     const thread_id = std.Thread.getCurrentId();
 
     const client_socket = std.posix.accept(ctx.serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
-        debug("\tERROR({d}): error while accepting connection: {!}\n", .{ thread_id, err });
+        std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
         return;
     };
     errdefer std.posix.close(client_socket);
     var event = linux.epoll_event{ .events = epoll_event_flags, .data = .{ .fd = client_socket } };
     std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, client_socket, &event) catch |err| {
-        debug("\tERROR({d}): error while adding client to epoll: {!}\n", .{ thread_id, err });
+        std.log.err("({d}): error while adding client to epoll: {!}", .{ thread_id, err });
         return;
     };
     const client = std.net.Stream{ .handle = client_socket };
@@ -242,13 +246,13 @@ fn handle_connection(map: *ConnectionHashMap, ctx: Context, alloc: std.mem.Alloc
     var upstream: std.net.Stream = undefined;
     {
         const list = std.net.getAddressList(alloc, server_name, server_port) catch |err| {
-            debug("\tERROR({d}): error while getting address list: {!}\n", .{ thread_id, err });
+            std.log.err("({d}): error while getting address list: {!}", .{ thread_id, err });
             return;
         };
         defer list.deinit();
 
         if (list.addrs.len == 0) {
-            debug("\tERROR({d}): no address found\n", .{thread_id});
+            std.log.err("({d}): no address found", .{thread_id});
             return;
         }
 
@@ -257,20 +261,20 @@ fn handle_connection(map: *ConnectionHashMap, ctx: Context, alloc: std.mem.Alloc
             const sock_flags = std.posix.SOCK.STREAM |
                 (if (builtin.os.tag == .windows) 0 else std.posix.SOCK.CLOEXEC);
             const sockfd = std.posix.socket(addr.any.family, sock_flags, std.posix.IPPROTO.TCP) catch {
-                debug("\t\tERROR({d}): error while creating socket\n", .{thread_id});
+                std.log.err("({d}): error while creating socket", .{thread_id});
                 continue;
             };
             errdefer std.net.Stream.close(.{ .handle = sockfd });
 
             std.posix.connect(sockfd, &addr.any, addr.getOsSockLen()) catch |err| {
-                debug("\t\tERROR({d}): error while connecting to upstream: {!}\n", .{thread_id, err});
+                std.log.err("({d}): error while connecting to upstream: {!}", .{ thread_id, err });
                 continue;
             };
 
             // Avoid waiting for connect async
             // set socket nonblocking
             _ = std.posix.fcntl(sockfd, std.posix.F.SETFL, sock_flags | std.posix.SOCK.NONBLOCK) catch |err| {
-                debug("\t\tERROR({d}): error while setting socket nonblocking: {!}\n", .{thread_id, err});
+                std.log.err("({d}): error while setting socket nonblocking: {!}", .{ thread_id, err });
                 continue;
             };
 
@@ -280,19 +284,19 @@ fn handle_connection(map: *ConnectionHashMap, ctx: Context, alloc: std.mem.Alloc
         }
 
         if (found == false) {
-            debug("\tERROR({d}): error while connecting to upstream\n", .{thread_id});
+            std.log.err("({d}): error while connecting to upstream", .{thread_id});
             return;
         }
     }
 
     var event2 = linux.epoll_event{ .events = epoll_event_flags, .data = .{ .fd = upstream.handle } };
     std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_ADD, upstream.handle, &event2) catch |err| {
-        debug("\tERROR({d}): error while adding upstream to epoll: {!}\n", .{ thread_id, err });
+        std.log.err("({d}): error while adding upstream to epoll: {!}", .{ thread_id, err });
         return;
     };
-    debug("\tINFO({d}): new client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.handle });
+    std.log.debug("({d}): new client: {d}, upstream: {d} pair", .{ thread_id, client.handle, upstream.handle });
     map.add(client, upstream) catch |err| {
-        debug("\tERROR({d}): error while adding to map: {!}\n", .{ thread_id, err });
+        std.log.err("({d}): error while adding to map: {!}", .{ thread_id, err });
         return;
     };
 }
@@ -303,28 +307,28 @@ fn handle_messge(map: *ConnectionHashMap, ctx: Context) void {
     const client = std.net.Stream{ .handle = ctx.clientfd };
     const upstream = map.get_stream(client);
     if (upstream == null) {
-        debug("ERROR: no upstream found\n", .{});
+        std.log.err("no upstream found", .{});
         return;
     }
 
     var recv_fifo = map.get_fifo(client);
     if (recv_fifo == null) {
-        debug("ERROR: no fifo found\n", .{});
+        std.log.err("no fifo found", .{});
         return;
     }
 
-    debug("\tINFO({d}): client: {d}, upstream: {d} pair\n", .{ thread_id, client.handle, upstream.?.handle });
+    std.log.err("({d}): client: {d}, upstream: {d} pair", .{ thread_id, client.handle, upstream.?.handle });
     var bytes: usize = 0;
     while (true) {
         const buf = recv_fifo.?.writableWithSize(2048) catch |err| {
-            debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
+            std.log.err("({d}): error while recv_fifo.writableWithSize: {!}", .{ thread_id, err });
             return;
         };
         bytes = client.read(buf) catch |err| {
             switch (err) {
                 error.WouldBlock => break,
                 else => {
-                    debug("\tERROR: error while reading from client: {!}\n", .{err});
+                    std.log.err("error while reading from client: {!}", .{err});
                     return;
                 },
             }
@@ -334,15 +338,15 @@ fn handle_messge(map: *ConnectionHashMap, ctx: Context) void {
     }
 
     if (bytes == 0) {
-        debug("WARN: Client closing this connection\n", .{});
+        std.log.warn("Client closing this connection", .{});
         map.remove(client) catch |err| {
-            debug("ERROR: error while removing from map: {!}\n", .{err});
+            std.log.err("error while removing from map: {!}", .{err});
         };
         std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, client.handle, null) catch |err| {
-            debug("ERROR: error while removing client from epoll: {!}\n", .{err});
+            std.log.err("error while removing client from epoll: {!}", .{err});
         };
         std.posix.epoll_ctl(ctx.epollfd, linux.EPOLL.CTL_DEL, upstream.?.handle, null) catch |err| {
-            debug("ERROR: error while removing upstream from epoll: {!}\n", .{err});
+            std.log.err("error while removing upstream from epoll: {!}", .{err});
         };
 
         std.posix.close(client.handle);
@@ -353,26 +357,26 @@ fn handle_messge(map: *ConnectionHashMap, ctx: Context) void {
     const datapeek = recv_fifo.?.readableSlice(0);
     const idx = std.mem.lastIndexOf(u8, datapeek, needle);
     if (idx == null) {
-        debug("\tWARN: no full message found\n", .{});
+        std.log.warn("no full message found", .{});
         return;
     }
 
-    debug("\tINFO({d}): received full message: {s}\n", .{ thread_id, datapeek });
+    std.log.debug("({d}): received full message: {s}", .{ thread_id, datapeek });
     defer recv_fifo.?.discard(recv_fifo.?.readableLength());
 
     var msg_buffer = u8boundarray.fromSlice(datapeek) catch |err| {
-        debug("ERROR: error while appending to msg_buffer: {!}\n", .{err});
+        std.log.err("error while appending to msg_buffer: {!}", .{err});
         return;
     };
 
     find_and_replace_boguscoin_address(&msg_buffer) catch |err| {
-        debug("ERROR: error while finding and replacing Boguscoin address: {!}\n", .{err});
+        std.log.err("error while finding and replacing Boguscoin address: {!}", .{err});
         return;
     };
 
-    debug("\tINFO({d}): sending message: {s}\n", .{ thread_id, msg_buffer.slice() });
+    std.log.debug("({d}): sending message: {s}", .{ thread_id, msg_buffer.slice() });
     upstream.?.writeAll(msg_buffer.constSlice()) catch |err| {
-        debug("ERROR: error while writing to upstream: {!}\n", .{err});
+        std.log.err("error while writing to upstream: {!}", .{err});
         return;
     };
 }

@@ -1,0 +1,58 @@
+const std = @import("std");
+const builtin = @import("builtin");
+
+pub var log_file: ?std.fs.File = null;
+pub var mutex = std.Thread.Mutex{};
+
+// TODO: pass log full path here
+pub fn init() !void {
+    if (log_file != null) return;
+
+    const timestamp = std.time.timestamp();
+    var buf: [64]u8 = undefined;
+    const filename = try std.fmt.bufPrint(&buf, "/tmp/client_log_{d}.txt", .{timestamp});
+
+    log_file = try std.fs.cwd().createFile(filename, .{});
+    try log_file.?.writer().print("=== Log started at timestamp {d} ===\n", .{timestamp});
+}
+
+pub fn deinit() void {
+    if (log_file) |file| {
+        file.close();
+        log_file = null;
+    }
+}
+
+// Custom log handler that writes to both stderr and file with timestamps
+pub fn customLogFn(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    // Ignore all non-error logging from sources other than
+    // .my_project, .nice_library and the default
+    const scope_prefix = "(" ++ switch (scope) {
+        .my_project, .nice_library, std.log.default_log_scope => @tagName(scope),
+        else => if (@intFromEnum(level) <= @intFromEnum(std.log.Level.err))
+            @tagName(scope)
+        else
+            return,
+    } ++ "): ";
+
+    const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
+
+    // Write to stderr
+    nosuspend {
+        // const stderr = std.io.getStdErr().writer();
+        // stderr.print(prefix ++ format ++ "\n", args) catch {};
+
+        // Write to log file if open
+        mutex.lock();
+        defer mutex.unlock();
+
+        if (log_file) |file| {
+            file.writer().print(prefix ++ format ++ "\n", args) catch {};
+        }
+    }
+}
