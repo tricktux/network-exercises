@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const logger = @import("logger.zig");
+const messages = @import("messages.zig");
 
 const linux = std.os.linux;
 const testing = std.testing;
@@ -25,6 +26,7 @@ const epoll_event_flags = linux.EPOLL.IN | linux.EPOLL.ET;
 pub const std_options: std.Options = .{
     .log_level = switch (builtin.mode) {
         .Debug => .debug,
+        .ReleaseFast => .debug,
         else => .debug,
     },
     .logFn = logger.customLogFn,
