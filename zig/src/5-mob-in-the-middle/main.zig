@@ -1,7 +1,15 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const linux = std.os.linux;
-const debug = std.debug.print;
+
+// Set this to false to disable all debug prints
+const enable_debug = false;
+
+// Define a no-op function with the same signature as std.debug.print
+fn noop_print(comptime fmt_: []const u8, args: anytype) void { _ = fmt_; _ = args; }
+
+// Choose the appropriate function based on enable_debug
+const debug = if (enable_debug) std.debug.print else noop_print;
 const testing = std.testing;
 const fmt = std.fmt;
 const time = std.time;
@@ -41,7 +49,6 @@ pub fn main() !void {
             server = addr.listen(.{
                 .kernel_backlog = kernel_backlog,
                 .reuse_address = true,
-                // TODO: should this be nonblocking??
                 .force_nonblocking = true,
             }) catch continue;
 
@@ -84,7 +91,6 @@ pub fn main() !void {
         debug("INFO: got '{d}' events\n", .{ready_count});
         for (ready_list[0..ready_count]) |ready| {
             const ready_socket = ready.data.fd;
-            debug("INFO: socket '{d}' has the events\n", .{ready_socket});
             if (ready_socket == serverfd) {
                 debug("\tINFO({d}): got new connection!!!\n", .{thread_id});
                 try tp.spawn(handle_connection, .{ &map, ctx, allocator });
@@ -345,13 +351,13 @@ fn handle_messge(map: *ConnectionHashMap, ctx: Context) void {
     }
 
     const datapeek = recv_fifo.?.readableSlice(0);
-    debug("\tINFO({d}): received message: {s}\n", .{ thread_id, datapeek });
     const idx = std.mem.lastIndexOf(u8, datapeek, needle);
     if (idx == null) {
         debug("\tWARN: no full message found\n", .{});
         return;
     }
 
+    debug("\tINFO({d}): received full message: {s}\n", .{ thread_id, datapeek });
     defer recv_fifo.?.discard(recv_fifo.?.readableLength());
 
     var msg_buffer = u8boundarray.fromSlice(datapeek) catch |err| {
