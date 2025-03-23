@@ -136,4 +136,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     b.installArtifact(mob_in_them_middle_tests);
+
+    // 6 Speed Daemon
+    const speed_daemon = b.addExecutable(.{
+        .name = "speed-daemon",
+        .root_source_file = b.path("src/6-speed-daemon/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(speed_daemon);
+
+    // 4 Unusual Database Program
+    const speed_daemon_tests = b.addTest(.{
+        .name = "speed-daemon-tests",
+        .root_source_file = b.path("src/6-speed-daemon/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(speed_daemon_tests);
 }
