@@ -59,23 +59,23 @@ const Message = struct {
     }
 
     pub fn initPlate(plate: Plate) Message {
-        return Message{ 
-                .type = Type.Plate, 
-                .data = .{ .plate = plate },
+        return Message{
+            .type = Type.Plate,
+            .data = .{ .plate = plate },
         };
     }
 
     pub fn initTicket(ticket: Ticket) Message {
-        return Message{ 
-                .type = Type.Ticket, 
-                .data = .{ .ticket = ticket },
+        return Message{
+            .type = Type.Ticket,
+            .data = .{ .ticket = ticket },
         };
     }
 
     pub fn initWantHeartbeat(interval: u32) Message {
-        return Message{ 
-                .type = Type.WantHeartbeat, 
-                .data = .{ .want_heartbeat = .{ .interval = interval } },
+        return Message{
+            .type = Type.WantHeartbeat,
+            .data = .{ .want_heartbeat = .{ .interval = interval } },
         };
     }
 
@@ -84,16 +84,16 @@ const Message = struct {
     }
 
     pub fn initCamera(camera: IAmCamera) Message {
-        return Message{ 
-                .type = Type.IAmCamera, 
-                .data = .{ .camera = camera },
+        return Message{
+            .type = Type.IAmCamera,
+            .data = .{ .camera = camera },
         };
     }
 
     pub fn initDispatcher(dispatcher: IAmDispatcher) Message {
-        return Message{ 
-                .type = Type.IAmDispatcher, 
-                .data = .{ .dispatcher = dispatcher },
+        return Message{
+            .type = Type.IAmDispatcher,
+            .data = .{ .dispatcher = dispatcher },
         };
     }
 };

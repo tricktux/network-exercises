@@ -6,7 +6,10 @@ const linux = std.os.linux;
 const enable_debug = false;
 
 // Define a no-op function with the same signature as std.debug.print
-fn noop_print(comptime fmt_: []const u8, args: anytype) void { _ = fmt_; _ = args; }
+fn noop_print(comptime fmt_: []const u8, args: anytype) void {
+    _ = fmt_;
+    _ = args;
+}
 
 // Choose the appropriate function based on enable_debug
 const debug = if (enable_debug) std.debug.print else noop_print;
@@ -263,14 +266,14 @@ fn handle_connection(map: *ConnectionHashMap, ctx: Context, alloc: std.mem.Alloc
             errdefer std.net.Stream.close(.{ .handle = sockfd });
 
             std.posix.connect(sockfd, &addr.any, addr.getOsSockLen()) catch |err| {
-                debug("\t\tERROR({d}): error while connecting to upstream: {!}\n", .{thread_id, err});
+                debug("\t\tERROR({d}): error while connecting to upstream: {!}\n", .{ thread_id, err });
                 continue;
             };
 
             // Avoid waiting for connect async
             // set socket nonblocking
             _ = std.posix.fcntl(sockfd, std.posix.F.SETFL, sock_flags | std.posix.SOCK.NONBLOCK) catch |err| {
-                debug("\t\tERROR({d}): error while setting socket nonblocking: {!}\n", .{thread_id, err});
+                debug("\t\tERROR({d}): error while setting socket nonblocking: {!}\n", .{ thread_id, err });
                 continue;
             };
 

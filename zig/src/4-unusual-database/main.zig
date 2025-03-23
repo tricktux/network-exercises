@@ -33,7 +33,7 @@ pub fn main() !void {
     var buff: [1024]u8 = undefined;
 
     var msg_buffer = std.BoundedArray(u8, 1024).init(0) catch |err| {
-        debug("ERROR: error while initializing msg_buffer: {!}\n", .{ err });
+        debug("ERROR: error while initializing msg_buffer: {!}\n", .{err});
         return;
     };
 
@@ -56,22 +56,22 @@ pub fn main() !void {
         const eqidx = std.mem.indexOf(u8, resp, needle);
         if (eqidx) |idx| {
             const key = resp[0..idx];
-            const value = resp[idx + 1..];
-            debug("\tINFO: inserting key: '{s}', value: '{s}'\n", .{key, value});
+            const value = resp[idx + 1 ..];
+            debug("\tINFO: inserting key: '{s}', value: '{s}'\n", .{ key, value });
             db.insert(key, value) catch |err| {
-                debug("\tERROR: inserting key: '{s}', value: '{s}', error: {!}\n", .{key, value, err});
+                debug("\tERROR: inserting key: '{s}', value: '{s}', error: {!}\n", .{ key, value, err });
                 continue;
             };
         } else {
             const value = db.retrieve(resp) catch |err| {
-                debug("\tERROR: retrieving key: '{s}', error: {!}\n", .{resp, err});
+                debug("\tERROR: retrieving key: '{s}', error: {!}\n", .{ resp, err });
                 continue;
             };
 
             if (value) |val| {
-                debug("\tINFO: retrieved key: '{s}', with value: '{s}'\n", .{resp, val});
-                std.fmt.format(msg_buffer.writer().any(), "{s}={s}", .{resp, val}) catch |err| {
-                    debug("\tERROR: formatting response: '{s}={s}', error: {!}\n", .{resp, val, err});
+                debug("\tINFO: retrieved key: '{s}', with value: '{s}'\n", .{ resp, val });
+                std.fmt.format(msg_buffer.writer().any(), "{s}={s}", .{ resp, val }) catch |err| {
+                    debug("\tERROR: formatting response: '{s}={s}', error: {!}\n", .{ resp, val, err });
                     continue;
                 };
                 _ = std.posix.sendto(sock, msg_buffer.constSlice(), 0, &sa.any, sl) catch |err| {
@@ -82,7 +82,6 @@ pub fn main() !void {
                 debug("\tINFO: key: '{s}' not found\n", .{resp});
             }
         }
-
     }
 }
 
@@ -154,7 +153,6 @@ const Database = struct {
         return r;
     }
 };
-
 
 test "StringArrayHashMap" {
     const allocator = std.testing.allocator;
@@ -275,10 +273,8 @@ test "UDP client-server interaction" {
     // const empty_response = recv_buf.constSlice();
     try testing.expectEqualStrings("empty_value=", recv_buf2[0..recvnum2]);
 
-
     // // Test retrieving a non-existent key
     // try client.send("non_existent_key");
     // const non_existent_bytes_received = try client.receive(&recv_buf);
     // try testing.expect(non_existent_bytes_received == 0);
 }
-

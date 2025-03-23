@@ -113,7 +113,7 @@ const Clients = struct {
         if (idx == null) return error.ClientNotFound;
 
         // Iterate in order
-        for (self.clients.values(), 0..) |client, i|  {
+        for (self.clients.values(), 0..) |client, i| {
             if (i == idx.?) continue;
             if (client.joined) {
                 // debug("\t\t\tDEBUG: send_message_from: '{s}' to: {s}\n", .{message, client.username.constSlice()});
@@ -213,7 +213,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
 
         // Validate username?
         if (!client.joined) {
-            debug("\t\tINFO({d}): Validating username: '{s}'\n", .{thread_id, msg});
+            debug("\t\tINFO({d}): Validating username: '{s}'\n", .{ thread_id, msg });
             if (!client.validate_username(msg)) {
                 stream.writeAll("Invalid username. Please try again.\n") catch |err| {
                     debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
@@ -247,7 +247,7 @@ fn handle_connection(connection: std.net.Server.Connection, clients: *Clients, a
                 msg_buffer.appendSlice(username) catch unreachable;
             }
             msg_buffer.appendSlice("\n") catch unreachable;
-            debug("\t\tINFO({d}): Sending room contents to new client: '{s}'\n", .{thread_id, msg_buffer.constSlice()});
+            debug("\t\tINFO({d}): Sending room contents to new client: '{s}'\n", .{ thread_id, msg_buffer.constSlice() });
             stream.writeAll(msg_buffer.constSlice()) catch |err| {
                 debug("\t\tERROR({d}): error sendAll function {!}... closing this connection\n", .{ thread_id, err });
                 return;

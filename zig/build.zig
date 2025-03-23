@@ -100,7 +100,6 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(budget_chat_tests);
 
-
     // 4 Unusual Database Program
     const unusual_database = b.addExecutable(.{
         .name = "unusual-database",

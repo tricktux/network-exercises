@@ -83,8 +83,8 @@ fn messages_parse(messages: []const u8, response: *u8fifo, assets: *AssetsDataba
     for (0..num_msgs) |i| {
         const start = i * message_size;
         const msg_type = messages[start];
-        const first_word = std.mem.readVarInt(i32, messages[start + 1..start + 5], .big);
-        const second_word = std.mem.readVarInt(i32, messages[start + 5..start + 9], .big);
+        const first_word = std.mem.readVarInt(i32, messages[start + 1 .. start + 5], .big);
+        const second_word = std.mem.readVarInt(i32, messages[start + 5 .. start + 9], .big);
 
         switch (msg_type) {
             message_insert => {
@@ -184,12 +184,12 @@ test "messages_parse inserts assets correctly and handles queries" {
     defer send_fifo.deinit();
 
     const test_messages = [_]u8{
-        'I', 0, 0, 0x03, 0xE8, 0, 0, 0, 100,    // type: 'I', timestamp: 1000 (0x03E8), price: 100
-        'I', 0, 0, 0x07, 0xD0, 0, 0, 0, 200,    // type: 'I', timestamp: 2000 (0x07D0), price: 200
-        'I', 0, 0, 0x0B, 0xB8, 0, 0, 0, 229,    // type: 'I', timestamp: 3000 (0x0BB8), price: 229
+        'I', 0, 0, 0x03, 0xE8, 0, 0, 0, 100, // type: 'I', timestamp: 1000 (0x03E8), price: 100
+        'I', 0, 0, 0x07, 0xD0, 0, 0, 0, 200, // type: 'I', timestamp: 2000 (0x07D0), price: 200
+        'I', 0, 0, 0x0B, 0xB8, 0, 0, 0, 229, // type: 'I', timestamp: 3000 (0x0BB8), price: 229
         'Q', 0, 0, 0x03, 0xE8, 0, 0, 0x0B, 0xB8, // type: 'Q', mintime: 1000, maxtime: 3000
         'Q', 0, 0, 0x07, 0xD0, 0, 0, 0x0B, 0xB8, // type: 'Q', mintime: 2000, maxtime: 3000
-        'Q', 0, 0, 0x0B, 0xB9, 0, 0, 0x0F, 0xA0  // type: 'Q', mintime: 3001, maxtime: 4000
+        'Q', 0, 0, 0x0B, 0xB9, 0, 0, 0x0F, 0xA0, // type: 'Q', mintime: 3001, maxtime: 4000
     };
 
     try messages_parse(std.mem.asBytes(&test_messages), &send_fifo, &assets);

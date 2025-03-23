@@ -84,7 +84,6 @@ pub const Queue = struct {
     }
 };
 
-
 // Tests
 test "Queue initialization and deinitialization" {
     var queue = try Queue.init();
