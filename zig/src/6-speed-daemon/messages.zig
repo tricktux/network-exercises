@@ -11,6 +11,7 @@ const Type = enum(u8) {
     Hearbeat = 0x41,
     IAmCamera = 0x80,
     IAmDispatcher = 0x81,
+    _,
 };
 
 const ErrorM = struct {
@@ -120,19 +121,20 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
         const mtype: Type = @enumFromInt(buf[start]);
         switch (mtype) {
             Type.Plate => {
-                if (buf.len < 7) return error.NotEnoughBytes;
+                if (buf.len - start < 7) return error.NotEnoughBytes;
 
                 std.log.info("(decode): Decoding plate message", .{});
                 const platelen = buf[start + 1];
                 const platestart = start + 2;
                 const plateend = platestart + platelen;
-                if (buf.len < plateend) return error.NotEnoughBytes;
+                if (buf.len < plateend) break;
                 // TODO: Transfer ownership to the message?
                 const plate: []const u8 = buf[platestart..plateend];
 
-                const timestampstart = platelen + 1;
-                const timestampend = platelen + 1 + 4;
-                if (buf.len < timestampend) return error.NotEnoughBytes;
+                const timestampstart = plateend;
+                const timestampend = timestampstart + 4;
+                if (buf.len < timestampend) break;
+                len += timestampend - start;
                 const timestamp: u32 = std.mem.readVarInt(u32, buf[timestampstart..timestampend], .big);
                 const platem = Plate{
                     .plate = plate,
@@ -141,8 +143,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
                 std.log.debug("(decode): plate: {s}, timestamp: {d}", .{ plate, timestamp });
                 const m = Message.initPlate(platem);
                 try array.append(m);
-                len += timestampend - start;
-                start = timestampend;
+                start += len;
                 std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
             },
             else => return error.InvalidMessageType,
@@ -175,14 +176,10 @@ test "decode - valid Plate message" {
     const plate_str = "ABC123";
     const timestamp: u32 = 12345;
 
-    var buf = [_]u8{
-        @intFromEnum(Type.Plate), // Message type
-        plate_str.len, // Plate length
-    };
-
     var full_buf = std.ArrayList(u8).init(testing.allocator);
     defer full_buf.deinit();
-    try full_buf.appendSlice(&buf);
+    try full_buf.append(@intFromEnum(Type.Plate));
+    try full_buf.append(plate_str.len);
     try full_buf.appendSlice(plate_str);
 
     // Add timestamp in big endian
@@ -227,8 +224,9 @@ test "decode - insufficient bytes for timestamp" {
     try buf.appendSlice("ABC"); // Complete plate
     try buf.appendSlice(&[_]u8{ 0, 0 }); // Incomplete timestamp (should be 4 bytes)
 
-    const result = decode(buf.items, &array);
-    try testing.expectError(error.NotEnoughBytes, result);
+    const result = try decode(buf.items, &array);
+    try testing.expectEqual(0, result);
+    try testing.expectEqual(0, array.len);
 }
 
 test "decode - plate messages" {
