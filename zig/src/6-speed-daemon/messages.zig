@@ -146,6 +146,21 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
                 start += len;
                 std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
             },
+            Type.WantHeartbeat => {
+                if (buf.len - start < 3) return error.NotEnoughBytes;
+
+                std.log.info("(decode): Decoding want-heartbeat message", .{});
+                const intervalstart = start + 1;
+                const intervalend = intervalstart + 4;
+                if (buf.len < intervalend) break;
+                len += intervalend - start;
+                const interval: u32 = std.mem.readVarInt(u32, buf[intervalstart..intervalend], .big);
+                std.log.debug("(decode): interval: {d}", .{ interval });
+                const m = Message.initWantHeartbeat(interval);
+                try array.append(m);
+                start += len;
+                std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
+            },
             else => return error.InvalidMessageType,
         }
     }
@@ -275,4 +290,56 @@ test "decode - plate messages" {
     try testing.expectEqual(Type.Plate, msg2.type);
     try testing.expectEqualStrings(plate2, msg2.data.plate.plate);
     try testing.expectEqual(timestamp2, msg2.data.plate.timestamp);
+}
+
+// Give me tests for Want Hearbeat
+test "decode want heartbeat" {
+    var array = try MessageBoundedArray.init(0);
+    var buf = std.ArrayList(u8).init(testing.allocator);
+    defer buf.deinit();
+    const interval: u32 = 12345;
+    try buf.append(@intFromEnum(Type.WantHeartbeat));
+    var interval_bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &interval_bytes, interval, .big);
+    try buf.appendSlice(&interval_bytes);
+    const bytes_consumed = try decode(buf.items, &array);
+    try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
+    try testing.expectEqual(@as(usize, 1), array.len);
+    const msg = array.buffer[0];
+    try testing.expectEqual(Type.WantHeartbeat, msg.type);
+    try testing.expectEqual(interval, msg.data.want_heartbeat.interval);
+}
+
+// Give me a set of tests with mixed messages
+test "decode mixed messages" {
+    var array = try MessageBoundedArray.init(0);
+    var buf = std.ArrayList(u8).init(testing.allocator);
+    defer buf.deinit();
+    // Plate message
+    const plate = "ABC123";
+    const timestamp: u32 = 12345;
+    try buf.append(@intFromEnum(Type.Plate));
+    try buf.append(plate.len);
+    try buf.appendSlice(plate);
+    var ts_bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &ts_bytes, timestamp, .big);
+    try buf.appendSlice(&ts_bytes);
+    // Want Heartbeat message
+    const interval: u32 = 12345;
+    try buf.append(@intFromEnum(Type.WantHeartbeat));
+    var interval_bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &interval_bytes, interval, .big);
+    try buf.appendSlice(&interval_bytes);
+    const bytes_consumed = try decode(buf.items, &array);
+    try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
+    try testing.expectEqual(@as(usize, 2), array.len);
+    // Check Plate message
+    const msg1 = array.buffer[0];
+    try testing.expectEqual(Type.Plate, msg1.type);
+    try testing.expectEqualStrings(plate, msg1.data.plate.plate);
+    try testing.expectEqual(timestamp, msg1.data.plate.timestamp);
+    // Check Want Heartbeat message
+    const msg2 = array.buffer[1];
+    try testing.expectEqual(Type.WantHeartbeat, msg2.type);
+    try testing.expectEqual(interval, msg2.data.want_heartbeat.interval);
 }
