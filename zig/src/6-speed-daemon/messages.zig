@@ -45,7 +45,7 @@ const IAmCamera = struct {
 
 const IAmDispatcher = struct {
     numroads: u16,
-    roads: []u16,
+    roads: std.ArrayList(u16),
 };
 
 // TODO: Add function to convert unix epoch timestamp to date
@@ -110,8 +110,17 @@ const DecodeError = error{
     NotEnoughBytes,
 };
 
-// TODO: Add return of number of bytes processed
-pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
+fn decode_u32(buf: []const u8) !u32 {
+    if (buf.len < 4) return error.NotEnoughBytes;
+    return std.mem.readVarInt(u32, buf, .big);
+}
+
+fn decode_u16(buf: []const u8) !u16 {
+    if (buf.len < 2) return error.NotEnoughBytes;
+    return std.mem.readVarInt(u16, buf, .big);
+}
+
+pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Allocator) !u16 {
     if (buf.len < 2) return error.NotEnoughBytes;
 
     var start: u16 = 0;
@@ -134,8 +143,8 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
                 const timestampstart = plateend;
                 const timestampend = timestampstart + 4;
                 if (buf.len < timestampend) break;
+                const timestamp: u32 = try decode_u32(buf[timestampstart..timestampend]);
                 len += timestampend - start;
-                const timestamp: u32 = std.mem.readVarInt(u32, buf[timestampstart..timestampend], .big);
                 const platem = Plate{
                     .plate = plate,
                     .timestamp = timestamp,
@@ -143,8 +152,6 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
                 std.log.debug("(decode): plate: {s}, timestamp: {d}", .{ plate, timestamp });
                 const m = Message.initPlate(platem);
                 try array.append(m);
-                start += len;
-                std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
             },
             Type.WantHeartbeat => {
                 if (buf.len - start < 3) return error.NotEnoughBytes;
@@ -153,16 +160,54 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
                 const intervalstart = start + 1;
                 const intervalend = intervalstart + 4;
                 if (buf.len < intervalend) break;
+                const interval: u32 = try decode_u32(buf[intervalstart..intervalend]);
                 len += intervalend - start;
-                const interval: u32 = std.mem.readVarInt(u32, buf[intervalstart..intervalend], .big);
-                std.log.debug("(decode): interval: {d}", .{ interval });
+                std.log.debug("(decode): interval: {d}", .{interval});
                 const m = Message.initWantHeartbeat(interval);
                 try array.append(m);
-                start += len;
-                std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
+            },
+            Type.IAmCamera => {
+                if (buf.len - start < 7) return error.NotEnoughBytes;
+
+                std.log.info("(decode): Decoding camera id message", .{});
+                const roadstart = start + 1;
+                const roadend = roadstart + 2;
+                const road: u16 = try decode_u16(buf[roadstart..roadend]);
+                const milestart = roadend;
+                const mileend = milestart + 2;
+                const mile: u16 = try decode_u16(buf[milestart..mileend]);
+                const limitstart = mileend;
+                const limitend = limitstart + 2;
+                const limit: u16 = try decode_u16(buf[limitstart..limitend]);
+                len += limitend - start;
+                const m = Message.initCamera(.{ .road = road, .mile = mile, .limit = limit });
+                std.log.debug("(decode): road: {d}, mile: {d}, limit: {d}", .{ road, mile, limit });
+                try array.append(m);
+            },
+            Type.IAmDispatcher => {
+                if (buf.len - start < 3) return error.NotEnoughBytes;
+                std.log.info("(decode): Decoding dispatcher message", .{});
+                const numroads: u8 = buf[start + 1];
+                if (buf.len < numroads * 2 + 1) return error.NotEnoughBytes;
+                var roadsstart = start + 2;
+                var roads = try std.ArrayList(u16).initCapacity(alloc, numroads);
+                var i: u8 = 0;
+                while (i < numroads) {
+                    const r = try decode_u16(buf[roadsstart .. roadsstart + 2]);
+                    try roads.append(r);
+                    roadsstart += 2;
+                    i += 1;
+                }
+                const m = Message.initDispatcher(.{ .numroads = numroads, .roads = roads });
+                len += numroads * 2 + 2 - start;
+                std.log.debug("(decode): numroads: {d}", .{numroads});
+                try array.append(m);
             },
             else => return error.InvalidMessageType,
         }
+        start += len;
+        std.debug.print("(decode): start: {d}, len: {d}, buf.len: {d}\n", .{ start, len, buf.len });
+        std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
     }
 
     return len;
@@ -171,7 +216,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray) !u16 {
 test "decode - empty buffer returns error" {
     var array = try MessageBoundedArray.init(0);
 
-    const result = decode(&[_]u8{}, &array);
+    const result = decode(&[_]u8{}, &array, std.testing.allocator);
     try testing.expectError(error.NotEnoughBytes, result);
     try testing.expectEqual(@as(usize, 0), array.len);
 }
@@ -180,7 +225,7 @@ test "decode - buffer with only type returns error" {
     var array = try MessageBoundedArray.init(0);
 
     const buf = [_]u8{@intFromEnum(Type.Plate)};
-    const result = decode(&buf, &array);
+    const result = decode(&buf, &array, std.testing.allocator);
     try testing.expectError(error.NotEnoughBytes, result);
 }
 
@@ -202,7 +247,7 @@ test "decode - valid Plate message" {
     std.mem.writeInt(u32, &ts_bytes, timestamp, .big);
     try full_buf.appendSlice(&ts_bytes);
 
-    const bytes_consumed = try decode(full_buf.items, &array);
+    const bytes_consumed = try decode(full_buf.items, &array, std.testing.allocator);
 
     // Check results
     try testing.expectEqual(@as(u16, @intCast(full_buf.items.len)), bytes_consumed);
@@ -224,7 +269,7 @@ test "decode - insufficient bytes for plate data" {
         'A', 'B', 'C', // Only 3 bytes of a 6-byte plate
     };
 
-    const result = decode(&buf, &array);
+    const result = decode(&buf, &array, std.testing.allocator);
     try testing.expectError(error.NotEnoughBytes, result);
 }
 
@@ -239,7 +284,7 @@ test "decode - insufficient bytes for timestamp" {
     try buf.appendSlice("ABC"); // Complete plate
     try buf.appendSlice(&[_]u8{ 0, 0 }); // Incomplete timestamp (should be 4 bytes)
 
-    const result = try decode(buf.items, &array);
+    const result = try decode(buf.items, &array, std.testing.allocator);
     try testing.expectEqual(0, result);
     try testing.expectEqual(0, array.len);
 }
@@ -274,7 +319,7 @@ test "decode - plate messages" {
     std.mem.writeInt(u32, &ts_bytes2, timestamp2, .big);
     try buf.appendSlice(&ts_bytes2);
 
-    const bytes_consumed = try decode(buf.items, &array);
+    const bytes_consumed = try decode(buf.items, &array, std.testing.allocator);
 
     try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
     try testing.expectEqual(@as(usize, 2), array.len);
@@ -302,7 +347,7 @@ test "decode want heartbeat" {
     var interval_bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &interval_bytes, interval, .big);
     try buf.appendSlice(&interval_bytes);
-    const bytes_consumed = try decode(buf.items, &array);
+    const bytes_consumed = try decode(buf.items, &array, std.testing.allocator);
     try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
     try testing.expectEqual(@as(usize, 1), array.len);
     const msg = array.buffer[0];
@@ -330,7 +375,7 @@ test "decode mixed messages" {
     var interval_bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &interval_bytes, interval, .big);
     try buf.appendSlice(&interval_bytes);
-    const bytes_consumed = try decode(buf.items, &array);
+    const bytes_consumed = try decode(buf.items, &array, std.testing.allocator);
     try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
     try testing.expectEqual(@as(usize, 2), array.len);
     // Check Plate message
@@ -342,4 +387,57 @@ test "decode mixed messages" {
     const msg2 = array.buffer[1];
     try testing.expectEqual(Type.WantHeartbeat, msg2.type);
     try testing.expectEqual(interval, msg2.data.want_heartbeat.interval);
+}
+
+test "decode IAmCamera message" {
+    var array = try MessageBoundedArray.init(0);
+    var buf = std.ArrayList(u8).init(testing.allocator);
+    defer buf.deinit();
+    const road: u16 = 123;
+    const mile: u16 = 456;
+    const limit: u16 = 789;
+    try buf.append(@intFromEnum(Type.IAmCamera));
+    var road_bytes: [2]u8 = undefined;
+    std.mem.writeInt(u16, &road_bytes, road, .big);
+    try buf.appendSlice(&road_bytes);
+    var mile_bytes: [2]u8 = undefined;
+    std.mem.writeInt(u16, &mile_bytes, mile, .big);
+    try buf.appendSlice(&mile_bytes);
+    var limit_bytes: [2]u8 = undefined;
+    std.mem.writeInt(u16, &limit_bytes, limit, .big);
+    try buf.appendSlice(&limit_bytes);
+    const bytes_consumed = try decode(buf.items, &array, std.testing.allocator);
+    try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
+    try testing.expectEqual(@as(usize, 1), array.len);
+    const msg = array.buffer[0];
+    try testing.expectEqual(Type.IAmCamera, msg.type);
+    try testing.expectEqual(road, msg.data.camera.road);
+    try testing.expectEqual(mile, msg.data.camera.mile);
+    try testing.expectEqual(limit, msg.data.camera.limit);
+}
+
+test "decode IAmDispatcher" {
+    var array = try MessageBoundedArray.init(0);
+    var buf = std.ArrayList(u8).init(testing.allocator);
+    defer buf.deinit();
+    const numroads: u8 = 3;
+    const roads = [_]u16{ 123, 456, 789 };
+    try buf.append(@intFromEnum(Type.IAmDispatcher));
+    try buf.append(numroads);
+    var i: u8 = 0;
+    while (i < numroads) : (i += 1) {
+        var road_bytes: [2]u8 = undefined;
+        std.mem.writeInt(u16, &road_bytes, roads[i], .big);
+        try buf.appendSlice(&road_bytes);
+    }
+    const bytes_consumed = try decode(buf.items, &array, std.testing.allocator);
+    try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
+    try testing.expectEqual(@as(usize, 1), array.len);
+    const msg = array.buffer[0];
+    try testing.expectEqual(Type.IAmDispatcher, msg.type);
+    try testing.expectEqual(numroads, msg.data.dispatcher.numroads);
+    i = 0;
+    while (i < numroads) : (i += 1) {
+        try testing.expectEqual(roads[i], msg.data.dispatcher.roads.items[i]);
+    }
 }
