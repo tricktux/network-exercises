@@ -160,12 +160,12 @@ const DecodeError = error{
     NotEnoughBytes,
 };
 
-fn decode_u32(buf: []const u8) !u32 {
+inline fn decode_u32(buf: []const u8) !u32 {
     if (buf.len < 4) return error.NotEnoughBytes;
     return std.mem.readVarInt(u32, buf, .big);
 }
 
-fn decode_u16(buf: []const u8) !u16 {
+inline fn decode_u16(buf: []const u8) !u16 {
     if (buf.len < 2) return error.NotEnoughBytes;
     return std.mem.readVarInt(u16, buf, .big);
 }
