@@ -1,7 +1,9 @@
 const std = @import("std");
+const time = @import("time.zig");
 const testing = std.testing;
 
 const MessageBoundedArray = std.BoundedArray(Message, 64);
+const u8BoundedArray = std.BoundedArray(u8, 1024);
 
 const Type = enum(u8) {
     ErrorM = 0x10,
@@ -48,9 +50,11 @@ const IAmDispatcher = struct {
     roads: std.ArrayList(u16),
 };
 
-// TODO: Add function to convert unix epoch timestamp to date
+const MessageError = error{
+    NotImplemented,
+};
+
 // TODO: Call deinit
-// TODO: Add function that returns binary representation
 const Message = struct {
     type: Type,
     data: union(enum) {
@@ -112,6 +116,41 @@ const Message = struct {
                 self.data.dispatcher.roads.deinit();
             },
             else => {},
+        }
+    }
+
+    pub fn host_to_network(self: Message, buf: *u8BoundedArray) !u16 {
+        try buf.append(@intFromEnum(self.type));
+        switch (self.type) {
+            Type.Ticket => {
+                const plate = self.data.plate;
+                try buf.append(plate.plate.len);
+                try buf.appendSlice(plate.plate);
+                var ts_bytes: [4]u8 = undefined;
+                std.mem.writeInt(u16, &ts_bytes, plate.road, .big);
+                try buf.appendSlice(&ts_bytes[0..2]);
+                std.mem.writeInt(u16, &ts_bytes, plate.mile1, .big);
+                try buf.appendSlice(&ts_bytes[0..2]);
+                std.mem.writeInt(u32, &ts_bytes, plate.timestamp1, .big);
+                try buf.appendSlice(&ts_bytes);
+                std.mem.writeInt(u16, &ts_bytes, plate.mile2, .big);
+                try buf.appendSlice(&ts_bytes[0..2]);
+                std.mem.writeInt(u32, &ts_bytes, plate.timestamp2, .big);
+                try buf.appendSlice(&ts_bytes);
+                std.mem.writeInt(u16, &ts_bytes, plate.speed, .big);
+                try buf.appendSlice(&ts_bytes[0..2]);
+            },
+            else => {},
+        }
+        return buf.items;
+    }
+
+    pub fn timestamp_to_date(self: *Message) !time.DateTime {
+        switch (self.type) {
+            Type.Plate => {
+                return time.DateTime.initUnix(@as(u64, @intCast(self.data.plate.timestamp)));
+            },
+            else => error.NotImplemented,
         }
     }
 };
@@ -217,8 +256,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
             else => return error.InvalidMessageType,
         }
         start += len;
-        std.debug.print("(decode): start: {d}, len: {d}, buf.len: {d}\n", .{ start, len, buf.len });
-        std.log.debug("(decode): start: {d}, len: {d}", .{ start, len });
+        std.log.debug("(decode): start: {d}, len: {d}, buf.len: {d}", .{ start, len, buf.len });
     }
 
     return len;
