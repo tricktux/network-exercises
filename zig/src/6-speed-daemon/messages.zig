@@ -8,7 +8,7 @@ const Type = enum(u8) {
     Plate = 0x20,
     Ticket = 0x21,
     WantHeartbeat = 0x40,
-    Hearbeat = 0x41,
+    Heartbeat = 0x41,
     IAmCamera = 0x80,
     IAmDispatcher = 0x81,
     _,
@@ -49,6 +49,8 @@ const IAmDispatcher = struct {
 };
 
 // TODO: Add function to convert unix epoch timestamp to date
+// TODO: Call deinit
+// TODO: Add function that returns binary representation
 const Message = struct {
     type: Type,
     data: union(enum) {
@@ -87,7 +89,7 @@ const Message = struct {
     }
 
     pub fn initHeartbeat() Message {
-        return Message{ .type = Type.Hearbeat, .data = .heartbeat{} };
+        return Message{ .type = Type.Heartbeat, .data = .heartbeat{} };
     }
 
     pub fn initCamera(camera: IAmCamera) Message {
@@ -102,6 +104,15 @@ const Message = struct {
             .type = Type.IAmDispatcher,
             .data = .{ .dispatcher = dispatcher },
         };
+    }
+
+    pub fn deinit(self: *Message) void {
+        switch (self.type) {
+            Type.IAmDispatcher => {
+                self.data.dispatcher.roads.deinit();
+            },
+            else => {},
+        }
     }
 };
 
@@ -219,6 +230,7 @@ test "decode - empty buffer returns error" {
     const result = decode(&[_]u8{}, &array, std.testing.allocator);
     try testing.expectError(error.NotEnoughBytes, result);
     try testing.expectEqual(@as(usize, 0), array.len);
+    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode - buffer with only type returns error" {
@@ -227,6 +239,7 @@ test "decode - buffer with only type returns error" {
     const buf = [_]u8{@intFromEnum(Type.Plate)};
     const result = decode(&buf, &array, std.testing.allocator);
     try testing.expectError(error.NotEnoughBytes, result);
+    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode - valid Plate message" {
@@ -257,6 +270,7 @@ test "decode - valid Plate message" {
     try testing.expectEqual(Type.Plate, msg.type);
     try testing.expectEqualStrings(plate_str, msg.data.plate.plate);
     try testing.expectEqual(timestamp, msg.data.plate.timestamp);
+    for (&array.buffer) |*msgs| msgs.deinit();
 }
 
 test "decode - insufficient bytes for plate data" {
@@ -271,6 +285,7 @@ test "decode - insufficient bytes for plate data" {
 
     const result = decode(&buf, &array, std.testing.allocator);
     try testing.expectError(error.NotEnoughBytes, result);
+    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode - insufficient bytes for timestamp" {
@@ -287,6 +302,7 @@ test "decode - insufficient bytes for timestamp" {
     const result = try decode(buf.items, &array, std.testing.allocator);
     try testing.expectEqual(0, result);
     try testing.expectEqual(0, array.len);
+    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode - plate messages" {
@@ -335,9 +351,10 @@ test "decode - plate messages" {
     try testing.expectEqual(Type.Plate, msg2.type);
     try testing.expectEqualStrings(plate2, msg2.data.plate.plate);
     try testing.expectEqual(timestamp2, msg2.data.plate.timestamp);
+    for (&array.buffer) |*msg| msg.deinit();
 }
 
-// Give me tests for Want Hearbeat
+// Give me tests for Want Heartbeat
 test "decode want heartbeat" {
     var array = try MessageBoundedArray.init(0);
     var buf = std.ArrayList(u8).init(testing.allocator);
@@ -353,6 +370,7 @@ test "decode want heartbeat" {
     const msg = array.buffer[0];
     try testing.expectEqual(Type.WantHeartbeat, msg.type);
     try testing.expectEqual(interval, msg.data.want_heartbeat.interval);
+    for (&array.buffer) |*msgs| msgs.deinit();
 }
 
 // Give me a set of tests with mixed messages
@@ -387,6 +405,7 @@ test "decode mixed messages" {
     const msg2 = array.buffer[1];
     try testing.expectEqual(Type.WantHeartbeat, msg2.type);
     try testing.expectEqual(interval, msg2.data.want_heartbeat.interval);
+    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode IAmCamera message" {
@@ -414,6 +433,7 @@ test "decode IAmCamera message" {
     try testing.expectEqual(road, msg.data.camera.road);
     try testing.expectEqual(mile, msg.data.camera.mile);
     try testing.expectEqual(limit, msg.data.camera.limit);
+    for (&array.buffer) |*msgs| msgs.deinit();
 }
 
 test "decode IAmDispatcher" {
@@ -440,4 +460,5 @@ test "decode IAmDispatcher" {
     while (i < numroads) : (i += 1) {
         try testing.expectEqual(roads[i], msg.data.dispatcher.roads.items[i]);
     }
+    for (&array.buffer) |*msgs| msgs.deinit();
 }
