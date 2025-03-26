@@ -46,7 +46,6 @@ const IAmCamera = struct {
 };
 
 const IAmDispatcher = struct {
-    numroads: u16,
     roads: std.ArrayList(u16),
 };
 
@@ -248,7 +247,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                     roadsstart += 2;
                     i += 1;
                 }
-                const m = Message.initDispatcher(.{ .numroads = numroads, .roads = roads });
+                const m = Message.initDispatcher(.{ .roads = roads });
                 len += numroads * 2 + 2 - start;
                 std.log.debug("(decode): numroads: {d}", .{numroads});
                 try array.append(m);
@@ -493,7 +492,6 @@ test "decode IAmDispatcher" {
     try testing.expectEqual(@as(usize, 1), array.len);
     const msg = array.buffer[0];
     try testing.expectEqual(Type.IAmDispatcher, msg.type);
-    try testing.expectEqual(numroads, msg.data.dispatcher.numroads);
     i = 0;
     while (i < numroads) : (i += 1) {
         try testing.expectEqual(roads[i], msg.data.dispatcher.roads.items[i]);
