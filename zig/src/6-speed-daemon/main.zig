@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const logger = @import("logger.zig");
 const messages = @import("messages.zig");
+const logic = @import("logic.zig");
 
 const linux = std.os.linux;
 const testing = std.testing;
