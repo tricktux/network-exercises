@@ -13,6 +13,7 @@ const Observations = std.ArrayList(Message);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
+const TimerHashMap = std.AutoHashMap(socketfd, Timer);
 
 // TODO: on main create a context with all the data
 const Context = struct {
@@ -37,6 +38,71 @@ const Context = struct {
 // - TimerHashMap = std.AutoHashMap(socketfd, Timer)
 // - Add function adds to epoll
 // - Remove function removes to epoll
+
+const Timer = struct {
+    fd: socketfd,
+    client: *Client,
+    interval: u64, // In deciseconds
+
+    pub fn init(client: *Client, interval: u64) !Timer {
+        const timerfd = try std.posix.timerfd_create(std.posix.CLOCK.MONOTONIC, std.posix.TFD.CLOEXEC | std.posix.TFD.NONBLOCK);
+
+        // Convert deciseconds to nanoseconds (1 decisecond = 100,000,000 nanoseconds)
+        const interval_ns = interval * 100_000_000;
+
+        const itimerspec = std.posix.itimerspec{
+            .it_interval = .{ .tv_sec = interval_ns / 1_000_000_000, .tv_nsec = interval_ns % 1_000_000_000 },
+            .it_value = .{ .tv_sec = interval_ns / 1_000_000_000, .tv_nsec = interval_ns % 1_000_000_000 },
+        };
+
+        try std.posix.timerfd_settime(timerfd, 0, &itimerspec, null);
+        return Timer{
+            .fd = timerfd,
+            .client = client,
+            .interval = interval_ns,
+        };
+    }
+
+    pub fn deinit(self: *Timer) void {
+        _ = std.posix.close(self.fd);
+    }
+};
+
+// TODO: Make all getPtr
+
+const Timers = struct {
+    map: TimerHashMap,
+    mutex: std.Thread.Mutex = .{},
+
+    pub fn init(alloc: std.mem.Allocator) !Timers {
+        return Timers{
+            .map = TimerHashMap.init(alloc),
+        };
+    }
+
+    pub fn deinit(self: *Timers) void {
+        self.map.deinit();
+    }
+
+    pub fn add(self: *Timers, timer: Timer) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        try self.map.put(timer.fd, timer);
+    }
+
+    pub fn get(self: *Timers, fd: socketfd) ?*Timer {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.map.getPtr(fd);
+    }
+
+    pub fn del(self: *Timers, fd: socketfd) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        // TODO call deinit
+        _ = self.map.remove(fd);
+    }
+};
 
 const ClientType = enum {
     Camera,
@@ -90,11 +156,11 @@ const Clients = struct {
         };
     }
 
-    pub fn deinit(self: *Clients) void {
+    pub fn deinit(self: *Clients, epoll: *EpollManager) void {
         // TODO: iterate deinit clients
         const it = self.map.iterator();
         for (it.next()) |client| {
-            client.deinit();
+            client.deinit(epoll);
         }
 
         self.map.deinit();
@@ -107,11 +173,11 @@ const Clients = struct {
         try self.map.put(client.fd, client);
     }
 
-    pub fn get(self: *Clients, fd: socketfd) ?Client {
+    pub fn get(self: *Clients, fd: socketfd) ?*Client {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        return self.map.get(fd);
+        return self.map.getPtr(fd);
     }
 
     pub fn del(self: *Clients, fd: socketfd) void {
@@ -126,7 +192,7 @@ const Clients = struct {
 const Client = struct {
     fd: socketfd,
     type: ClientType,
-    wantshearbaecon: bool = false,
+    timer: ?Timer,
     data: union {
         camera: Camera,
         dispatcher: Dispatcher,
@@ -134,6 +200,8 @@ const Client = struct {
 
     pub fn initWithCamera(fd: socketfd, message: Message) !Client {
         if (message.type != messages.Type.IAmCamera) return LogicError.MessageWrongType;
+        std.log.info("Creating camera client: road: {d}, mile: {d}, limit: {d}\n", .{ message.data.camera.road, message.data.camera.mile, message.data.camera.limit });
+
         return Client{
             .fd = fd,
             .type = ClientType.Camera,
@@ -143,6 +211,7 @@ const Client = struct {
 
     pub fn initWithDispatcher(fd: socketfd, message: Message) !Client {
         if (message.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
+        std.log.info("Creating dispatcher client with fd: {d}\n", .{fd});
         return Client{
             .fd = fd,
             .type = ClientType.Dispatcher,
@@ -150,7 +219,35 @@ const Client = struct {
         };
     }
 
-    pub fn deinit(self: *Client) void {
+    pub fn addTimer(self: *Client, interval: u64, epoll: *EpollManager) !void {
+        if (self.timer != null) return LogicError.AlreadyHasTimer;
+
+        std.log.info("Adding timer to client with interval: {d}\n", .{interval});
+        self.timer = try Timer.init(self, interval);
+        epoll.add(self.timer.?.fd);
+    }
+
+    // TODO: send heartbeat function
+    // pub fn sendHeartbeat(self: *Client) void {
+    //     const message = Message{
+    //         .type = messages.Type.Heartbeat,
+    //     };
+    //     const buffer = message.toBuffer();
+    //     const result = std.os.write(self.fd, buffer);
+    //     if (result != buffer.len) {
+    //         std.log.err("Error sending heartbeat to client with fd: {}\n", .{self.fd});
+    //     }
+    // }
+
+    pub fn deinit(self: *Client, epoll: *EpollManager) void {
+        if (self.timer != null) {
+            epoll.del(self.timer.?.fd);
+            self.timer.?.deinit();
+        }
+
+        epoll.del(self.fd) catch |err| {
+            std.log.err("Error removing client from epoll: {}\n", .{err});
+        };
         _ = std.posix.close(self.fd);
         switch (self.data) {
             .dispatcher => self.data.dispatcher.deinit(),
@@ -205,6 +302,7 @@ const Car = struct {
 const LogicError = error{
     EmptyPlate,
     MessageWrongType,
+    AlreadyHasTimer,
 };
 
 const Cars = struct {
@@ -240,13 +338,13 @@ const Cars = struct {
         try self.map.put(car.plate.toOwnedArray(), car);
     }
 
-    pub fn get(self: *Cars, plate: []const u8) ?Car {
+    pub fn get(self: *Cars, plate: []const u8) ?*Car {
         if (plate.len == 0) return LogicError.EmptyPlate;
 
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        return self.map.get(plate);
+        return self.map.getPtr(plate);
     }
 
     pub fn del(self: *Cars, plate: []const u8) void {
@@ -255,6 +353,7 @@ const Cars = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // TODO: Call deinit
         _ = self.map.remove(plate);
     }
 };
@@ -274,6 +373,20 @@ const Road = struct {
     pub fn deinit(self: *Road) void {
         self.cameras.deinit();
     }
+
+    pub fn addCameraId(self: *Road, camid: socketfd) !void {
+        try self.cameras.append(camid);
+    }
+
+    pub fn delCameraId(self: *Road, camid: socketfd) void {
+        const it = self.cameras.iterator();
+        while (it.next()) |id| {
+            if (id == camid) {
+                _ = self.cameras.remove(it.index());
+                break;
+            }
+        }
+    }
 };
 
 const Roads = struct {
@@ -290,23 +403,25 @@ const Roads = struct {
         self.map.deinit();
     }
 
+    // TODO: do we need a client here?
     pub fn add(self: *Roads, road: Road) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
         try self.map.put(road.road, road);
     }
 
-    pub fn get(self: *Roads, road: u16) ?Road {
+    pub fn get(self: *Roads, road: u16) ?*Road {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        return self.map.get(road);
+        return self.map.getPtr(road);
     }
 
     pub fn del(self: *Roads, road: u16) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // TODO call deinit
         _ = self.map.remove(road);
     }
 };
@@ -350,17 +465,18 @@ const Cameras = struct {
         try self.map.put(camera.key, camera);
     }
 
-    pub fn get(self: *Cameras, fd: socketfd) ?Camera {
+    pub fn get(self: *Cameras, fd: socketfd) ?*Camera {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        return self.map.get(fd);
+        return self.map.getPtr(fd);
     }
 
     pub fn del(self: *Cameras, fd: socketfd) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // TODO call deinit
         _ = self.map.remove(fd);
     }
 };
