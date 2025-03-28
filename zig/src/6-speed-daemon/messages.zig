@@ -1,9 +1,10 @@
 const std = @import("std");
 const time = @import("time.zig");
+const types = @import("types.zig");
 const testing = std.testing;
 
+const u8BoundedArray = types.u8BoundedArray;
 const MessageBoundedArray = std.BoundedArray(Message, 64);
-const u8BoundedArray = std.BoundedArray(u8, 1024);
 
 const Type = enum(u8) {
     ErrorM = 0x10,
