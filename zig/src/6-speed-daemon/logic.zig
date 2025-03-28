@@ -68,8 +68,6 @@ const Timer = struct {
     }
 };
 
-// TODO: Make all getPtr
-
 const Timers = struct {
     map: TimerHashMap,
     mutex: std.Thread.Mutex = .{},
@@ -99,8 +97,11 @@ const Timers = struct {
     pub fn del(self: *Timers, fd: socketfd) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        // TODO call deinit
-        _ = self.map.remove(fd);
+        if (self.map.fetchRemove(fd)) |timer| {
+            timer.value.deinit();
+        } else {
+            std.log.err("Error removing timer with fd: {d}\n", .{fd});
+        }
     }
 };
 
@@ -180,12 +181,15 @@ const Clients = struct {
         return self.map.getPtr(fd);
     }
 
-    pub fn del(self: *Clients, fd: socketfd) void {
+    pub fn del(self: *Clients, fd: socketfd, epoll: *EpollManager) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        _ = self.map.remove(fd);
-        // TODO: call deinit
+        if (self.map.fetchRemove(fd)) |client| {
+            client.value.deinit(epoll);
+        } else {
+            std.log.err("Error removing client with fd: {d}\n", .{fd});
+        }
     }
 };
 
@@ -353,8 +357,11 @@ const Cars = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        // TODO: Call deinit
-        _ = self.map.remove(plate);
+        if (self.map.fetchRemove(plate)) |car| {
+            car.value.deinit();
+        } else {
+            std.log.err("Error removing car with plate: {s}\n", .{plate});
+        }
     }
 };
 
@@ -421,8 +428,11 @@ const Roads = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        // TODO call deinit
-        _ = self.map.remove(road);
+        if (self.map.fetchRemove(road)) |r| {
+            r.value.deinit();
+        } else {
+            std.log.err("Error removing road with id: {d}\n", .{road});
+        }
     }
 };
 
@@ -476,7 +486,10 @@ const Cameras = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        // TODO call deinit
-        _ = self.map.remove(fd);
+        if (self.map.fetchRemove(fd)) |cam| {
+            cam.value.deinit();
+        } else {
+            std.log.err("Error removing camera with id: {d}\n", .{fd});
+        }
     }
 };
