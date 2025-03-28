@@ -3,13 +3,13 @@ const builtin = @import("builtin");
 
 pub var log_file: ?std.fs.File = null;
 pub var mutex = std.Thread.Mutex{};
+pub var buf: [2046]u8 = undefined;
 
 // TODO: pass log full path here
 pub fn init() !void {
     if (log_file != null) return;
 
     const timestamp = std.time.timestamp();
-    var buf: [64]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "/tmp/client_log_{d}.txt", .{timestamp});
 
     log_file = try std.fs.cwd().createFile(filename, .{});
@@ -52,7 +52,19 @@ pub fn customLogFn(
         defer mutex.unlock();
 
         if (log_file) |file| {
-            file.writer().print(prefix ++ format ++ "\n", args) catch {};
+            // file.writer().print(prefix ++ format ++ "\n", args) catch {};
+            // Get current timestamp
+            const timestamp = std.time.timestamp();
+
+            // Format the log message
+            const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
+                // If formatting fails, still try to log something
+                file.writer().print("[{d}] ERROR formatting log message\n", .{timestamp}) catch {};
+                return;
+            };
+
+            // Write with timestamp
+            file.writer().print("[{d}] {s}\n", .{timestamp, formatted_msg}) catch {};
         }
     }
 }
