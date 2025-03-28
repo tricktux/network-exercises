@@ -1,8 +1,10 @@
 const std = @import("std");
-const Message = @import("messages.zig").Message;
 const messages = @import("messages.zig");
+const types = @import("types.zig");
 const linux = std.os.linux;
 
+const u8BoundedArray = types.u8BoundedArray;
+const Message = messages.Message;
 const socketfd = std.posix.socket_t;
 const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
 const RoadHashMap = std.AutoHashMap(u16, Road);
@@ -22,22 +24,9 @@ const Context = struct {
     cameras: *Cameras,
     tickets: *Tickets,
     clients: *Clients,
+    epoll: *EpollManager,
+    timers: *Timers,
 };
-
-// TODO: Client
-// - timer = underfined
-// - OnWantHeartbeat
-//  - timer = Timer.init
-// - OnDeinit
-//  - timer.deinit
-// TODO: Timer
-// - timerfd
-// - &client
-// - interval
-// TODO: Timers
-// - TimerHashMap = std.AutoHashMap(socketfd, Timer)
-// - Add function adds to epoll
-// - Remove function removes to epoll
 
 const Timer = struct {
     fd: socketfd,
@@ -158,7 +147,6 @@ const Clients = struct {
     }
 
     pub fn deinit(self: *Clients, epoll: *EpollManager) void {
-        // TODO: iterate deinit clients
         const it = self.map.iterator();
         for (it.next()) |client| {
             client.deinit(epoll);
@@ -167,10 +155,11 @@ const Clients = struct {
         self.map.deinit();
     }
 
-    pub fn add(self: *Clients, client: Client) !void {
+    pub fn add(self: *Clients, client: Client, epoll: *EpollManager) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        epoll.add(client.fd);
         try self.map.put(client.fd, client);
     }
 
@@ -231,17 +220,16 @@ const Client = struct {
         epoll.add(self.timer.?.fd);
     }
 
-    // TODO: send heartbeat function
-    // pub fn sendHeartbeat(self: *Client) void {
-    //     const message = Message{
-    //         .type = messages.Type.Heartbeat,
-    //     };
-    //     const buffer = message.toBuffer();
-    //     const result = std.os.write(self.fd, buffer);
-    //     if (result != buffer.len) {
-    //         std.log.err("Error sending heartbeat to client with fd: {}\n", .{self.fd});
-    //     }
-    // }
+    pub fn sendHeartbeat(self: *Client) !void {
+        const m = Message.initHeartbeat();
+        const buf = u8BoundedArray.init(0);
+        std.log.debug("Sending heartbeat to client with fd: {d}\n", .{self.fd});
+        _ = try m.host_to_network(m, &buf);
+        const result = try std.posix.write(self.fd, buf.constSlice());
+        if (result != buf.len) {
+            std.log.err("Error sending heartbeat to client with fd: {}\n", .{self.fd});
+        }
+    }
 
     pub fn deinit(self: *Client, epoll: *EpollManager) void {
         if (self.timer != null) {
