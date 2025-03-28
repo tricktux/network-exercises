@@ -1,6 +1,7 @@
 const std = @import("std");
 const Message = @import("messages.zig").Message;
 const messages = @import("messages.zig");
+const linux = std.os.linux;
 
 const socketfd = std.posix.socket_t;
 const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
@@ -11,6 +12,7 @@ const Tickets = std.ArrayList(Ticket);
 const Observations = std.ArrayList(Message);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
+const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
 
 // TODO: on main create a context with all the data
 const Context = struct {
@@ -21,9 +23,66 @@ const Context = struct {
     clients: *Clients,
 };
 
+// TODO: Client
+// - timer = underfined
+// - OnWantHeartbeat
+//  - timer = Timer.init
+// - OnDeinit
+//  - timer.deinit
+// TODO: Timer
+// - timerfd
+// - &client
+// - interval
+// TODO: Timers
+// - TimerHashMap = std.AutoHashMap(socketfd, Timer)
+// - Add function adds to epoll
+// - Remove function removes to epoll
+
 const ClientType = enum {
     Camera,
     Dispatcher,
+};
+
+const EpollManager = struct {
+    epollfd: socketfd,
+    event_flags: comptime_int = linux.EPOLL.IN | linux.EPOLL.ET,
+    // TODO: is `epoll_ctl` thread safe? Is this needed?
+    mutex: std.Thread.Mutex = .{},
+    ready_events: EpollEventsArray,
+
+    pub fn init() !EpollManager {
+        const epollfd = try std.posix.epoll_create1(0);
+        return EpollManager{
+            .epollfd = epollfd,
+            .ready_events = EpollEventsArray.init(0),
+        };
+    }
+
+    pub fn deinit(self: *EpollManager) void {
+        _ = std.posix.close(self.epollfd);
+    }
+
+    pub fn add(self: *EpollManager, fd: socketfd) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const event = std.posix.epoll_event{
+            .events = self.event_flags,
+            .data = .{ .fd = fd },
+        };
+
+        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_ADD, fd, &event);
+    }
+
+    pub fn remove(self: *EpollManager, fd: socketfd) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_DEL, fd, null);
+    }
+
+    // TODO: Add wait function that returns &ready_events
+    // TODO: Takes in a timeout value
 };
 
 const Clients = struct {
@@ -65,6 +124,7 @@ const Clients = struct {
 const Client = struct {
     fd: socketfd,
     type: ClientType,
+    wantshearbaecon: bool = false,
     data: union {
         camera: Camera,
         dispatcher: Dispatcher,
