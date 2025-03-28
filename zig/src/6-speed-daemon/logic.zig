@@ -124,7 +124,7 @@ pub const EpollManager = struct {
     }
 
     pub fn mod(self: *EpollManager, fd: socketfd) !void {
-        const event = std.posix.epoll_event{
+        var event = linux.epoll_event{
             .events = self.event_flags,
             .data = .{ .fd = fd },
         };

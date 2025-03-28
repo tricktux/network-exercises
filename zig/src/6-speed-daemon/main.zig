@@ -118,6 +118,9 @@ fn handle_events(ctx: *Context, serverfd: socketfd) void {
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_list[0..ready_count]) |ready| {
             const ready_socket = ready.data.fd;
+            defer ctx.epoll.mod(ready_socket) catch |err| {
+                std.log.err("Failed to re-add socket to epoll: {!}", .{err});
+            };
             // TODO: Check for timer event
             // TODO: Check for client closing event
             if (ready_socket == serverfd) {
