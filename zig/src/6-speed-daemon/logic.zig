@@ -45,16 +45,12 @@ const ClientType = enum {
 
 const EpollManager = struct {
     epollfd: socketfd,
-    event_flags: comptime_int = linux.EPOLL.IN | linux.EPOLL.ET,
-    // TODO: is `epoll_ctl` thread safe? Is this needed?
-    mutex: std.Thread.Mutex = .{},
-    ready_events: EpollEventsArray,
+    event_flags: comptime_int = linux.EPOLL.IN | linux.EPOLL.ET | linux.EPOLL.RDHUP | linux.EPOLL.ONESHOT,
 
     pub fn init() !EpollManager {
         const epollfd = try std.posix.epoll_create1(0);
         return EpollManager{
             .epollfd = epollfd,
-            .ready_events = EpollEventsArray.init(0),
         };
     }
 
@@ -63,9 +59,6 @@ const EpollManager = struct {
     }
 
     pub fn add(self: *EpollManager, fd: socketfd) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
         const event = std.posix.epoll_event{
             .events = self.event_flags,
             .data = .{ .fd = fd },
@@ -74,15 +67,17 @@ const EpollManager = struct {
         try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_ADD, fd, &event);
     }
 
-    pub fn remove(self: *EpollManager, fd: socketfd) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_DEL, fd, null);
+    pub fn mod(self: *EpollManager, fd: socketfd) !void {
+        const event = std.posix.epoll_event{
+            .events = self.event_flags,
+            .data = .{ .fd = fd },
+        };
+        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_MOD, fd, &event);
     }
 
-    // TODO: Add wait function that returns &ready_events
-    // TODO: Takes in a timeout value
+    pub fn del(self: *EpollManager, fd: socketfd) !void {
+        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_DEL, fd, null);
+    }
 };
 
 const Clients = struct {
