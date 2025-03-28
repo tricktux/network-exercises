@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const logger = @import("logger.zig");
 const messages = @import("messages.zig");
 const logic = @import("logic.zig");
+const types = @import("types.zig");
 
 const linux = std.os.linux;
 const testing = std.testing;
@@ -10,6 +11,7 @@ const fmt = std.fmt;
 const time = std.time;
 const Thread = std.Thread;
 
+const socketfd = types.socketfd;
 const Context = logic.Context;
 const Cars = logic.Cars;
 const Car = logic.Car;
@@ -81,47 +83,55 @@ pub fn main() !void {
     var cars = try Cars.init(allocator);
     var roads = try Roads.init(allocator);
     var cameras = try Cameras.init(allocator);
-    var tickets = try Tickets.init(allocator);
+    var tickets = Tickets.init(allocator);
     var clients = try Clients.init(allocator);
     var timers = try Timers.init(allocator);
-    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .timers = &timers };
-    _ = ctx.timers.init(allocator);
+    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
 
     const serverfd = server.stream.handle;
     try epoll.add(serverfd);
 
-    // Initialize thread pool
-    // const cpus = try std.Thread.getCpuCount();
-    // var threads: [cpus]std.Thread = undefined;
-    // for (cpus) |i| {
-    //     threads[i] = try std.Thread.spawnChild(handle_connection, .{ server, allocator });
-    // }
-    // for (cpus) |i| {
-    //     try threads[i].join();
-    // }
+    // Initialize Threads
+    const cpus = try std.Thread.getCpuCount();
+    var threads = try std.ArrayList(std.Thread).initCapacity(allocator, cpus);
+    const spawn_config = std.Thread.SpawnConfig{ .allocator = allocator };
+    var i: usize = 0;
+    while (i < cpus) : (i += 1) {
+        const t = try std.Thread.spawn(spawn_config, handle_events, .{ &ctx, serverfd });
+        try threads.append(t);
+    }
+    std.log.debug("Main spawned '{d}' threads", .{cpus});
+    i = 0;
+    while (i < cpus) : (i += 1) threads.items[i].join();
+}
+
+fn handle_events(ctx: *Context, serverfd: socketfd) void {
+    const thread_id = std.Thread.getCurrentId();
     // TODO: Turn this into it's own function that the threads will spawn
-    // var ready_list: [kernel_backlog]linux.epoll_event = undefined;
-    //
-    // std.log.debug("ThreadPool initialized with {} capacity", .{cpus});
-    // std.log.debug("We are listeninig baby!!!...", .{});
-    // const thread_id = std.Thread.getCurrentId();
-    // while (true) {
-    //     std.log.debug("({d}): waiting for a new event...", .{thread_id});
-    //     // try tp.spawn(handle_connection, .{ connection, allocator });
-    //     const ready_count = std.posix.epoll_wait(epollfd, &ready_list, -1);
-    //     std.log.debug("got '{d}' events", .{ready_count});
-    //     for (ready_list[0..ready_count]) |ready| {
-    //         const ready_socket = ready.data.fd;
-    //         if (ready_socket == serverfd) {
-    //             std.log.debug("({d}): got new connection!!!", .{thread_id});
-    //             try tp.spawn(handle_connection, .{ &map, ctx, allocator });
-    //         } else {
-    //             // ctx.clientfd = ready_socket;
-    //             std.log.debug("({d}): got new message!!!", .{thread_id});
-    //             try tp.spawn(handle_messge, .{ &map, ctx });
-    //         }
-    //     }
-    // }
+    var ready_list: [kernel_backlog]linux.epoll_event = undefined;
+
+    std.log.debug("We are listeninig baby!!!...", .{});
+    while (true) {
+        std.log.debug("({d}): waiting for a new event...", .{thread_id});
+        // try tp.spawn(handle_connection, .{ connection, allocator });
+        const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, &ready_list, -1);
+        std.log.debug("got '{d}' events", .{ready_count});
+        for (ready_list[0..ready_count]) |ready| {
+            const ready_socket = ready.data.fd;
+            // TODO: Check for timer event
+            // TODO: Check for client closing event
+            if (ready_socket == serverfd) {
+                std.log.debug("({d}): got new connection!!!", .{thread_id});
+                // TODO: do something
+                // try tp.spawn(handle_connection, .{ &map, ctx, allocator });
+            } else {
+                // ctx.clientfd = ready_socket;
+                std.log.debug("({d}): got new message!!!", .{thread_id});
+                // TODO: do something
+                // try tp.spawn(handle_messge, .{ &map, ctx });
+            }
+        }
+    }
 }
 
 test {
