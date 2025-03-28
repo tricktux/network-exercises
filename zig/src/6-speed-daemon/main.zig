@@ -71,25 +71,35 @@ pub fn main() !void {
         }
     }
 
-    // Initialize thread pool
-    const cpus = try std.Thread.getCpuCount();
-    var tp: std.Thread.Pool = undefined;
-    try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
-    defer tp.deinit();
+    // var tp: std.Thread.Pool = undefined;
+    // try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
+    // defer tp.deinit();
 
     // TODO Create the world
-    // Epoll creation
     var epoll = try EpollManager.init();
-    // var cars = Cars.init(allocator);
-    // var roads = Roads.init(allocator);
-    // var cameras = Cameras.init(allocator);
-    // var tickets = Tickets.init(allocator);
-    // var clients = Clients.init(allocator);
-    // var timers = Timers.init(allocator);
+    defer epoll.deinit();
+    var cars = try Cars.init(allocator);
+    var roads = try Roads.init(allocator);
+    var cameras = try Cameras.init(allocator);
+    var tickets = try Tickets.init(allocator);
+    var clients = try Clients.init(allocator);
+    var timers = try Timers.init(allocator);
+    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .timers = &timers };
+    _ = ctx.timers.init(allocator);
 
     const serverfd = server.stream.handle;
     try epoll.add(serverfd);
 
+    // Initialize thread pool
+    // const cpus = try std.Thread.getCpuCount();
+    // var threads: [cpus]std.Thread = undefined;
+    // for (cpus) |i| {
+    //     threads[i] = try std.Thread.spawnChild(handle_connection, .{ server, allocator });
+    // }
+    // for (cpus) |i| {
+    //     try threads[i].join();
+    // }
+    // TODO: Turn this into it's own function that the threads will spawn
     // var ready_list: [kernel_backlog]linux.epoll_event = undefined;
     //
     // std.log.debug("ThreadPool initialized with {} capacity", .{cpus});
@@ -104,11 +114,11 @@ pub fn main() !void {
     //         const ready_socket = ready.data.fd;
     //         if (ready_socket == serverfd) {
     //             std.log.debug("({d}): got new connection!!!", .{thread_id});
-    //             // try tp.spawn(handle_connection, .{ &map, ctx, allocator });
+    //             try tp.spawn(handle_connection, .{ &map, ctx, allocator });
     //         } else {
     //             // ctx.clientfd = ready_socket;
     //             std.log.debug("({d}): got new message!!!", .{thread_id});
-    //             // try tp.spawn(handle_messge, .{ &map, ctx });
+    //             try tp.spawn(handle_messge, .{ &map, ctx });
     //         }
     //     }
     // }
