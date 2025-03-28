@@ -55,7 +55,7 @@ const MessageError = error{
 };
 
 // TODO: Call deinit
-const Message = struct {
+pub const Message = struct {
     type: Type,
     data: union(enum) {
         errorm: ErrorM,

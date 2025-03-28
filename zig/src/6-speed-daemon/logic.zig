@@ -5,12 +5,12 @@ const linux = std.os.linux;
 
 const u8BoundedArray = types.u8BoundedArray;
 const Message = messages.Message;
-const socketfd = std.posix.socket_t;
+const socketfd = types.socketfd;
 const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
 const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
-const Tickets = std.ArrayList(Ticket);
+pub const Tickets = std.ArrayList(Ticket);
 const Observations = std.ArrayList(Message);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
