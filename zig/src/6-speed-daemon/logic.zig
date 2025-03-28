@@ -96,6 +96,12 @@ const Clients = struct {
     }
 
     pub fn deinit(self: *Clients) void {
+        // TODO: iterate deinit clients
+        const it = self.map.iterator();
+        for (it.next()) |client| {
+            client.deinit();
+        }
+
         self.map.deinit();
     }
 
@@ -118,6 +124,7 @@ const Clients = struct {
         defer self.mutex.unlock();
 
         _ = self.map.remove(fd);
+        // TODO: call deinit
     }
 };
 
@@ -149,6 +156,7 @@ const Client = struct {
     }
 
     pub fn deinit(self: *Client) void {
+        _ = std.posix.close(self.fd);
         switch (self.data) {
             .dispatcher => self.data.dispatcher.deinit(),
             else => {},
