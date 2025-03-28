@@ -18,7 +18,7 @@ const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
 const TimerHashMap = std.AutoHashMap(socketfd, Timer);
 
 // TODO: on main create a context with all the data
-const Context = struct {
+pub const Context = struct {
     cars: *Cars,
     roads: *Roads,
     cameras: *Cameras,
@@ -28,7 +28,7 @@ const Context = struct {
     timers: *Timers,
 };
 
-const Timer = struct {
+pub const Timer = struct {
     fd: socketfd,
     client: *Client,
     interval: u64, // In deciseconds
@@ -57,7 +57,7 @@ const Timer = struct {
     }
 };
 
-const Timers = struct {
+pub const Timers = struct {
     map: TimerHashMap,
     mutex: std.Thread.Mutex = .{},
 
@@ -94,14 +94,14 @@ const Timers = struct {
     }
 };
 
-const ClientType = enum {
+pub const ClientType = enum {
     Camera,
     Dispatcher,
 };
 
-const EpollManager = struct {
+pub const EpollManager = struct {
     epollfd: socketfd,
-    event_flags: comptime_int = linux.EPOLL.IN | linux.EPOLL.ET | linux.EPOLL.RDHUP | linux.EPOLL.ONESHOT,
+    event_flags: u32 = linux.EPOLL.IN | linux.EPOLL.ET | linux.EPOLL.RDHUP | linux.EPOLL.ONESHOT,
 
     pub fn init() !EpollManager {
         const epollfd = try std.posix.epoll_create1(0);
@@ -115,12 +115,12 @@ const EpollManager = struct {
     }
 
     pub fn add(self: *EpollManager, fd: socketfd) !void {
-        const event = std.posix.epoll_event{
+        var event = linux.epoll_event{
             .events = self.event_flags,
             .data = .{ .fd = fd },
         };
 
-        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_ADD, fd, &event);
+        try std.posix.epoll_ctl(self.epollfd, linux.EPOLL.CTL_ADD, fd, &event);
     }
 
     pub fn mod(self: *EpollManager, fd: socketfd) !void {
@@ -128,15 +128,15 @@ const EpollManager = struct {
             .events = self.event_flags,
             .data = .{ .fd = fd },
         };
-        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_MOD, fd, &event);
+        try std.posix.epoll_ctl(self.epollfd, linux.EPOLL.CTL_MOD, fd, &event);
     }
 
     pub fn del(self: *EpollManager, fd: socketfd) !void {
-        try std.posix.epoll_ctl(self.epollfd, std.posix.EPOLL_CTL_DEL, fd, null);
+        try std.posix.epoll_ctl(self.epollfd, linux.EPOLL.CTL_DEL, fd, null);
     }
 };
 
-const Clients = struct {
+pub const Clients = struct {
     map: ClientHashMap,
     mutex: std.Thread.Mutex = .{},
 
@@ -182,7 +182,7 @@ const Clients = struct {
     }
 };
 
-const Client = struct {
+pub const Client = struct {
     fd: socketfd,
     type: ClientType,
     timer: ?Timer,
@@ -248,7 +248,7 @@ const Client = struct {
     }
 };
 
-const Dispatcher = struct {
+pub const Dispatcher = struct {
     fd: socketfd,
     roads: std.ArrayList(u16),
 
@@ -266,12 +266,12 @@ const Dispatcher = struct {
     }
 };
 
-const Ticket = struct {
+pub const Ticket = struct {
     dispatched: bool = false,
     ticket: Message,
 };
 
-const Car = struct {
+pub const Car = struct {
     plate: String,
     tickets: Tickets,
     observations: Observations,
@@ -291,13 +291,13 @@ const Car = struct {
     }
 };
 
-const LogicError = error{
+pub const LogicError = error{
     EmptyPlate,
     MessageWrongType,
     AlreadyHasTimer,
 };
 
-const Cars = struct {
+pub const Cars = struct {
     map: CarHashMap,
     mutex: std.Thread.Mutex = .{},
     allocator: std.mem.Allocator,
@@ -353,7 +353,7 @@ const Cars = struct {
     }
 };
 
-const Road = struct {
+pub const Road = struct {
     road: u16,
     speed_limit: ?u16 = null,
     dispatcher: ?socketfd = null, // Dispatcher associated with this road
@@ -384,7 +384,7 @@ const Road = struct {
     }
 };
 
-const Roads = struct {
+pub const Roads = struct {
     map: RoadHashMap,
     mutex: std.Thread.Mutex = .{},
 
@@ -424,7 +424,7 @@ const Roads = struct {
     }
 };
 
-const Camera = struct {
+pub const Camera = struct {
     fd: socketfd,
     road: u16,
     mile: u16,
@@ -442,7 +442,7 @@ const Camera = struct {
     }
 };
 
-const Cameras = struct {
+pub const Cameras = struct {
     map: CameraHashMap,
     mutex: std.Thread.Mutex = .{},
 
