@@ -64,7 +64,7 @@ pub fn customLogFn(
             };
 
             // Write with timestamp
-            file.writer().print("[{d}] {s}\n", .{timestamp, formatted_msg}) catch {};
+            file.writer().print("[{d}] {s}\n", .{ timestamp, formatted_msg }) catch {};
         }
     }
 }
