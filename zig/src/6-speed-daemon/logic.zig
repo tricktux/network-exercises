@@ -114,7 +114,7 @@ const Clients = struct {
         return self.map.get(fd);
     }
 
-    pub fn remove(self: *Clients, fd: socketfd) void {
+    pub fn del(self: *Clients, fd: socketfd) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -249,7 +249,7 @@ const Cars = struct {
         return self.map.get(plate);
     }
 
-    pub fn remove(self: *Cars, plate: []const u8) void {
+    pub fn del(self: *Cars, plate: []const u8) void {
         if (plate.len == 0) return LogicError.EmptyPlate;
 
         self.mutex.lock();
@@ -303,7 +303,7 @@ const Roads = struct {
         return self.map.get(road);
     }
 
-    pub fn remove(self: *Roads, road: u16) void {
+    pub fn del(self: *Roads, road: u16) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -357,7 +357,7 @@ const Cameras = struct {
         return self.map.get(fd);
     }
 
-    pub fn remove(self: *Cameras, fd: socketfd) void {
+    pub fn del(self: *Cameras, fd: socketfd) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
