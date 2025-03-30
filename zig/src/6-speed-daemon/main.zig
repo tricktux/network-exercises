@@ -20,12 +20,12 @@ const Road = logic.Road;
 const Cameras = logic.Cameras;
 const Camera = logic.Camera;
 const Tickets = logic.Tickets;
-const Ticket = logic.Ticket;
-const Clients = logic.Clients;
-const Client = logic.Client;
+const TicketsQueue = logic.TicketsQueue;
 const EpollManager = logic.EpollManager;
 const Timers = logic.Timers;
 const Timer = logic.Timer;
+const Clients = logic.Clients;
+const Client = logic.Client;
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -76,14 +76,14 @@ pub fn main() !void {
     // Create the world
     var epoll = try EpollManager.init();
     defer epoll.deinit();
-    var cars = try Cars.init(allocator);
+    var tickets = TicketsQueue.init(allocator);
+    defer tickets.deinit();
+    var cars = try Cars.init(allocator, &tickets);
     defer cars.deinit();
     var roads = try Roads.init(allocator);
     defer roads.deinit();
     var cameras = try Cameras.init(allocator);
     defer cameras.deinit();
-    var tickets = Tickets.init(allocator);
-    defer tickets.deinit();
     var clients = try Clients.init(allocator);
     defer clients.deinit(&epoll) catch |err| {
         std.log.err("Failed to deinit clients: {!}", .{err});
