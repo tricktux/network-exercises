@@ -11,7 +11,7 @@ const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
 const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
-pub const TicketsQueue = std.ArrayList(Message);  // Of Type.Ticket
+pub const TicketsQueue = std.ArrayList(Message); // Of Type.Ticket
 const Tickets = std.SinglyLinkedList([]u8);
 const Observations = std.ArrayList(Observation);
 const ObservationsHashMap = std.StringHashMap(Observations);
@@ -280,7 +280,7 @@ pub const Observation = struct {
 pub const Car = struct {
     plate: String,
     tickets_queue: *TicketsQueue,
-    tickets: Tickets,  // Non owning list of all observations keys that cause a
+    tickets: Tickets, // Non owning list of all observations keys that cause a
     // ticket. For easy check if a car has a ticket on this road, on this date
     observationsmap: ObservationsHashMap,
     alloc: std.mem.Allocator,
@@ -310,6 +310,8 @@ pub const Car = struct {
         return try std.fmt.bufPrint(&buf, "{d}-{MM/dd/YYYY}", .{ road, timestamp });
     }
 
+    // TODO: Check after calling this function the global tickets_queue and send
+    // them out
     pub fn addObservation(self: *Car, message: Message, cam: *Camera) !void {
         if (message.type != messages.Type.Plate) return LogicError.MessageWrongType;
         if (message.data.plate.len == 0) return LogicError.EmptyPlate;
@@ -318,43 +320,37 @@ pub const Car = struct {
 
         const timestamp = time.timestamp_to_date(message.timestamp);
 
+        // Get the unique key for this observation
         const buf: [1024]u8 = undefined;
-        const store = try createUniqueKey(cam.road, timestamp, &buf);
+        const key = try createUniqueKey(cam.road, timestamp, &buf);
         std.log.info("Adding observation to car with plate: {s}, timestamp: {time.format.lll}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, message.timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
-        if (self.observationsmap.contains(store)) {
+
+        // Add to observations map or create a new one key
+        var observations: Observations = undefined;
+        if (self.observationsmap.contains(key)) {
             // Just add it to the existing list
-            var observations = self.observationsmap.get(store).?;
-            try observations.append(o);
+            var obs = self.observationsmap.get(key).?;
+            try obs.append(o);
+            observations = obs;
         } else {
             // Create a permanent copy of the key
-            const key = try self.alloc.dupe(u8, store);
+            const key_dupe = try self.alloc.dupe(u8, key);
 
             // Add it to the observation to the map
-            var observations = try Observations.initCapacity(self.alloc, 4);
-            try observations.append(o);
-            try self.observationsmap.put(key, observations);
+            var obs = try Observations.initCapacity(self.alloc, 4);
+            try obs.append(o);
+            try self.observationsmap.put(key_dupe, obs);
+            return;
         }
-    }
 
-    pub fn checkSpeedViolation(self: *Car, cam: *Camera) !bool {
-        if (!self.observationsmap.contains(cam.road)) return false;
-        // var observations = self.observationsmap.get(cam.road).?;
-        // const it = observations.iterator();
-        // // TODO: When ticket detected:
-        // // - Add it to the tickets queue
-        // // - Add it to the tickets list
-        // var avg_speed: u64 = 0;
-        // while (it.next()) |observation| {
-        //
-        //     // speed is distance over time
-        //
-        //     // if (observation.speed_limit < cam.speed_limit) {
-        //     //     std.log.info("Speed violation detected for car with plate: {s}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, observation.road, observation.mile, observation.speed_limit });
-        //     //     return true;
-        //     // }
-        // }
-        return false;
+        // We have more than one observation on the same day on the same road
+        // Check if there has been a violation
+        // TODO: Check tickets list for this road and date
+        // - If there's an entry we aleady issued a ticket for this date. return
+        // TODO: Sort observations by timestamp
+        // TODO: Compute speed as (mile2 - mile1)/(time2 - time1)
+        // TODO: If speed > speed_limit, add ticket to tickets_queue and to tickets list
     }
 };
 
