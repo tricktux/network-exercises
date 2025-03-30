@@ -54,6 +54,7 @@ const MessageError = error{
     NotImplemented,
 };
 
+// TODO: Messages
 // TODO: Call deinit
 pub const Message = struct {
     type: Type,
@@ -152,6 +153,18 @@ pub const Message = struct {
             },
             else => error.NotImplemented,
         }
+    }
+};
+
+const Messages = struct {
+    array: MessageBoundedArray,
+
+    pub fn init(capacity: usize) !Messages {
+        return Messages{ .array = try MessageBoundedArray.init(capacity) };
+    }
+
+    pub fn deinit(self: *Messages) void {
+        for (&self.array.buffer) |*msg| msg.deinit();
     }
 };
 
