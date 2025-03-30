@@ -283,10 +283,8 @@ pub const Car = struct {
     tickets: Tickets,  // Non owning list of all observations keys that cause a
     // ticket. For easy check if a car has a ticket on this road, on this date
     observationsmap: ObservationsHashMap,
-    observationkeys: ObservationsKeysStore = ObservationsKeysStore{},
     alloc: std.mem.Allocator,
 
-    // TODO: InitFromMessage
     pub fn init(alloc: std.mem.Allocator, tickets: *TicketsQueue) !Car {
         return Car{
             .plate = try String.initCapacity(alloc, 32),
@@ -303,41 +301,39 @@ pub const Car = struct {
         var it = self.observationsmap.iterator();
         while (it.next()) |observations| {
             observations.value_ptr.deinit();
+            self.alloc.free(observations.key_ptr.*);
         }
-        // TODO: deinit observationkeys
         self.observationsmap.deinit();
     }
 
-    fn createUniqueKey(self: *Car, road: u16, timestamp: time.DateTime) ![]u8 {
-        var key: [1024]u8 = undefined;
-        const k = std.fmt.bufPrint(&key, "{d}-{MM/dd/YYYY}", .{ road, timestamp });
-        return try self.alloc.dupe(u8, k);
+    fn createUniqueKey(road: u16, timestamp: time.DateTime, buf: []const u8) ![]u8 {
+        return try std.fmt.bufPrint(&buf, "{d}-{MM/dd/YYYY}", .{ road, timestamp });
     }
 
     pub fn addObservation(self: *Car, message: Message, cam: *Camera) !void {
         if (message.type != messages.Type.Plate) return LogicError.MessageWrongType;
         if (message.data.plate.len == 0) return LogicError.EmptyPlate;
-        // TODO: Return Error
-        if (self.plate.items.len == 0) try self.plate.appendSlice(message.data.plate);
+        if (self.plate.items.len == 0) return LogicError.EmptyPlate;
         if (!std.mem.eql(u8, message.data.plate, self.plate.items)) return LogicError.PlateMismatch;
 
         const timestamp = time.timestamp_to_date(message.timestamp);
-        // TODO: Print correctly this timestamp
-        // TODO: Create the unique key
 
-        const store = try self.createUniqueKey(cam.road, timestamp);
-        var knode = ObservationsKeysStore.Node{ .data = store };
-        self.observationkeys.append(&knode);
+        const buf: [1024]u8 = undefined;
+        const store = try createUniqueKey(cam.road, timestamp, &buf);
         std.log.info("Adding observation to car with plate: {s}, timestamp: {time.format.lll}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, message.timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
         if (self.observationsmap.contains(store)) {
+            // Just add it to the existing list
             var observations = self.observationsmap.get(store).?;
             try observations.append(o);
-            try self.alloc.free(store);
         } else {
+            // Create a permanent copy of the key
+            const key = try self.alloc.dupe(u8, store);
+
+            // Add it to the observation to the map
             var observations = try Observations.initCapacity(self.alloc, 4);
             try observations.append(o);
-            try self.observationsmap.put(store, observations);
+            try self.observationsmap.put(key, observations);
         }
     }
 
