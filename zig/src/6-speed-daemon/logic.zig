@@ -11,13 +11,12 @@ const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
 pub const Tickets = std.ArrayList(Ticket);
-const Observations = std.ArrayList(Message);
+const Observations = std.ArrayList(Observation);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
 const TimerHashMap = std.AutoHashMap(socketfd, Timer);
 
-// TODO: on main create a context with all the data
 pub const Context = struct {
     cars: *Cars,
     roads: *Roads,
@@ -272,6 +271,13 @@ pub const Ticket = struct {
     ticket: Message,
 };
 
+pub const Observation = struct {
+    timestamp: u32,
+    road: u16,
+    mile: u16,
+    speed_limit: u16,
+};
+
 pub const Car = struct {
     plate: String,
     tickets: Tickets,
@@ -279,9 +285,9 @@ pub const Car = struct {
 
     pub fn init(alloc: std.mem.Allocator) !Car {
         return Car{
-            .plate = String.initCapacity(alloc, 32),
-            .tickets = Tickets.initCapacity(alloc, 4),
-            .observations = Observations.initCapacity(alloc, 8),
+            .plate = try String.initCapacity(alloc, 32),
+            .tickets = try Tickets.initCapacity(alloc, 4),
+            .observations = try Observations.initCapacity(alloc, 8),
         };
     }
 
@@ -290,12 +296,24 @@ pub const Car = struct {
         self.tickets.deinit();
         self.observations.deinit();
     }
+
+    pub fn addObservation(self: *Car, message: Message, cam: *Camera) !void {
+        if (message.type != messages.Type.Plate) return LogicError.MessageWrongType;
+        if (message.data.plate.len == 0) return LogicError.EmptyPlate;
+        if (self.plate.items.len == 0) try self.plate.appendSlice(message.data.plate);
+        if (!std.mem.eql(u8, message.data.plate, self.plate.items)) return LogicError.PlateMismatch;
+
+        std.log.info("Adding observation to car with plate: {s}, timestamp: {d}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, message.timestamp, cam.road, cam.mile, cam.speed_limit });
+
+        try self.observations.append(.{ .timestamp = message.timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit });
+    }
 };
 
 pub const LogicError = error{
     EmptyPlate,
     MessageWrongType,
     AlreadyHasTimer,
+    PlateMismatch,
 };
 
 pub const Cars = struct {
@@ -331,7 +349,7 @@ pub const Cars = struct {
         try self.map.put(car.plate.toOwnedArray(), car);
     }
 
-    pub fn get(self: *Cars, plate: []const u8) ?*Car {
+    pub fn get(self: *Cars, plate: []const u8) !?*Car {
         if (plate.len == 0) return LogicError.EmptyPlate;
 
         self.mutex.lock();
