@@ -1,5 +1,6 @@
 const std = @import("std");
 const messages = @import("messages.zig");
+const time = @import("time.zig");
 const types = @import("types.zig");
 const linux = std.os.linux;
 
@@ -12,6 +13,7 @@ const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
 pub const Tickets = std.ArrayList(Ticket);
 const Observations = std.ArrayList(Observation);
+const ObservationsHashMap = std.AutoHashMap(u16, Observations);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
@@ -272,7 +274,7 @@ pub const Ticket = struct {
 };
 
 pub const Observation = struct {
-    timestamp: u32,
+    timestamp: time.DateTime,
     road: u16,
     mile: u16,
     speed_limit: u16,
@@ -281,20 +283,24 @@ pub const Observation = struct {
 pub const Car = struct {
     plate: String,
     tickets: Tickets,
-    observations: Observations,
+    observationsmap: ObservationsHashMap,
 
     pub fn init(alloc: std.mem.Allocator) !Car {
         return Car{
             .plate = try String.initCapacity(alloc, 32),
             .tickets = try Tickets.initCapacity(alloc, 4),
-            .observations = try Observations.initCapacity(alloc, 8),
+            .observationsmap = try ObservationsHashMap.init(alloc),
         };
     }
 
     pub fn deinit(self: *Car) void {
         self.plate.deinit();
         self.tickets.deinit();
-        self.observations.deinit();
+        var it = self.observationsmap.iterator();
+        while (it.next()) |observations| {
+            observations.value_ptr.deinit();
+        }
+        self.observationsmap.deinit();
     }
 
     pub fn addObservation(self: *Car, message: Message, cam: *Camera) !void {
@@ -304,8 +310,32 @@ pub const Car = struct {
         if (!std.mem.eql(u8, message.data.plate, self.plate.items)) return LogicError.PlateMismatch;
 
         std.log.info("Adding observation to car with plate: {s}, timestamp: {d}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, message.timestamp, cam.road, cam.mile, cam.speed_limit });
+        const o = Observation{ .timestamp = message.timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
+        if (self.observationsmap.contains(cam.road)) {
+            var observations = self.observationsmap.get(cam.road).?;
+            try observations.append(o);
+        } else {
+            var observations = try Observations.init(self.observationsmap.allocator);
+            try observations.append(o);
+            try self.observationsmap.put(cam.road, observations);
+        }
+    }
 
-        try self.observations.append(.{ .timestamp = message.timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit });
+    pub fn checkSpeedViolation(self: *Car, cam: *Camera) !bool {
+        if (!self.observationsmap.contains(cam.road)) return false;
+        var observations = self.observationsmap.get(cam.road).?;
+        const it = observations.iterator();
+        var avg_speed: u64 = 0;
+        while (it.next()) |observation| {
+            
+            // speed is distance over time
+
+            // if (observation.speed_limit < cam.speed_limit) {
+            //     std.log.info("Speed violation detected for car with plate: {s}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, observation.road, observation.mile, observation.speed_limit });
+            //     return true;
+            // }
+        }
+        return false;
     }
 };
 
