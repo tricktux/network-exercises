@@ -73,19 +73,23 @@ pub fn main() !void {
         }
     }
 
-    // var tp: std.Thread.Pool = undefined;
-    // try tp.init(.{ .allocator = allocator, .n_jobs = @as(u32, @intCast(cpus)) });
-    // defer tp.deinit();
-
     // TODO Create the world
     var epoll = try EpollManager.init();
     defer epoll.deinit();
     var cars = try Cars.init(allocator);
+    defer cars.deinit();
     var roads = try Roads.init(allocator);
+    defer roads.deinit();
     var cameras = try Cameras.init(allocator);
+    defer cameras.deinit();
     var tickets = Tickets.init(allocator);
+    defer tickets.deinit();
     var clients = try Clients.init(allocator);
+    defer clients.deinit(&epoll) catch |err| {
+        std.log.err("Failed to deinit clients: {!}", .{err});
+    };
     var timers = try Timers.init(allocator);
+    defer timers.deinit();
     var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
 
     const serverfd = server.stream.handle;
@@ -94,30 +98,47 @@ pub fn main() !void {
     // Initialize Threads
     const cpus = try std.Thread.getCpuCount();
     var threads = try std.ArrayList(std.Thread).initCapacity(allocator, cpus);
+    defer threads.deinit();
+    _ = try threads.addManyAsSlice(cpus);
     const spawn_config = std.Thread.SpawnConfig{ .allocator = allocator };
+
+    // Spawn threads
     var i: usize = 0;
     while (i < cpus) : (i += 1) {
-        const t = try std.Thread.spawn(spawn_config, handle_events, .{ &ctx, serverfd });
-        try threads.append(t);
+        threads.items[i] = try std.Thread.spawn(spawn_config, handle_events, .{ &ctx, serverfd, allocator });
     }
     std.log.debug("Main spawned '{d}' threads", .{cpus});
     i = 0;
     while (i < cpus) : (i += 1) threads.items[i].join();
 }
 
-fn handle_events(ctx: *Context, serverfd: socketfd) void {
+fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
     // TODO: Turn this into it's own function that the threads will spawn
-    var ready_list: [kernel_backlog]linux.epoll_event = undefined;
+    const cpus = std.Thread.getCpuCount() catch |err| {
+        std.log.err("Failed to get CPU count: {!}", .{err});
+        return;
+    };
+
+    var ready_events = std.ArrayList(linux.epoll_event).initCapacity(alloc, kernel_backlog/cpus) catch |err| {
+        std.log.err("Failed to create ready_events list: {!}", .{err});
+        return;
+    };
+    _ = ready_events.addManyAsSlice(kernel_backlog/cpus) catch |err| {
+        std.log.err("Failed to add ready_events list: {!}", .{err});
+        return;
+    };
+    defer ready_events.deinit();
+
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
         std.log.debug("({d}): waiting for a new event...", .{thread_id});
         // try tp.spawn(handle_connection, .{ connection, allocator });
-        const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, &ready_list, -1);
+        const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
         std.log.debug("got '{d}' events", .{ready_count});
-        for (ready_list[0..ready_count]) |ready| {
-            const ready_socket = ready.data.fd;
+        for (ready_events.items[0..ready_count]) |event| {
+            const ready_socket = event.data.fd;
             defer ctx.epoll.mod(ready_socket) catch |err| {
                 std.log.err("Failed to re-add socket to epoll: {!}", .{err});
             };

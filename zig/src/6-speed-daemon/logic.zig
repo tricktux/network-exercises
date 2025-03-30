@@ -86,6 +86,7 @@ pub const Timers = struct {
     pub fn del(self: *Timers, fd: socketfd) void {
         self.mutex.lock();
         defer self.mutex.unlock();
+
         if (self.map.fetchRemove(fd)) |timer| {
             timer.value.deinit();
         } else {
@@ -146,10 +147,10 @@ pub const Clients = struct {
         };
     }
 
-    pub fn deinit(self: *Clients, epoll: *EpollManager) void {
-        const it = self.map.iterator();
-        for (it.next()) |client| {
-            client.deinit(epoll);
+    pub fn deinit(self: *Clients, epoll: *EpollManager) !void {
+        var it = self.map.iterator();
+        while (it.next()) |client| {
+            try client.value_ptr.deinit(epoll);
         }
 
         self.map.deinit();
@@ -186,7 +187,7 @@ pub const Client = struct {
     fd: socketfd,
     type: ClientType,
     timer: ?Timer,
-    data: union {
+    data: union(enum) {
         camera: Camera,
         dispatcher: Dispatcher,
     },
@@ -231,9 +232,9 @@ pub const Client = struct {
         }
     }
 
-    pub fn deinit(self: *Client, epoll: *EpollManager) void {
+    pub fn deinit(self: *Client, epoll: *EpollManager) !void {
         if (self.timer != null) {
-            epoll.del(self.timer.?.fd);
+            try epoll.del(self.timer.?.fd);
             self.timer.?.deinit();
         }
 
@@ -310,10 +311,10 @@ pub const Cars = struct {
     }
 
     pub fn deinit(self: *Cars) void {
-        const it = self.map.iterator();
+        var it = self.map.iterator();
 
         while (it.next()) |car| {
-            car.deinit();
+            car.value_ptr.deinit();
         }
 
         self.map.deinit();
