@@ -73,7 +73,7 @@ pub fn main() !void {
         }
     }
 
-    // TODO Create the world
+    // Create the world
     var epoll = try EpollManager.init();
     defer epoll.deinit();
     var cars = try Cars.init(allocator);
@@ -114,7 +114,6 @@ pub fn main() !void {
 
 fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
-    // TODO: Turn this into it's own function that the threads will spawn
     const cpus = std.Thread.getCpuCount() catch |err| {
         std.log.err("Failed to get CPU count: {!}", .{err});
         return;
