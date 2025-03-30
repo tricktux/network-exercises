@@ -146,15 +146,11 @@ pub const Message = struct {
         return buf.items;
     }
 
-    pub fn timestamp_to_date(self: *Message) !time.DateTime {
-        switch (self.type) {
-            Type.Plate => {
-                return time.DateTime.initUnix(@as(u64, @intCast(self.data.plate.timestamp)));
-            },
-            else => error.NotImplemented,
-        }
-    }
 };
+
+pub fn timestamp_to_date(timestamp: u32) time.DateTime {
+    return time.DateTime.initUnix(@as(u64, @intCast(timestamp)));
+}
 
 const Messages = struct {
     array: MessageBoundedArray,
