@@ -98,7 +98,7 @@ pub const Message = struct {
     }
 
     pub fn initHeartbeat() Message {
-        return Message{ .type = Type.Heartbeat, .data = .heartbeat{} };
+        return Message{ .type = Type.Heartbeat, .data = .{ .heartbeat = Heartbeat{} } };
     }
 
     pub fn initCamera(camera: IAmCamera) Message {
@@ -149,7 +149,6 @@ pub const Message = struct {
         }
         return buf.items;
     }
-
 };
 
 pub fn timestamp_to_date(timestamp: u32) time.DateTime {
