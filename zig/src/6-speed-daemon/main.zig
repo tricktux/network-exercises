@@ -11,6 +11,8 @@ const fmt = std.fmt;
 const time = std.time;
 const Thread = std.Thread;
 
+const u8BoundedArray = types.u8BoundedArray;
+const Message = messages.Message;
 const socketfd = types.socketfd;
 const Context = logic.Context;
 const Cars = logic.Cars;
@@ -128,20 +130,55 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
     defer ready_events.deinit();
+    var buf = u8BoundedArray.init(0) catch |err| {
+        std.log.err("Failed to create buffer: {!}", .{err});
+        return;
+    };
 
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
+        buf.clear();
         std.log.debug("({d}): waiting for a new event...", .{thread_id});
-        // try tp.spawn(handle_connection, .{ connection, allocator });
         const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_events.items[0..ready_count]) |event| {
             const ready_socket = event.data.fd;
+            const stream = std.net.Stream{ .handle = ready_socket };
+
             defer ctx.epoll.mod(ready_socket) catch |err| {
                 std.log.err("Failed to re-add socket to epoll: {!}", .{err});
             };
-            // TODO: Check for timer event
+
+            // Check for timer event
+            if (ctx.timers.get(ready_socket)) |_| {
+                // TODO: Do you have to read the timer?
+                // - Yes you do
+                var expiry_count: u64 = 0;
+                const bytes_read = std.posix.read(ready_socket, std.mem.asBytes(&expiry_count)) catch |err| {
+                    std.log.err("Failed to posix.read timer: {!}", .{err});
+                    // TODO: Close this connection
+                    continue;
+                };
+                if (bytes_read != @sizeOf(u64)) {
+                    // Handle error - didn't read the expected number of bytes
+                }
+                // Now perform your timer-related action
+                // Compose a heartbeat message
+                const message = Message.initHeartbeat();
+                _ = message.host_to_network(&buf) catch |err| {
+                    std.log.err("Failed to serialize heartbeat message: {!}", .{err});
+                    // TODO: Close this connection
+                    continue;
+                };
+                // Send the message
+                stream.writeAll(buf.constSlice()) catch |err| {
+                    std.log.err("Failed to send heartbeat message: {!}", .{err});
+                    // TODO: Close this connection
+                };
+                continue;
+            }
+
             // TODO: Check for client closing event
             if (ready_socket == serverfd) {
                 std.log.debug("({d}): got new connection!!!", .{thread_id});
