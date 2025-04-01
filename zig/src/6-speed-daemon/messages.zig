@@ -68,6 +68,10 @@ pub const Message = struct {
         dispatcher: IAmDispatcher,
     },
 
+    pub fn init() Message {
+        return Message{};
+    }
+
     pub fn initError(err: []const u8) Message {
         return Message{ .type = Type.ErrorM, .data = .errorm{ .msg = err } };
     }

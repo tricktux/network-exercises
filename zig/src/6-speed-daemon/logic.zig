@@ -11,6 +11,7 @@ const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
 const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
+// TODO: Make this a DoublyLinkedList
 pub const TicketsQueue = std.ArrayList(Message); // Of Type.Ticket
 const Tickets = std.StringHashMap(Message);
 const Observations = std.ArrayList(Observation);
@@ -293,7 +294,7 @@ pub const Car = struct {
         return Car{
             .plate = try String.initCapacity(alloc, 32),
             .tickets_queue = tickets,
-            .tickets = try Tickets.initCapacity(alloc, 4),
+            .tickets = try Tickets.init(alloc),
             .observationsmap = try ObservationsHashMap.init(alloc),
             .alloc = alloc,
         };
@@ -301,7 +302,7 @@ pub const Car = struct {
 
     pub fn deinit(self: *Car) void {
         self.plate.deinit();
-        // self.tickets.deinit();
+        self.tickets.deinit();
         var it = self.observationsmap.iterator();
         while (it.next()) |observations| {
             observations.value_ptr.deinit();
@@ -332,11 +333,10 @@ pub const Car = struct {
 
         // Add to observations map or create a new one key
         var observations: Observations = undefined;
-        if (self.observationsmap.contains(key)) {
-            // Just add it to the existing list
-            var obs = self.observationsmap.get(key).?;
-            try obs.append(o);
-            observations = obs;
+        const entry = self.observationsmap.get(key);
+        if (entry != null) {
+            observations = entry.?.value_ptr.*;
+            observations.append(o);
         } else {
             // Create a permanent copy of the key
             const key_dupe = try self.alloc.dupe(u8, key);
@@ -348,31 +348,22 @@ pub const Car = struct {
             return;
         }
 
-        // TODO: Get only the day portion of and that's what you save on tickets
-        // - Because you could have a ticket for a different road on the same
-        const idx = std.mem.indexOf(u8, key, '-');
+        const key_mem = entry.?.key_ptr.*;
+        const idx = std.mem.indexOf(u8, key_mem, "-");
         if (idx == null) {
-            std.log.err("Error parsing key: {s}\n", .{key});
+            std.log.err("Error parsing key: {s}\n", .{key_mem});
             return;
         }
         // TODO: Change tickets to StringHashMap of day of ticket to ticket
         // - To make this line below just a contains
         // day
         // Check if we've already issued a ticket for this road and date
-        const date_key = key[0..idx.?];
+        const date_key = key[idx.? + 1 ..];
         if (self.tickets.contains(date_key)) {
-            // We've already issued a ticket for this road/date
-            std.log.info("Ticket already issued for car on this date: {s}", .{ date_key });
+            // We've already issued a ticket to this car for this date
+            std.log.info("Ticket already issued for car on this date: {s}", .{date_key});
             return;
         }
-        // var ticket_it = self.tickets.first;
-        // while (ticket_it) |node| : (ticket_it = node.next) {
-        //     if (std.mem.eql(u8, node.data, key)) {
-        //         // We've already issued a ticket for this road/date
-        //         std.log.info("Ticket already issued for car with plate: {s} on road: {d}", .{ self.plate.items, cam.road });
-        //         return;
-        //     }
-        // }
 
         // Sort observations by timestamp
         std.sort.block(Observation, observations.items, {}, Observation.lessThan);
@@ -406,7 +397,7 @@ pub const Car = struct {
             if (speed > @as(f64, obs1.speed_limit)) {
                 // Create a new ticket
                 // TODO: fix here
-                var ticket = Message.initTicket();
+                var ticket = Message{.type = messages.Type.Ticket };
                 ticket.data.ticket.plate = self.plate.items;
                 ticket.data.ticket.road = cam.road;
                 ticket.data.ticket.mile1 = obs1.mile;
@@ -417,12 +408,7 @@ pub const Car = struct {
 
                 // Add the ticket to the global queue
                 try self.tickets_queue.*.append(ticket);
-
-                // Add the key to our tickets list to mark that we've issued a ticket for this road/date
-                // const key_dupe = try self.alloc.dupe(u8, key);
-                // var node = try self.alloc.create(std.SinglyLinkedList([]u8).Node);
-                // node.* = .{ .data = key_dupe, .next = null };
-                // self.tickets.prepend(node);
+                try self.tickets.put(date_key, ticket);
 
                 std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.data.ticket.speed, obs1.speed_limit });
 
