@@ -6,7 +6,7 @@ const testing = std.testing;
 const u8BoundedArray = types.u8BoundedArray;
 const MessageBoundedArray = std.BoundedArray(Message, 64);
 
-const Type = enum(u8) {
+pub const Type = enum(u8) {
     ErrorM = 0x10,
     Plate = 0x20,
     Ticket = 0x21,

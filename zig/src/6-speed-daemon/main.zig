@@ -159,4 +159,5 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
 test {
     _ = messages;
+    _ = logic;
 }

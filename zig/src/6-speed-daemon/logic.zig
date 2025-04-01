@@ -3,6 +3,7 @@ const messages = @import("messages.zig");
 const time = @import("time.zig");
 const types = @import("types.zig");
 const linux = std.os.linux;
+const testing = std.testing;
 
 const u8BoundedArray = types.u8BoundedArray;
 const Message = messages.Message;
@@ -294,8 +295,8 @@ pub const Car = struct {
         return Car{
             .plate = try String.initCapacity(alloc, 32),
             .tickets_queue = tickets,
-            .tickets = try Tickets.init(alloc),
-            .observationsmap = try ObservationsHashMap.init(alloc),
+            .tickets = Tickets.init(alloc),
+            .observationsmap = ObservationsHashMap.init(alloc),
             .alloc = alloc,
         };
     }
@@ -311,32 +312,32 @@ pub const Car = struct {
         self.observationsmap.deinit();
     }
 
-    fn createUniqueKey(road: u16, timestamp: time.DateTime, buf: []const u8) ![]u8 {
-        return try std.fmt.bufPrint(&buf, "{d}-{MM/dd/YYYY}", .{ road, timestamp });
+    fn createUniqueKey(road: u16, timestamp: time.DateTime, buf: []u8) ![]u8 {
+        return try std.fmt.bufPrint(buf, "{d}-{MM/dd/YYYY}", .{ road, timestamp });
     }
 
     // TODO: Check after calling this function the global tickets_queue and send
     // them out
     pub fn addObservation(self: *Car, message: Message, cam: *Camera) !void {
         if (message.type != messages.Type.Plate) return LogicError.MessageWrongType;
-        if (message.data.plate.len == 0) return LogicError.EmptyPlate;
+        if (message.data.plate.plate.len == 0) return LogicError.EmptyPlate;
         if (self.plate.items.len == 0) return LogicError.EmptyPlate;
-        if (!std.mem.eql(u8, message.data.plate, self.plate.items)) return LogicError.PlateMismatch;
+        if (!std.mem.eql(u8, message.data.plate.plate, self.plate.items)) return LogicError.PlateMismatch;
 
-        const timestamp = time.timestamp_to_date(message.timestamp);
+        const timestamp = messages.timestamp_to_date(message.data.plate.timestamp);
 
         // Get the unique key for this observation
-        const buf: [1024]u8 = undefined;
+        var buf: [1024]u8 = undefined;
         const key = try createUniqueKey(cam.road, timestamp, &buf);
-        std.log.info("Adding observation to car with plate: {s}, timestamp: {time.format.lll}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, message.timestamp, cam.road, cam.mile, cam.speed_limit });
+        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY h-mm-ss A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
         // Add to observations map or create a new one key
         var observations: Observations = undefined;
-        const entry = self.observationsmap.get(key);
+        const entry = self.observationsmap.getEntry(key);
         if (entry != null) {
             observations = entry.?.value_ptr.*;
-            observations.append(o);
+            try observations.append(o);
         } else {
             // Create a permanent copy of the key
             const key_dupe = try self.alloc.dupe(u8, key);
@@ -382,29 +383,29 @@ pub const Car = struct {
 
             // Calculate time difference in hours
             const time_diff_ms = obs2.timestamp.toUnixMilli() - obs1.timestamp.toUnixMilli();
-            const time_diff_hours = @as(f64, time_diff_ms) / (1000.0 * 60.0 * 60.0);
+            const time_diff_hours = @as(f64, @floatFromInt(time_diff_ms)) / (1000.0 * 60.0 * 60.0);
 
             // Skip if time difference is too small to avoid division by zero
-            if (time_diff_hours <= 0.0001) continue;
+            if (time_diff_hours <= 0.5) continue;
 
             // Calculate distance in miles (absolute value)
-            const distance = @as(f64, if (obs2.mile > obs1.mile) obs2.mile - obs1.mile else obs1.mile - obs2.mile);
+            const distance = @as(f64, @floatFromInt(if (obs2.mile > obs1.mile) obs2.mile - obs1.mile else obs1.mile - obs2.mile));
 
             // Calculate speed in miles per hour
             const speed = distance / time_diff_hours;
 
             // Check if speed exceeds the limit
-            if (speed > @as(f64, obs1.speed_limit)) {
+            if (speed > @as(f64, @floatFromInt(obs1.speed_limit))) {
                 // Create a new ticket
                 // TODO: fix here
-                var ticket = Message{.type = messages.Type.Ticket };
+                var ticket = Message{ .type = messages.Type.Ticket, .data = .{ .ticket = .{ .plate = undefined, .road = 0, .mile1 = 0, .timestamp1 = 0, .mile2 = 0, .timestamp2 = 0, .speed = 0 } } };
                 ticket.data.ticket.plate = self.plate.items;
                 ticket.data.ticket.road = cam.road;
                 ticket.data.ticket.mile1 = obs1.mile;
-                ticket.data.ticket.timestamp1 = obs1.timestamp.toUnixMilli();
+                ticket.data.ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnixMilli()));
                 ticket.data.ticket.mile2 = obs2.mile;
-                ticket.data.ticket.timestamp2 = obs2.timestamp.toUnixMilli();
-                ticket.data.ticket.speed = @as(u16, speed + 0.5); // Round to nearest integer
+                ticket.data.ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnixMilli()));
+                ticket.data.ticket.speed = @as(u16, @intFromFloat(speed + 0.5)); // Round to nearest integer
 
                 // Add the ticket to the global queue
                 try self.tickets_queue.*.append(ticket);
@@ -612,3 +613,395 @@ pub const Cameras = struct {
         }
     }
 };
+
+test "Car.addObservation" {
+    const allocator = testing.allocator;
+
+    // Test setup
+    var tickets_queue = TicketsQueue.init(allocator);
+    defer tickets_queue.deinit();
+
+    // Test error cases
+    try testErrorCases(allocator, &tickets_queue);
+
+    // Test basic observation addition
+    try testSingleObservation(allocator, &tickets_queue);
+
+    // Test no speeding case
+    try testMultipleObservationsNoSpeeding(allocator, &tickets_queue);
+
+    // Test speeding detection
+    try testSpeedingViolation(allocator, &tickets_queue);
+
+    // Test one ticket per day per road rule
+    try testNoTicketDuplication(allocator, &tickets_queue);
+
+    // Test observations on different roads
+    try testDifferentRoads(allocator, &tickets_queue);
+
+    // Test time difference threshold
+    try testTimeThreshold(allocator, &tickets_queue);
+
+    // Test non-chronological observation order
+    try testNonChronologicalOrder(allocator, &tickets_queue);
+
+    // Test different days
+    try testDifferentDays(allocator, &tickets_queue);
+}
+
+fn testErrorCases(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    var camera = Camera{
+        .fd = 123,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+
+    // Wrong message type
+    {
+        const msg = messages.Message.initHeartbeat();
+        try testing.expectError(LogicError.MessageWrongType, car.addObservation(msg, &camera));
+    }
+
+    // Empty plate in message
+    {
+        const msg = messages.Message{
+            .type = messages.Type.Plate,
+            .data = .{ .plate = .{.plate = "", .timestamp = 0} },
+            // Initialize other required fields
+        };
+        try testing.expectError(LogicError.EmptyPlate, car.addObservation(msg, &camera));
+    }
+
+    // Car with empty plate
+    {
+        var car_empty = try Car.init(allocator, tickets_queue);
+        defer car_empty.deinit();
+        // Plate not set
+
+        const msg = messages.Message{
+            .type = messages.Type.Plate,
+            .data = .{ .plate = "XYZ789" },
+            // Initialize other required fields
+        };
+        try testing.expectError(LogicError.EmptyPlate, car_empty.addObservation(msg, &camera));
+    }
+
+    // Plate mismatch
+    {
+        const msg = messages.Message{
+            .type = messages.Type.Plate,
+            .data = .{ .plate = "XYZ789" }, // Different from car's plate
+            // Initialize other required fields
+        };
+        try testing.expectError(LogicError.PlateMismatch, car.addObservation(msg, &camera));
+    }
+}
+
+fn testSingleObservation(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    var camera = Camera{
+        .fd = 123,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+
+    // Add a single observation
+    const timestamp = 1625097600000; // July 1, 2021
+    const msg = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp,
+        // Initialize other required fields
+    };
+
+    try car.addObservation(msg, &camera);
+
+    // Verify observation map contains the entry
+    try testing.expectEqual(@as(usize, 1), car.observationsmap.count());
+
+    // Verify no tickets yet (need at least 2 observations)
+    try testing.expectEqual(@as(usize, 0), tickets_queue.items.len);
+}
+
+fn testMultipleObservationsNoSpeeding(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    // First observation
+    var camera1 = Camera{
+        .fd = 123,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+    const timestamp1 = 1625097600000; // 2021-07-01 00:00:00
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    // Second observation - speed under limit (50 mph)
+    var camera2 = Camera{
+        .fd = 124,
+        .road = 1,
+        .mile = 60, // 50 mile difference
+        .speed_limit = 60,
+    };
+    const timestamp2 = timestamp1 + 3600000; // 1 hour later
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp2,
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Verify no tickets issued (under speed limit)
+    try testing.expectEqual(@as(usize, 0), tickets_queue.items.len);
+}
+
+fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.items.len;
+
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    // First observation
+    var camera1 = Camera{
+        .fd = 123,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+    const timestamp1 = 1625097600000;
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    // Second observation - speed over limit (80 mph)
+    var camera2 = Camera{
+        .fd = 124,
+        .road = 1,
+        .mile = 90, // 80 mile difference
+        .speed_limit = 60,
+    };
+    const timestamp2 = timestamp1 + 3600000; // 1 hour later
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp2,
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Verify a ticket was issued
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+
+    // Verify ticket details
+    const ticket = tickets_queue.items[initial_tickets];
+    try testing.expectEqual(messages.Type.Ticket, ticket.type);
+    try testing.expectEqualStrings("ABC123", ticket.data.ticket.plate);
+    try testing.expectEqual(camera1.road, ticket.data.ticket.road);
+    try testing.expectEqual(@as(u16, 80), ticket.data.ticket.speed); // Calculated speed
+}
+
+fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.items.len;
+
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    // Create a speeding violation
+    var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
+    var camera2 = Camera{ .fd = 124, .road = 1, .mile = 90, .speed_limit = 60 };
+
+    const timestamp1 = 1625097600000;
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1 + 3600000, // 1 hour later
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Verify one ticket was issued
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+
+    // Add another observation on same day/road that would cause speeding
+    var camera3 = Camera{ .fd = 125, .road = 1, .mile = 170, .speed_limit = 60 };
+    const msg3 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1 + 7200000, // 2 hours after first
+    };
+    try car.addObservation(msg3, &camera3);
+
+    // Verify no additional ticket was issued (one per day per road rule)
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+}
+
+fn testDifferentRoads(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.items.len;
+
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    // Road 1
+    var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
+    const timestamp1 = 1625097600000;
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    // Road 2 (speeding)
+    var camera2 = Camera{ .fd = 124, .road = 2, .mile = 10, .speed_limit = 60 };
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1 + 3600000, // 1 hour later
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Road 1 again (speeding)
+    var camera3 = Camera{ .fd = 125, .road = 1, .mile = 100, .speed_limit = 60 };
+    const msg3 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1 + 4600000, // 1 hour 20 min later
+    };
+    try car.addObservation(msg3, &camera3);
+
+    // Verify observation map has entries for different roads
+    try testing.expectEqual(@as(usize, 2), car.observationsmap.count());
+
+    // Verify a ticket was issued for road 1
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+}
+
+fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.items.len;
+
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    // First observation
+    var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
+    const timestamp1 = 1625097600000;
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    // Second observation - only 15 minutes later (below 30 min threshold)
+    var camera2 = Camera{ .fd = 124, .road = 1, .mile = 90, .speed_limit = 60 };
+    const timestamp2 = timestamp1 + 900000; // 15 minutes later
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp2,
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Verify no ticket (time difference too small)
+    try testing.expectEqual(initial_tickets, tickets_queue.items.len);
+}
+
+fn testNonChronologicalOrder(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.items.len;
+
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
+    var camera2 = Camera{ .fd = 124, .road = 1, .mile = 90, .speed_limit = 60 };
+
+    const timestamp1 = 1625097600000;
+    const timestamp2 = timestamp1 + 3600000; // 1 hour later
+
+    // Add second observation first (out of order)
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp2,
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Then add first observation
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    // Verify a ticket was issued with correct chronological ordering
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+
+    // Verify first observation in ticket is chronologically earlier
+    const ticket = tickets_queue.items[initial_tickets];
+    try testing.expectEqual(timestamp1, ticket.data.ticket.timestamp1);
+    try testing.expectEqual(timestamp2, ticket.data.ticket.timestamp2);
+}
+
+fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.items.len;
+
+    var car = try Car.init(allocator, tickets_queue);
+    defer car.deinit();
+    try car.plate.appendSlice("ABC123");
+
+    // Day 1
+    var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
+    const timestamp1 = 1625097600000; // July 1, 2021
+    const msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp1,
+    };
+    try car.addObservation(msg1, &camera1);
+
+    // Day 2 - would be speeding if on same day
+    var camera2 = Camera{ .fd = 124, .road = 1, .mile = 90, .speed_limit = 60 };
+    const timestamp2 = timestamp1 + 86400000; // 24 hours later (next day)
+    const msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = "ABC123" },
+        .timestamp = timestamp2,
+    };
+    try car.addObservation(msg2, &camera2);
+
+    // Verify separate entries for different days
+    try testing.expectEqual(@as(usize, 2), car.observationsmap.count());
+
+    // Verify no tickets (observations on different days)
+    try testing.expectEqual(initial_tickets, tickets_queue.items.len);
+}
