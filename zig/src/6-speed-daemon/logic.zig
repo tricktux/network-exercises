@@ -405,28 +405,28 @@ pub const Car = struct {
             const speed = distance / time_diff_hours;
 
             // Check if speed exceeds the limit
-            if (speed > @as(f64, @floatFromInt(obs1.speed_limit))) {
-                // Create a new ticket
-                var ticket = Ticket.init();
-                ticket.plate = self.plate.items;
-                ticket.road = cam.road;
-                ticket.mile1 = obs1.mile;
-                ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
-                ticket.mile2 = obs2.mile;
-                ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
-                ticket.speed = @as(u16, @intFromFloat(speed + 0.5)); // Round to nearest integer
+            if (speed <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
 
-                const msg = Message.initTicket(ticket);
+            // Create a new ticket
+            var ticket = Ticket.init();
+            ticket.plate = self.plate.items;
+            ticket.road = cam.road;
+            ticket.mile1 = obs1.mile;
+            ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
+            ticket.mile2 = obs2.mile;
+            ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
+            ticket.speed = @as(u16, @intFromFloat(speed + 0.5)); // Round to nearest integer
 
-                // Add the ticket to the global queue
-                try self.tickets_queue.*.append(msg);
-                try self.tickets.put(date_key, msg);
+            const msg = Message.initTicket(ticket);
 
-                std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.speed, obs1.speed_limit });
+            // Add the ticket to the global queue
+            try self.tickets_queue.*.append(msg);
+            try self.tickets.put(date_key, msg);
 
-                // Only issue one ticket per day per road
-                return;
-            }
+            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.speed, obs1.speed_limit });
+
+            // Only issue one ticket per day per road
+            return;
         }
     }
 };
