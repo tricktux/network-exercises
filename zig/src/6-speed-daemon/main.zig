@@ -145,21 +145,33 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             const ready_socket = event.data.fd;
             // const stream = std.net.Stream{ .handle = ready_socket };
 
+            // TODO: even timers need this?
             defer ctx.epoll.mod(ready_socket) catch |err| {
                 std.log.err("Failed to re-add socket to epoll: {!}", .{err});
             };
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
+                const clientfd = timer.client.fd;
                 timer.read() catch |err| {
-                    std.log.err("Failed to posix.read timer: {!}", .{err});
-                    // TODO: Close this connection
+                    std.log.err("Failed to posix.read timer: {!}...deleting client...", .{err});
+                    timer.client.sendError("Failed to posix.read timer", &buf) catch |sec_err| {
+                        std.log.err("Failed to client.sendError: {!}", .{sec_err});
+                    };
+                    ctx.clients.del(clientfd, ctx.epoll) catch |third_err| {
+                        std.log.err("Failed to del client: {!}", .{third_err});
+                    };
                     continue;
                 };
 
                 timer.client.sendHeartbeat(&buf) catch |err| {
                     std.log.err("Failed to client.sendHeartbeat: {!}", .{err});
-                    // TODO: Close this connection
+                    timer.client.sendError("Failed to sendHeartbeat", &buf) catch |sec_err| {
+                        std.log.err("Failed to client.sendError: {!}", .{sec_err});
+                    };
+                    ctx.clients.del(clientfd, ctx.epoll) catch |third_err| {
+                        std.log.err("Failed to del client: {!}", .{third_err});
+                    };
                     continue;
                 };
                 std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thread_id, timer.client.fd });
@@ -179,12 +191,12 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 std.log.debug("({d}): got new connection!!!", .{thread_id});
                 // TODO: do something
                 // try tp.spawn(handle_connection, .{ &map, ctx, allocator });
-            } else {
-                // ctx.clientfd = ready_socket;
-                std.log.debug("({d}): got new message!!!", .{thread_id});
-                // TODO: do something
-                // try tp.spawn(handle_messge, .{ &map, ctx });
             }
+
+            // ctx.clientfd = ready_socket;
+            std.log.debug("({d}): got new message!!!", .{thread_id});
+            // TODO: do something
+            // try tp.spawn(handle_messge, .{ &map, ctx });
         }
     }
 }
