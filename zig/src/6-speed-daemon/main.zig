@@ -183,7 +183,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     std.log.err("Failed to del client: {!}", .{err});
                     continue;
                 };
-                std.log.debug("({d}): Closed connection for client: {d}", .{thread_id, ready_socket});
+                std.log.debug("({d}): Closed connection for client: {d}", .{ thread_id, ready_socket });
                 continue;
             }
 

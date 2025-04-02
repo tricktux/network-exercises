@@ -73,7 +73,7 @@ pub const Message = struct {
     }
 
     pub fn initError(err: []const u8) Message {
-        return Message{ .type = Type.ErrorM, .data = .{ .errorm = .{ .msg = err } }};
+        return Message{ .type = Type.ErrorM, .data = .{ .errorm = .{ .msg = err } } };
     }
 
     pub fn initPlate(plate: Plate) Message {
