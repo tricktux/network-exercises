@@ -14,6 +14,7 @@ const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
 // TODO: Make this a DoublyLinkedList
+const Ticket = messages.Ticket;
 pub const TicketsQueue = std.ArrayList(Message); // Of Type.Ticket
 const Tickets = std.StringHashMap(Message);
 const Observations = std.ArrayList(Observation);
@@ -406,21 +407,22 @@ pub const Car = struct {
             // Check if speed exceeds the limit
             if (speed > @as(f64, @floatFromInt(obs1.speed_limit))) {
                 // Create a new ticket
-                // TODO: fix here
-                var ticket = Message{ .type = messages.Type.Ticket, .data = .{ .ticket = .{ .plate = undefined, .road = 0, .mile1 = 0, .timestamp1 = 0, .mile2 = 0, .timestamp2 = 0, .speed = 0 } } };
-                ticket.data.ticket.plate = self.plate.items;
-                ticket.data.ticket.road = cam.road;
-                ticket.data.ticket.mile1 = obs1.mile;
-                ticket.data.ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
-                ticket.data.ticket.mile2 = obs2.mile;
-                ticket.data.ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
-                ticket.data.ticket.speed = @as(u16, @intFromFloat(speed + 0.5)); // Round to nearest integer
+                var ticket = Ticket.init();
+                ticket.plate = self.plate.items;
+                ticket.road = cam.road;
+                ticket.mile1 = obs1.mile;
+                ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
+                ticket.mile2 = obs2.mile;
+                ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
+                ticket.speed = @as(u16, @intFromFloat(speed + 0.5)); // Round to nearest integer
+
+                const msg = Message.initTicket(ticket);
 
                 // Add the ticket to the global queue
-                try self.tickets_queue.*.append(ticket);
-                try self.tickets.put(date_key, ticket);
+                try self.tickets_queue.*.append(msg);
+                try self.tickets.put(date_key, msg);
 
-                std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.data.ticket.speed, obs1.speed_limit });
+                std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.speed, obs1.speed_limit });
 
                 // Only issue one ticket per day per road
                 return;

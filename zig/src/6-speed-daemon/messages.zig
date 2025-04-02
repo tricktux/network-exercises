@@ -26,7 +26,7 @@ const Plate = struct {
     timestamp: u32,
 };
 
-const Ticket = struct {
+pub const Ticket = struct {
     plate: []const u8,
     road: u16,
     mile1: u16,
@@ -34,6 +34,10 @@ const Ticket = struct {
     mile2: u16,
     timestamp2: u32,
     speed: u16,
+
+    pub fn init() Ticket {
+        return Ticket{.plate = &[_]u8{}, .road = 0, .mile1 = 0, .timestamp1 = 0, .mile2 = 0, .timestamp2 = 0, .speed = 0};
+    }
 };
 
 const WantHeartbeat = struct { interval: u32 };
