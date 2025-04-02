@@ -58,6 +58,11 @@ pub const Timer = struct {
         };
     }
 
+    pub fn read(self: *Timer) !void {
+        var expiry_count: u64 = 0;
+        _ = try std.posix.read(self.fd, std.mem.asBytes(&expiry_count));
+    }
+
     pub fn deinit(self: *Timer) void {
         _ = std.posix.close(self.fd);
     }
