@@ -10,7 +10,7 @@ const testing = std.testing;
 const fmt = std.fmt;
 const time = std.time;
 const Thread = std.Thread;
-
+const MessageBoundedArray = messages.MessageBoundedArray;
 const u8BoundedArray = types.u8BoundedArray;
 const Message = messages.Message;
 const socketfd = types.socketfd;
@@ -125,19 +125,27 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         std.log.err("Failed to create ready_events list: {!}", .{err});
         return;
     };
+    defer ready_events.deinit();
     _ = ready_events.addManyAsSlice(kernel_backlog / cpus) catch |err| {
         std.log.err("Failed to add ready_events list: {!}", .{err});
         return;
     };
-    defer ready_events.deinit();
     var buf = u8BoundedArray.init(0) catch |err| {
         std.log.err("Failed to create buffer: {!}", .{err});
+        return;
+    };
+    var msgs = MessageBoundedArray.init(0) catch |err| {
+        std.log.err("Failed to create messages: {!}", .{err});
         return;
     };
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
+        // Clean up
         buf.clear();
+        for (&msgs.buffer) |*msg| msg.deinit();
+        msgs.clear();
+
         std.log.debug("({d}): waiting for a new event...", .{thread_id});
         const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
         std.log.debug("got '{d}' events", .{ready_count});
