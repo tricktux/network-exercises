@@ -266,7 +266,7 @@ pub const Dispatcher = struct {
     pub fn initFromMessage(fd: socketfd, message: Message) !Dispatcher {
         if (message.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
 
-        return Camera{
+        return Dispatcher{
             .fd = fd,
             .roads = message.roads.toOwnedSlice(),
         };
