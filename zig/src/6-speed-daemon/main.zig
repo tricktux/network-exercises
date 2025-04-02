@@ -151,30 +151,22 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             };
 
             // Check for timer event
-            if (ctx.timers.get(ready_socket)) |_| {
-                // TODO: Do you have to read the timer?
-                // - Yes you do
-                var expiry_count: u64 = 0;
-                const bytes_read = std.posix.read(ready_socket, std.mem.asBytes(&expiry_count)) catch |err| {
+            if (ctx.timers.get(ready_socket)) |timer| {
+                timer.read() catch |err| {
                     std.log.err("Failed to posix.read timer: {!}", .{err});
                     // TODO: Close this connection
                     continue;
                 };
-                if (bytes_read != @sizeOf(u64)) {
-                    // Handle error - didn't read the expected number of bytes
-                }
-                // Now perform your timer-related action
-                // Compose a heartbeat message
-                const message = Message.initHeartbeat();
-                _ = message.host_to_network(&buf) catch |err| {
-                    std.log.err("Failed to serialize heartbeat message: {!}", .{err});
+
+                timer.client.sendHeartbeat(&buf) catch |err| {
+                    std.log.err("Failed to client.sendHeartbeat: {!}", .{err});
                     // TODO: Close this connection
                     continue;
                 };
-                // Send the message
-                stream.writeAll(buf.constSlice()) catch |err| {
-                    std.log.err("Failed to send heartbeat message: {!}", .{err});
-                    // TODO: Close this connection
+                std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thread_id, timer.client.fd });
+                continue;
+            }
+
                 };
                 continue;
             }
