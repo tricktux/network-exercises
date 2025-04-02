@@ -800,7 +800,7 @@ fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
     const timestamp2 = timestamp1 + 3600; // 1 hour later
     const msg2 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{.plate = "ABC123", .timestamp = timestamp2 } },
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp2 } },
     };
     try car.addObservation(msg2, &camera2);
 
@@ -835,7 +835,7 @@ fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *Tickets
 
     const msg2 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{.plate = "ABC123", .timestamp = timestamp1 + 3600 } },
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp1 + 3600 } },
     };
     try car.addObservation(msg2, &camera2);
 
@@ -905,7 +905,7 @@ fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     const timestamp1 = 1625097600;
     const msg1 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp1 }},
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp1 } },
     };
     try car.addObservation(msg1, &camera1);
 
@@ -914,7 +914,7 @@ fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     const timestamp2 = timestamp1 + 900; // 15 minutes later
     const msg2 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp2 }},
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp2 } },
     };
     try car.addObservation(msg2, &camera2);
 

@@ -121,11 +121,11 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
-    var ready_events = std.ArrayList(linux.epoll_event).initCapacity(alloc, kernel_backlog/cpus) catch |err| {
+    var ready_events = std.ArrayList(linux.epoll_event).initCapacity(alloc, kernel_backlog / cpus) catch |err| {
         std.log.err("Failed to create ready_events list: {!}", .{err});
         return;
     };
-    _ = ready_events.addManyAsSlice(kernel_backlog/cpus) catch |err| {
+    _ = ready_events.addManyAsSlice(kernel_backlog / cpus) catch |err| {
         std.log.err("Failed to add ready_events list: {!}", .{err});
         return;
     };
