@@ -189,11 +189,19 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
             if (ready_socket == serverfd) {
                 std.log.debug("({d}): got new connection!!!", .{thread_id});
-                // TODO: do something
-                // try tp.spawn(handle_connection, .{ &map, ctx, allocator });
+
+                const clientfd = std.posix.accept(serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
+                    std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
+                    continue;
+                };
+                // For now just add it to epoll, until it identifies itself
+                ctx.epoll.add(clientfd) catch |err| {
+                    std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
+                };
+
+                continue;
             }
 
-            // ctx.clientfd = ready_socket;
             std.log.debug("({d}): got new message!!!", .{thread_id});
             // TODO: do something
             // try tp.spawn(handle_messge, .{ &map, ctx });
