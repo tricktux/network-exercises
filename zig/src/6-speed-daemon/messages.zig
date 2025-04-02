@@ -124,30 +124,36 @@ pub const Message = struct {
         }
     }
 
-    pub fn host_to_network(self: Message, buf: *u8BoundedArray) !u16 {
+    pub fn host_to_network(self: Message, buf: *u8BoundedArray) !usize {
         try buf.append(@intFromEnum(self.type));
         switch (self.type) {
             Type.Ticket => {
-                const plate = self.data.plate;
-                try buf.append(plate.plate.len);
-                try buf.appendSlice(plate.plate);
+                if (self.data.ticket.plate.len > std.math.maxInt(u8)) return error.NotEnoughBytes;
+                const ticket = self.data.ticket;
+                try buf.append(@as(u8, @intCast(ticket.plate.len)));
+                try buf.appendSlice(ticket.plate);
                 var ts_bytes: [4]u8 = undefined;
-                std.mem.writeInt(u16, &ts_bytes, plate.road, .big);
-                try buf.appendSlice(&ts_bytes[0..2]);
-                std.mem.writeInt(u16, &ts_bytes, plate.mile1, .big);
-                try buf.appendSlice(&ts_bytes[0..2]);
-                std.mem.writeInt(u32, &ts_bytes, plate.timestamp1, .big);
+                std.mem.writeInt(u16, ts_bytes[0..2], ticket.road, .big);
+                try buf.appendSlice(ts_bytes[0..2]);
+                std.mem.writeInt(u16, ts_bytes[0..2], ticket.mile1, .big);
+                try buf.appendSlice(ts_bytes[0..2]);
+                std.mem.writeInt(u32, &ts_bytes, ticket.timestamp1, .big);
                 try buf.appendSlice(&ts_bytes);
-                std.mem.writeInt(u16, &ts_bytes, plate.mile2, .big);
-                try buf.appendSlice(&ts_bytes[0..2]);
-                std.mem.writeInt(u32, &ts_bytes, plate.timestamp2, .big);
+                std.mem.writeInt(u16, ts_bytes[0..2], ticket.mile2, .big);
+                try buf.appendSlice(ts_bytes[0..2]);
+                std.mem.writeInt(u32, &ts_bytes, ticket.timestamp2, .big);
                 try buf.appendSlice(&ts_bytes);
-                std.mem.writeInt(u16, &ts_bytes, plate.speed, .big);
-                try buf.appendSlice(&ts_bytes[0..2]);
+                std.mem.writeInt(u16, ts_bytes[0..2], ticket.speed, .big);
+                try buf.appendSlice(ts_bytes[0..2]);
+            },
+            Type.ErrorM => {
+                if (self.data.errorm.msg.len > std.math.maxInt(u8)) return error.NotEnoughBytes;
+                try buf.append(@as(u8, @intCast(self.data.errorm.msg.len)));
+                try buf.appendSlice(self.data.errorm.msg);
             },
             else => {},
         }
-        return buf.items;
+        return buf.len;
     }
 };
 
