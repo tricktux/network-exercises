@@ -135,7 +135,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
-
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
         buf.clear();
@@ -144,7 +143,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_events.items[0..ready_count]) |event| {
             const ready_socket = event.data.fd;
-            const stream = std.net.Stream{ .handle = ready_socket };
+            // const stream = std.net.Stream{ .handle = ready_socket };
 
             defer ctx.epoll.mod(ready_socket) catch |err| {
                 std.log.err("Failed to re-add socket to epoll: {!}", .{err});
@@ -167,11 +166,15 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 continue;
             }
 
+            if ((event.events & linux.EPOLL.RDHUP) == linux.EPOLL.RDHUP) {
+                ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
+                    std.log.err("Failed to del client: {!}", .{err});
+                    continue;
                 };
+                std.log.debug("({d}): Closed connection for client: {d}", .{thread_id, ready_socket});
                 continue;
             }
 
-            // TODO: Check for client closing event
             if (ready_socket == serverfd) {
                 std.log.debug("({d}): got new connection!!!", .{thread_id});
                 // TODO: do something
