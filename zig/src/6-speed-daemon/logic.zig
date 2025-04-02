@@ -182,15 +182,17 @@ pub const Clients = struct {
         return self.map.getPtr(fd);
     }
 
-    pub fn del(self: *Clients, fd: socketfd, epoll: *EpollManager) void {
+    pub fn del(self: *Clients, fd: socketfd, epoll: *EpollManager) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        if (self.map.fetchRemove(fd)) |client| {
-            client.value.deinit(epoll);
-        } else {
-            std.log.err("Error removing client with fd: {d}\n", .{fd});
+        var client = self.map.getPtr(fd);
+        if (client == null) {
+            std.log.err("Failed to find client with fd: {d} for removal\n", .{fd});
+            return;
         }
+        try client.?.deinit(epoll);
+        _ = self.map.remove(fd);
     }
 };
 
