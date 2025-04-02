@@ -234,6 +234,13 @@ pub const Client = struct {
         epoll.add(self.timer.?.fd);
     }
 
+    pub fn sendError(self: *Client, msg: []const u8, buf: *u8BoundedArray) !void {
+        const m = Message.initError(msg);
+        _ = try m.host_to_network(buf);
+        const stream = std.net.Stream{ .handle = self.fd };
+        try stream.writeAll(buf.constSlice());
+    }
+
     pub fn sendHeartbeat(self: *Client, buf: *u8BoundedArray) !void {
         const m = Message.initHeartbeat();
         std.log.debug("Sending heartbeat to client with fd: {d}\n", .{self.fd});
