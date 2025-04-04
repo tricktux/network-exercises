@@ -270,13 +270,12 @@ pub const Client = struct {
         };
     }
 
-    pub fn initWithDispatcher(fd: socketfd, message: Message) !Client {
-        if (message.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
+    pub fn initWithDispatcher(fd: socketfd, disp: Dispatcher) Client {
         std.log.info("Creating dispatcher client with fd: {d}\n", .{fd});
         return Client{
             .fd = fd,
             .type = ClientType.Dispatcher,
-            .data = .{ .dispatcher = Dispatcher.initFromMessage(fd, message) },
+            .data = .{ .dispatcher = disp },
         };
     }
 
@@ -572,6 +571,7 @@ pub const Roads = struct {
     pub fn add(self: *Roads, road: Road) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
+
         try self.map.put(road.road, road);
     }
 
