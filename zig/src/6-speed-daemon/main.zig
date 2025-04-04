@@ -124,6 +124,7 @@ const ThreadContext = struct {
     client: ?*Client,
     error_msg: ?[]const u8,
     msgs: *MessageBoundedArray,
+    alloc: std.mem.Allocator,
 };
 
 inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
@@ -146,16 +147,28 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
 }
 
 inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
-    std.log.debug("({d}): got new message!!!", .{thread_id});
-    // TODO: do something
-    // - Read the messages
-    const stream = std.net.Stream{ .handle = ready_socket };
+    const fd = thr_ctx.fd;
+    const stream = std.net.Stream{ .handle = fd };
+    const client = thr_ctx.client;
+    const thrid = std.Thread.getCurrentId();
 
-    // TODO: Need fifo here
+    std.log.debug("({d}): got new message!!!", .{thrid});
+
+    var fifo = ctx.fifos.get(fd);
+    if (fifo == null) {
+        std.log.err("({d}): Failed to get fifo: {d}", .{thrid, fd});
+        return;
+    }
+
     var bytes: usize = 0;
     var read_error = false;
     while (true) {
-        bytes = stream.read(buf.buffer[bytes..]) catch |err| {
+        const buf = fifo.?.writableWithSize(2048) catch |err| {
+            std.log.err("({d}): Failed to get fifo: {d}. Error: {!}", .{thrid, fd, err});
+            read_error = true;
+            break;
+        };
+        bytes = stream.read(buf) catch |err| {
             switch (err) {
                 error.WouldBlock => break,
                 else => {
@@ -166,56 +179,53 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             }
         };
         if (bytes == 0) break;
-        if (bytes >= 2048) {
-            std.log.err("Too many bytes read: {d}", .{bytes});
-            break;
-        }
-        buf.len += bytes;
+        fifo.?.update(bytes);
     }
 
     if (read_error) {
-        std.log.err("({d}): error while reading from client: {!}", .{thread_id, ready_socket});
+        std.log.err("({d}): error while reading from client: {d}", .{thrid, fd});
         if (client != null) {
-            ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
+            ctx.clients.del(fd, ctx.epoll) catch |err| {
                 std.log.err("Failed to del client: {!}", .{err});
             };
         }
-        ctx.epoll.del(ready_socket) catch |err| {
+        ctx.epoll.del(fd) catch |err| {
             std.log.err("Failed to del client: {!}", .{err});
         };
-        continue;
+        return;
     }
 
     // - Handle read zero byte
     if (bytes == 0) {
         if (client != null) {
-            std.log.debug("({d}): Client disconnected: {d}", .{thread_id, ready_socket});
-            ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
+            std.log.debug("({d}): Client disconnected: {d}", .{thrid, fd});
+            ctx.clients.del(fd, ctx.epoll) catch |err| {
                 std.log.err("Failed to del client: {!}", .{err});
             };
-            continue;
+            return;
         }
 
-        std.log.debug("({d}): Client disconnected before identifying: {d}", .{thread_id, ready_socket});
-        ctx.epoll.del(ready_socket) catch |err| {
+        std.log.debug("({d}): Client disconnected before identifying: {d}", .{thrid, fd});
+        ctx.epoll.del(fd) catch |err| {
             std.log.err("Failed to del client: {!}", .{err});
         };
-        continue;
+        return;
     }
     // - call decode(buf, msgs)
-    _ = messages.decode(buf.constSlice(), &msgs, alloc) catch |err| {
+    const data = fifo.?.readableSlice(0);
+    _ = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
         std.log.err("Failed to decode messages: {!}", .{err});
-        continue;
+        return;
     };
     // - for (msgs) |msg| { switch (msg.Type) { ... } }
-    for (&msgs.buffer) |*msg| {
+    for (&thr_ctx.msgs.buffer) |*msg| {
         switch (msg.type) {
             messages.Type.Heartbeat => {
                 if (client == null) {
-                    std.log.err("({d}): Got heartbeat from unknown client: {d}", .{thread_id, ready_socket});
+                    std.log.err("({d}): Got heartbeat from unknown client: {d}", .{thrid, fd});
                     continue;
                 }
-                std.log.debug("({d}): Got heartbeat from client: {d}", .{thread_id, ready_socket});
+                std.log.debug("({d}): Got heartbeat from client: {d}", .{thrid, fd});
                 // client.heartbeat();
             },
             else => {
@@ -231,7 +241,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 // TODO: - Like message handling
 
 fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
-    const thread_id = std.Thread.getCurrentId();
     const cpus = std.Thread.getCpuCount() catch |err| {
         std.log.err("Failed to get CPU count: {!}", .{err});
         return;
@@ -255,7 +264,8 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
-    var thr_ctx = ThreadContext{.fd = 0, .error_msg = null, .buf = &buf, .client = null, .msgs = &msgs };
+    var thr_ctx = ThreadContext{.fd = 0, .error_msg = null, .buf = &buf, .client = null, .msgs = &msgs, .alloc = alloc };
+    const thrid = std.Thread.getCurrentId();
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
@@ -264,7 +274,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         for (&msgs.buffer) |*msg| msg.deinit();
         msgs.clear();
 
-        std.log.debug("({d}): waiting for a new event...", .{thread_id});
+        std.log.debug("({d}): waiting for a new event...", .{thrid});
         const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_events.items[0..ready_count]) |event| {
@@ -291,7 +301,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     removeFd(ctx, &thr_ctx);
                     continue;
                 };
-                std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thread_id, timer.client.fd });
+                std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thrid, timer.client.fd });
                 continue;
             }
 
@@ -303,17 +313,17 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
             // Handle a closing connection event
             if ((event.events & linux.EPOLL.RDHUP) == linux.EPOLL.RDHUP) {
-                std.log.debug("({d}): Closed connection for client: {d}", .{ thread_id, ready_socket });
+                std.log.debug("({d}): Closed connection for client: {d}", .{ thrid, ready_socket });
                 removeFd(ctx, &thr_ctx);
                 continue;
             }
 
             // Handle a new connection event
             if (ready_socket == serverfd) {
-                std.log.debug("({d}): got new connection!!!", .{thread_id});
+                std.log.debug("({d}): got new connection!!!", .{thrid});
 
                 const clientfd = std.posix.accept(serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
-                    std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
+                    std.log.err("({d}): error while accepting connection: {!}", .{ thrid, err });
                     continue;
                 };
 
@@ -321,13 +331,13 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 // TODO: Are these fatal errors? Should we return instead of
                 // continue?
                 ctx.epoll.add(clientfd) catch |err| {
-                    std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
+                    std.log.err("({d}): error while accepting connection: {!}", .{ thrid, err });
                     _ = std.posix.close(clientfd);
                     continue;
                 };
 
                 ctx.fifos.add(clientfd) catch |err| {
-                    std.log.err("({d}): error while adding fifo: {!}", .{ thread_id, err });
+                    std.log.err("({d}): error while adding fifo: {!}", .{ thrid, err });
                     _ = std.posix.close(clientfd);
                     continue;
                 };
