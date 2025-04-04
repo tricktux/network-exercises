@@ -182,16 +182,6 @@ const DecodeError = error{
     NotEnoughBytes,
 };
 
-inline fn decode_u32(buf: []const u8) !u32 {
-    if (buf.len < 4) return error.NotEnoughBytes;
-    return std.mem.readVarInt(u32, buf, .big);
-}
-
-inline fn decode_u16(buf: []const u8) !u16 {
-    if (buf.len < 2) return error.NotEnoughBytes;
-    return std.mem.readVarInt(u16, buf, .big);
-}
-
 pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Allocator) !u16 {
     if (buf.len < 2) return 0;
 
@@ -216,7 +206,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 const timestampstart = plateend;
                 const timestampend = timestampstart + 4;
                 if (buf.len < timestampend) break;
-                const timestamp: u32 = try decode_u32(buf[timestampstart..timestampend]);
+                const timestamp: u32 = std.mem.readVarInt(u32, buf[timestampstart..timestampend], .big);
                 len += timestampend - start;
                 const platem = Plate{
                     .plate = plate,
@@ -233,7 +223,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 const intervalstart = start + 1;
                 const intervalend = intervalstart + 4;
                 if (buf.len < intervalend) break;
-                const interval: u32 = try decode_u32(buf[intervalstart..intervalend]);
+                const interval: u32 = std.mem.readVarInt(u32, buf[intervalstart..intervalend], .big);
                 len += intervalend - start;
                 std.log.debug("(decode): interval: {d}", .{interval});
                 const m = Message.initWantHeartbeat(interval);
@@ -245,13 +235,13 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 std.log.info("(decode): Decoding camera id message", .{});
                 const roadstart = start + 1;
                 const roadend = roadstart + 2;
-                const road: u16 = try decode_u16(buf[roadstart..roadend]);
+                const road: u16 = std.mem.readVarInt(u16, buf[roadstart..roadend], .big);
                 const milestart = roadend;
                 const mileend = milestart + 2;
-                const mile: u16 = try decode_u16(buf[milestart..mileend]);
+                const mile: u16 = std.mem.readVarInt(u16, buf[milestart..mileend], .big);
                 const limitstart = mileend;
                 const limitend = limitstart + 2;
-                const limit: u16 = try decode_u16(buf[limitstart..limitend]);
+                const limit: u16 = std.mem.readVarInt(u16, buf[limitstart..limitend], .big);
                 len += limitend - start;
                 const m = Message.initCamera(.{ .road = road, .mile = mile, .limit = limit });
                 std.log.debug("(decode): road: {d}, mile: {d}, limit: {d}", .{ road, mile, limit });
@@ -266,7 +256,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 var roads = try std.ArrayList(u16).initCapacity(alloc, numroads);
                 var i: u8 = 0;
                 while (i < numroads) {
-                    const r = try decode_u16(buf[roadsstart .. roadsstart + 2]);
+                    const r = std.mem.readVarInt(u16, buf[roadsstart .. roadsstart + 2], .big);
                     try roads.append(r);
                     roadsstart += 2;
                     i += 1;
