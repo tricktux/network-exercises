@@ -565,12 +565,29 @@ pub const Roads = struct {
         self.map.deinit();
     }
 
-    // TODO: do we need a client here?
     pub fn add(self: *Roads, road: Road) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
         try self.map.put(road.road, road);
+    }
+
+    pub fn addDispatcher(self: *Roads, disp: *Dispatcher) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const fd = disp.fd;
+
+        for (disp.roads.items) |road| {
+            const existingroad = self.map.getPtr(road);
+            if (existingroad != null and existingroad.?.dispatcher == null) {
+                existingroad.?.dispatcher = fd;
+                continue;
+            }
+
+            const r = Road{ .road = road, .dispatcher = fd };
+            try self.map.put(road, r);
+        }
     }
 
     pub fn get(self: *Roads, road: u16) ?*Road {

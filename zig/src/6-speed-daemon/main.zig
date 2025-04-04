@@ -137,6 +137,13 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
             };
         }
         // TODO: If it's a dispatcher, remove the roads
+        // if (thr_ctx.client.?.type == ClientType.Dispatcher) {
+        //     for (ctx.roads.items) |road| {
+        //         if (road.?.dispatcher == thr_ctx.fd) {
+        //             road.?.dispatcher = null;
+        //         }
+        //     }
+        // }
         ctx.clients.del(thr_ctx.fd, ctx.epoll) catch |third_err| {
             std.log.err("Failed to del client: {!}", .{third_err});
         };
@@ -260,7 +267,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Add dispatcher to the Dispatchers
-                const dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
+                var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
                     std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init dispatcher";
                     removeFd(ctx, thr_ctx);
@@ -273,18 +280,9 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     removeFd(ctx, thr_ctx);
                 };
 
-                for (dispatcher.roads.items) |road| {
-                    const existingroad = ctx.roads.get(road);
-                    if (existingroad != null and existingroad.?.dispatcher == null) {
-                        existingroad.?.dispatcher = fd;
-                        continue;
-                    }
-
-                    const r = Road{ .road = road, .dispatcher = fd };
-                    ctx.roads.add(r) catch |err| {
-                        std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
-                    };
-                }
+                ctx.roads.addDispatcher(&dispatcher) catch |err| {
+                    std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
+                };
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
