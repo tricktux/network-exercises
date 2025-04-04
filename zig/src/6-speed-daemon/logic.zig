@@ -550,33 +550,7 @@ pub const Cars = struct {
 
 pub const Road = struct {
     road: u16,
-    speed_limit: ?u16 = null,
     dispatcher: ?socketfd = null, // Dispatcher associated with this road
-    cameras: ArrayCameraId, // Cameras associated with this road
-
-    pub fn init(alloc: std.mem.Allocator) !Road {
-        return Road{
-            .cameras = ArrayCameraId.initCapacity(alloc, 4),
-        };
-    }
-
-    pub fn deinit(self: *Road) void {
-        self.cameras.deinit();
-    }
-
-    pub fn addCameraId(self: *Road, camid: socketfd) !void {
-        try self.cameras.append(camid);
-    }
-
-    pub fn delCameraId(self: *Road, camid: socketfd) void {
-        const it = self.cameras.iterator();
-        while (it.next()) |id| {
-            if (id == camid) {
-                _ = self.cameras.remove(it.index());
-                break;
-            }
-        }
-    }
 };
 
 pub const Roads = struct {
