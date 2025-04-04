@@ -223,11 +223,10 @@ pub const Clients = struct {
         self.map.deinit();
     }
 
-    pub fn add(self: *Clients, client: Client, epoll: *EpollManager) !void {
+    pub fn add(self: *Clients, client: Client) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        epoll.add(client.fd);
         try self.map.put(client.fd, client);
     }
 
@@ -261,14 +260,12 @@ pub const Client = struct {
         dispatcher: Dispatcher,
     },
 
-    pub fn initWithCamera(fd: socketfd, message: Message) !Client {
-        if (message.type != messages.Type.IAmCamera) return LogicError.MessageWrongType;
-        std.log.info("Creating camera client: road: {d}, mile: {d}, limit: {d}\n", .{ message.data.camera.road, message.data.camera.mile, message.data.camera.limit });
-
+    pub fn initWithCamera(fd: socketfd, cam: Camera) Client {
         return Client{
             .fd = fd,
             .type = ClientType.Camera,
-            .data = .{ .camera = Camera.initFromMessage(fd, message) },
+            .timer = null,
+            .data = .{ .camera = cam },
         };
     }
 
@@ -633,9 +630,9 @@ pub const Camera = struct {
 
         return Camera{
             .fd = fd,
-            .road = message.road,
-            .mile = message.mile,
-            .speed_limit = message.limit,
+            .road = message.data.camera.road,
+            .mile = message.data.camera.mile,
+            .speed_limit = message.data.camera.limit,
         };
     }
 };
@@ -654,11 +651,11 @@ pub const Cameras = struct {
         self.map.deinit();
     }
 
-    pub fn add(self: *Cameras, camera: Camera) !void {
+    pub fn add(self: *Cameras, fd: socketfd, camera: Camera) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        try self.map.put(camera.key, camera);
+        try self.map.put(fd, camera);
     }
 
     pub fn get(self: *Cameras, fd: socketfd) ?*Camera {
