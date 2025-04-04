@@ -36,7 +36,7 @@ pub const Ticket = struct {
     speed: u16,
 
     pub fn init() Ticket {
-        return Ticket{.plate = &[_]u8{}, .road = 0, .mile1 = 0, .timestamp1 = 0, .mile2 = 0, .timestamp2 = 0, .speed = 0};
+        return Ticket{ .plate = &[_]u8{}, .road = 0, .mile1 = 0, .timestamp1 = 0, .mile2 = 0, .timestamp2 = 0, .speed = 0 };
     }
 };
 

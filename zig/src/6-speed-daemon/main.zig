@@ -80,7 +80,6 @@ pub fn main() !void {
     }
 
     // Create the world
-    // TODO: Add fifos
     var epoll = try EpollManager.init();
     defer epoll.deinit();
     var fifos = try Fifos.init(allocator);
@@ -160,7 +159,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     var fifo = ctx.fifos.get(fd);
     if (fifo == null) {
-        std.log.err("({d}): Failed to get fifo: {d}", .{thrid, fd});
+        std.log.err("({d}): Failed to get fifo: {d}", .{ thrid, fd });
         return;
     }
 
@@ -168,7 +167,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     var read_error = false;
     while (true) {
         const buf = fifo.?.writableWithSize(2048) catch |err| {
-            std.log.err("({d}): Failed to get fifo: {d}. Error: {!}", .{thrid, fd, err});
+            std.log.err("({d}): Failed to get fifo: {d}. Error: {!}", .{ thrid, fd, err });
             read_error = true;
             break;
         };
@@ -187,7 +186,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     }
 
     if (read_error) {
-        std.log.err("({d}): error while reading from client: {d}", .{thrid, fd});
+        std.log.err("({d}): error while reading from client: {d}", .{ thrid, fd });
         thr_ctx.error_msg = "Error while reading from client";
         removeFd(ctx, thr_ctx);
         return;
@@ -211,16 +210,16 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     for (&thr_ctx.msgs.buffer) |*msg| {
         switch (msg.type) {
             .Heartbeat, .ErrorM, .Ticket => {
-                std.log.debug("({d}): Got unexpected msg type: {x} from client: {d}", .{thrid, msg.type, fd});
+                std.log.debug("({d}): Got unexpected msg type: {x} from client: {d}", .{ thrid, msg.type, fd });
                 thr_ctx.error_msg = "I was not expecting this type of message from you";
                 removeFd(ctx, thr_ctx);
             },
             .IAmCamera => {
-                std.log.debug("({d}): Got IAmCamera msg from client: {d}", .{thrid, fd});
+                std.log.debug("({d}): Got IAmCamera msg from client: {d}", .{ thrid, fd });
                 if (client != null) {
                     const t = std.enums.tagName(ClientType, client.?.type);
                     const u = if (t == null) "unknown" else t.?;
-                    std.log.err("({d}): Client already is identified as type: {s}", .{thrid, u});
+                    std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
                     thr_ctx.error_msg = "Client already is identified";
                     removeFd(ctx, thr_ctx);
                     continue;
@@ -229,13 +228,13 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 // Add the cam to the cameras
                 // TODO: Find out if there's a road already with this cam
                 const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
-                    std.log.err("({d}): Failed to init camera: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init camera";
                     removeFd(ctx, thr_ctx);
                     continue;
                 };
                 ctx.cameras.add(fd, camera) catch |err| {
-                    std.log.err("({d}): Failed to add camera: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add camera";
                     removeFd(ctx, thr_ctx);
                     continue;
@@ -244,17 +243,17 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 // Add new client
                 const newclient = Client.initWithCamera(fd, camera);
                 ctx.clients.add(newclient) catch |err| {
-                    std.log.err("({d}): Failed to add client: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, thr_ctx);
                 };
             },
             .IAmDispatcher => {
-                std.log.debug("({d}): Got IAmDispatcher msg from client: {d}", .{thrid, fd});
+                std.log.debug("({d}): Got IAmDispatcher msg from client: {d}", .{ thrid, fd });
                 if (client != null) {
                     const t = std.enums.tagName(ClientType, client.?.type);
                     const u = if (t == null) "unknown" else t.?;
-                    std.log.err("({d}): Client already is identified as type: {s}", .{thrid, u});
+                    std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
                     thr_ctx.error_msg = "Client already is identified";
                     removeFd(ctx, thr_ctx);
                     continue;
@@ -262,14 +261,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
                 // Add dispatcher to the Dispatchers
                 const dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
-                    std.log.err("({d}): Failed to init dispatcher: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init dispatcher";
                     removeFd(ctx, thr_ctx);
                     continue;
                 };
                 const newclient = Client.initWithDispatcher(fd, dispatcher);
                 ctx.clients.add(newclient) catch |err| {
-                    std.log.err("({d}): Failed to add client: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, thr_ctx);
                 };
@@ -281,27 +280,21 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         continue;
                     }
 
-                    const r = Road{.road = road, .dispatcher = fd};
+                    const r = Road{ .road = road, .dispatcher = fd };
                     ctx.roads.add(r) catch |err| {
-                        std.log.err("({d}): Failed to add road: {!}", .{thrid, err});
+                        std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
                     };
                 }
-
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
                 thr_ctx.error_msg = "Received a message of invalid type";
                 removeFd(ctx, thr_ctx);
                 continue;
-            }
+            },
         }
     }
 }
-
-// TODO: On message receipt use the fifo
-// TODO: On client disconnect remove the fifo
-// TODO: Streamline functions
-// TODO: - Like message handling
 
 fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
     const cpus = std.Thread.getCpuCount() catch |err| {
@@ -327,7 +320,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
-    var thr_ctx = ThreadContext{.fd = 0, .error_msg = null, .buf = &buf, .client = null, .msgs = &msgs, .alloc = alloc };
+    var thr_ctx = ThreadContext{ .fd = 0, .error_msg = null, .buf = &buf, .client = null, .msgs = &msgs, .alloc = alloc };
     const thrid = std.Thread.getCurrentId();
 
     std.log.debug("We are listeninig baby!!!...", .{});

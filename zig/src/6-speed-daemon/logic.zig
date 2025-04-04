@@ -88,7 +88,6 @@ pub const Fifos = struct {
         fifo.?.deinit();
         _ = self.map.remove(fd);
     }
-
 };
 
 pub const Timer = struct {
