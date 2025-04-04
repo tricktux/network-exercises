@@ -24,6 +24,8 @@ const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
 const TimerHashMap = std.AutoHashMap(socketfd, Timer);
+const u8Fifo = std.fifo.LinearFifo(u8, .Dynamic);
+const FdFifoHashMap = std.AutoHashMap(socketfd, u8Fifo);
 
 pub const Context = struct {
     cars: *Cars,
@@ -33,6 +35,59 @@ pub const Context = struct {
     clients: *Clients,
     epoll: *EpollManager,
     timers: *Timers,
+    fifos: *Fifos,
+};
+
+pub const Fifos = struct {
+    map: FdFifoHashMap,
+    mutex: std.Thread.Mutex = .{},
+    alloc: std.mem.Allocator,
+
+    pub fn init(alloc: std.mem.Allocator) !Fifos {
+        return Fifos{
+            .map = FdFifoHashMap.init(alloc),
+            .alloc = alloc,
+        };
+    }
+
+    pub fn deinit(self: *Fifos) void {
+        var it = self.map.iterator();
+        while (it.next()) |fifo| {
+            fifo.value_ptr.deinit();
+        }
+        self.map.deinit();
+    }
+
+    pub fn add(self: *Fifos, fd: socketfd) !void {
+        if (fd == 0) return error.InvalidFd;
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const fifo = u8Fifo.init(self.alloc);
+        try self.map.put(fd, fifo);
+    }
+
+    pub fn get(self: *Fifos, fd: socketfd) ?*u8Fifo {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        return self.map.getPtr(fd);
+    }
+
+    pub fn del(self: *Fifos, fd: socketfd) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        var fifo = self.map.getPtr(fd);
+        if (fifo == null) {
+            std.log.err("Failed to find fifo with fd: {d} for removal\n", .{fd});
+            return;
+        }
+        fifo.?.deinit();
+        _ = self.map.remove(fd);
+    }
+
 };
 
 pub const Timer = struct {

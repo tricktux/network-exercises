@@ -28,6 +28,7 @@ const Timers = logic.Timers;
 const Timer = logic.Timer;
 const Clients = logic.Clients;
 const Client = logic.Client;
+const Fifos = logic.Fifos;
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -76,8 +77,11 @@ pub fn main() !void {
     }
 
     // Create the world
+    // TODO: Add fifos
     var epoll = try EpollManager.init();
     defer epoll.deinit();
+    var fifos = try Fifos.init(allocator);
+    defer fifos.deinit();
     var tickets = TicketsQueue.init(allocator);
     defer tickets.deinit();
     var cars = try Cars.init(allocator, &tickets);
@@ -92,7 +96,7 @@ pub fn main() !void {
     };
     var timers = try Timers.init(allocator);
     defer timers.deinit();
-    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
+    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers, .fifos = &fifos };
 
     const serverfd = server.stream.handle;
     try epoll.add(serverfd);
