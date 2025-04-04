@@ -123,6 +123,7 @@ const ThreadContext = struct {
     fd: socketfd,
     client: ?*Client,
     error_msg: ?[]const u8,
+    msgs: *MessageBoundedArray,
 };
 
 inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
@@ -144,9 +145,86 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
     ctx.fifos.del(thr_ctx.fd);
 }
 
-// TODO: Create this thread context also at the beginning of the function
-// TODO: - Remember to update members as you update functions
-// TODO: On new client create a new fifo
+inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
+    std.log.debug("({d}): got new message!!!", .{thread_id});
+    // TODO: do something
+    // - Read the messages
+    const stream = std.net.Stream{ .handle = ready_socket };
+
+    // TODO: Need fifo here
+    var bytes: usize = 0;
+    var read_error = false;
+    while (true) {
+        bytes = stream.read(buf.buffer[bytes..]) catch |err| {
+            switch (err) {
+                error.WouldBlock => break,
+                else => {
+                    std.log.err("error while reading from client: {!}", .{err});
+                    read_error = true;
+                    break;
+                },
+            }
+        };
+        if (bytes == 0) break;
+        if (bytes >= 2048) {
+            std.log.err("Too many bytes read: {d}", .{bytes});
+            break;
+        }
+        buf.len += bytes;
+    }
+
+    if (read_error) {
+        std.log.err("({d}): error while reading from client: {!}", .{thread_id, ready_socket});
+        if (client != null) {
+            ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
+                std.log.err("Failed to del client: {!}", .{err});
+            };
+        }
+        ctx.epoll.del(ready_socket) catch |err| {
+            std.log.err("Failed to del client: {!}", .{err});
+        };
+        continue;
+    }
+
+    // - Handle read zero byte
+    if (bytes == 0) {
+        if (client != null) {
+            std.log.debug("({d}): Client disconnected: {d}", .{thread_id, ready_socket});
+            ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
+                std.log.err("Failed to del client: {!}", .{err});
+            };
+            continue;
+        }
+
+        std.log.debug("({d}): Client disconnected before identifying: {d}", .{thread_id, ready_socket});
+        ctx.epoll.del(ready_socket) catch |err| {
+            std.log.err("Failed to del client: {!}", .{err});
+        };
+        continue;
+    }
+    // - call decode(buf, msgs)
+    _ = messages.decode(buf.constSlice(), &msgs, alloc) catch |err| {
+        std.log.err("Failed to decode messages: {!}", .{err});
+        continue;
+    };
+    // - for (msgs) |msg| { switch (msg.Type) { ... } }
+    for (&msgs.buffer) |*msg| {
+        switch (msg.type) {
+            messages.Type.Heartbeat => {
+                if (client == null) {
+                    std.log.err("({d}): Got heartbeat from unknown client: {d}", .{thread_id, ready_socket});
+                    continue;
+                }
+                std.log.debug("({d}): Got heartbeat from client: {d}", .{thread_id, ready_socket});
+                // client.heartbeat();
+            },
+            else => {
+                std.log.err("Unrecognized error message", .{});
+            }
+        }
+    }
+}
+
 // TODO: On message receipt use the fifo
 // TODO: On client disconnect remove the fifo
 // TODO: Streamline functions
@@ -177,7 +255,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
-    var thr_ctx = ThreadContext{.fd = 0, .error_msg = null, .buf = &buf, .client = null};
+    var thr_ctx = ThreadContext{.fd = 0, .error_msg = null, .buf = &buf, .client = null, .msgs = &msgs };
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
@@ -240,6 +318,8 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 };
 
                 // For now just add it to epoll and fifos, until it identifies itself
+                // TODO: Are these fatal errors? Should we return instead of
+                // continue?
                 ctx.epoll.add(clientfd) catch |err| {
                     std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
                     _ = std.posix.close(clientfd);
@@ -255,83 +335,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             }
 
             // Then it must be we got a new message
-            std.log.debug("({d}): got new message!!!", .{thread_id});
-            // TODO: do something
-            // - Read the messages
-            const stream = std.net.Stream{ .handle = ready_socket };
-
-            // TODO: Need fifo here
-            var bytes: usize = 0;
-            var read_error = false;
-            while (true) {
-                bytes = stream.read(buf.buffer[bytes..]) catch |err| {
-                    switch (err) {
-                        error.WouldBlock => break,
-                        else => {
-                            std.log.err("error while reading from client: {!}", .{err});
-                            read_error = true;
-                            break;
-                        },
-                    }
-                };
-                if (bytes == 0) break;
-                if (bytes >= 2048) {
-                    std.log.err("Too many bytes read: {d}", .{bytes});
-                    break;
-                }
-                buf.len += bytes;
-            }
-
-            if (read_error) {
-                std.log.err("({d}): error while reading from client: {!}", .{thread_id, ready_socket});
-                if (client != null) {
-                    ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
-                        std.log.err("Failed to del client: {!}", .{err});
-                    };
-                }
-                ctx.epoll.del(ready_socket) catch |err| {
-                    std.log.err("Failed to del client: {!}", .{err});
-                };
-                continue;
-            }
-
-            // - Handle read zero byte
-            if (bytes == 0) {
-                if (client != null) {
-                    std.log.debug("({d}): Client disconnected: {d}", .{thread_id, ready_socket});
-                    ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
-                        std.log.err("Failed to del client: {!}", .{err});
-                    };
-                    continue;
-                }
-
-                std.log.debug("({d}): Client disconnected before identifying: {d}", .{thread_id, ready_socket});
-                ctx.epoll.del(ready_socket) catch |err| {
-                    std.log.err("Failed to del client: {!}", .{err});
-                };
-                continue;
-            }
-            // - call decode(buf, msgs)
-            _ = messages.decode(buf.constSlice(), &msgs, alloc) catch |err| {
-                std.log.err("Failed to decode messages: {!}", .{err});
-                continue;
-            };
-            // - for (msgs) |msg| { switch (msg.Type) { ... } }
-            for (&msgs.buffer) |*msg| {
-                switch (msg.type) {
-                    messages.Type.Heartbeat => {
-                        if (client == null) {
-                            std.log.err("({d}): Got heartbeat from unknown client: {d}", .{thread_id, ready_socket});
-                            continue;
-                        }
-                        std.log.debug("({d}): Got heartbeat from client: {d}", .{thread_id, ready_socket});
-                        // client.heartbeat();
-                    },
-                    else => {
-                        std.log.err("Unrecognized error message", .{});
-                    }
-                }
-            }
+            handleMessages(ctx, &thr_ctx);
         }
     }
 }
