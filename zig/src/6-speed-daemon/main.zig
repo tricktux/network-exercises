@@ -128,7 +128,7 @@ const ThreadContext = struct {
 inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
     if (thr_ctx.client != null) {
         if (thr_ctx.error_msg != null) {
-            thr_ctx.client.sendError(thr_ctx.error_msg, &thr_ctx.buf) catch |err| {
+            thr_ctx.client.?.sendError(thr_ctx.error_msg.?, thr_ctx.buf) catch |err| {
                 std.log.err("Failed to client.sendError: {!}", .{err});
             };
         }
@@ -141,9 +141,7 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
         };
     }
 
-    ctx.fifos.del(thr_ctx.fd) catch |err| {
-        std.log.err("Failed to del fifo: {!}", .{err});
-    };
+    ctx.fifos.del(thr_ctx.fd);
 }
 
 // TODO: Create this thread context also at the beginning of the function
@@ -197,49 +195,42 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             defer ctx.epoll.mod(ready_socket) catch |err| {
                 std.log.err("Failed to re-add socket to epoll: {!}", .{err});
             };
-            const client = ctx.clients.get(ready_socket);
-            thr_ctx.client = client;
-            thr_ctx.fd = ready_socket;
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
-                const clientfd = timer.client.fd;
+                thr_ctx.client = timer.client;
+                thr_ctx.fd = timer.client.fd;
                 timer.read() catch |err| {
                     std.log.err("Failed to posix.read timer: {!}...deleting client...", .{err});
-                    thr_ctx.client = timer.client;
-                    timer.client.sendError("Failed to posix.read timer", &buf) catch |sec_err| {
-                        std.log.err("Failed to client.sendError: {!}", .{sec_err});
-                    };
-                    ctx.clients.del(clientfd, ctx.epoll) catch |third_err| {
-                        std.log.err("Failed to del client: {!}", .{third_err});
-                    };
+                    thr_ctx.error_msg = "Failed to posix.read timer";
+                    removeFd(ctx, &thr_ctx);
                     continue;
                 };
 
                 timer.client.sendHeartbeat(&buf) catch |err| {
                     std.log.err("Failed to client.sendHeartbeat: {!}", .{err});
-                    timer.client.sendError("Failed to sendHeartbeat", &buf) catch |sec_err| {
-                        std.log.err("Failed to client.sendError: {!}", .{sec_err});
-                    };
-                    ctx.clients.del(clientfd, ctx.epoll) catch |third_err| {
-                        std.log.err("Failed to del client: {!}", .{third_err});
-                    };
+                    thr_ctx.error_msg = "Failed to sendHeartbeat";
+                    removeFd(ctx, &thr_ctx);
                     continue;
                 };
                 std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thread_id, timer.client.fd });
                 continue;
             }
 
+            // Setup loop variables if it's not a timer
+            const client = ctx.clients.get(ready_socket);
+            thr_ctx.client = client;
+            thr_ctx.fd = ready_socket;
+            thr_ctx.error_msg = null;
+
+            // Handle a closing connection event
             if ((event.events & linux.EPOLL.RDHUP) == linux.EPOLL.RDHUP) {
-                // TODO: Can't assume this is a client
-                ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
-                    std.log.err("Failed to del client: {!}", .{err});
-                    continue;
-                };
                 std.log.debug("({d}): Closed connection for client: {d}", .{ thread_id, ready_socket });
+                removeFd(ctx, &thr_ctx);
                 continue;
             }
 
+            // Handle a new connection event
             if (ready_socket == serverfd) {
                 std.log.debug("({d}): got new connection!!!", .{thread_id});
 
@@ -247,11 +238,19 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
                     continue;
                 };
-                // For now just add it to epoll, until it identifies itself
+
+                // For now just add it to epoll and fifos, until it identifies itself
                 ctx.epoll.add(clientfd) catch |err| {
                     std.log.err("({d}): error while accepting connection: {!}", .{ thread_id, err });
+                    _ = std.posix.close(clientfd);
+                    continue;
                 };
 
+                ctx.fifos.add(clientfd) catch |err| {
+                    std.log.err("({d}): error while adding fifo: {!}", .{ thread_id, err });
+                    _ = std.posix.close(clientfd);
+                    continue;
+                };
                 continue;
             }
 
