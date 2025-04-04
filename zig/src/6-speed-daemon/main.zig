@@ -31,6 +31,7 @@ const Timer = logic.Timer;
 const Clients = logic.Clients;
 const Client = logic.Client;
 const Fifos = logic.Fifos;
+const Dispatcher = logic.Dispatcher;
 
 // Constants
 const name: []const u8 = "0.0.0.0";
@@ -136,6 +137,7 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
                 std.log.err("Failed to client.sendError: {!}", .{err});
             };
         }
+        // TODO: If it's a dispatcher, remove the roads
         ctx.clients.del(thr_ctx.fd, ctx.epoll) catch |third_err| {
             std.log.err("Failed to del client: {!}", .{third_err});
         };
@@ -225,6 +227,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Add the cam to the cameras
+                // TODO: Find out if there's a road already with this cam
                 const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
                     std.log.err("({d}): Failed to init camera: {!}", .{thrid, err});
                     thr_ctx.error_msg = "Failed to init camera";
@@ -245,6 +248,45 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, thr_ctx);
                 };
+            },
+            .IAmDispatcher => {
+                std.log.debug("({d}): Got IAmDispatcher msg from client: {d}", .{thrid, fd});
+                if (client != null) {
+                    const t = std.enums.tagName(ClientType, client.?.type);
+                    const u = if (t == null) "unknown" else t.?;
+                    std.log.err("({d}): Client already is identified as type: {s}", .{thrid, u});
+                    thr_ctx.error_msg = "Client already is identified";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                }
+
+                // Add dispatcher to the Dispatchers
+                const dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
+                    std.log.err("({d}): Failed to init dispatcher: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to init dispatcher";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                };
+                const newclient = Client.initWithDispatcher(fd, dispatcher);
+                ctx.clients.add(newclient) catch |err| {
+                    std.log.err("({d}): Failed to add client: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to add client";
+                    removeFd(ctx, thr_ctx);
+                };
+
+                for (dispatcher.roads.items) |road| {
+                    const existingroad = ctx.roads.get(road);
+                    if (existingroad != null and existingroad.?.dispatcher == null) {
+                        existingroad.?.dispatcher = fd;
+                        continue;
+                    }
+
+                    const r = Road{.road = road, .dispatcher = fd};
+                    ctx.roads.add(r) catch |err| {
+                        std.log.err("({d}): Failed to add road: {!}", .{thrid, err});
+                    };
+                }
+
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
