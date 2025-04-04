@@ -118,6 +118,42 @@ pub fn main() !void {
     while (i < cpus) : (i += 1) threads.items[i].join();
 }
 
+const ThreadContext = struct {
+    buf: *u8BoundedArray,
+    fd: socketfd,
+    client: ?*Client,
+    error_msg: ?[]const u8,
+};
+
+inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
+    if (thr_ctx.client != null) {
+        if (thr_ctx.error_msg != null) {
+            thr_ctx.client.sendError(thr_ctx.error_msg, &thr_ctx.buf) catch |err| {
+                std.log.err("Failed to client.sendError: {!}", .{err});
+            };
+        }
+        ctx.clients.del(thr_ctx.fd, ctx.epoll) catch |third_err| {
+            std.log.err("Failed to del client: {!}", .{third_err});
+        };
+    } else {
+        ctx.epoll.del(thr_ctx.fd) catch |err| {
+            std.log.err("Failed to del epoll: {!}", .{err});
+        };
+    }
+
+    ctx.fifos.del(thr_ctx.fd) catch |err| {
+        std.log.err("Failed to del fifo: {!}", .{err});
+    };
+}
+
+// TODO: Create this thread context also at the beginning of the function
+// TODO: - Remember to update members as you update functions
+// TODO: On new client create a new fifo
+// TODO: On message receipt use the fifo
+// TODO: On client disconnect remove the fifo
+// TODO: Streamline functions
+// TODO: - Like message handling
+
 fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
     const thread_id = std.Thread.getCurrentId();
     const cpus = std.Thread.getCpuCount() catch |err| {
@@ -143,6 +179,8 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
+    var thr_ctx = ThreadContext{.fd = 0, .error_msg = null, .buf = &buf, .client = null};
+
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
         // Clean up
@@ -159,12 +197,16 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             defer ctx.epoll.mod(ready_socket) catch |err| {
                 std.log.err("Failed to re-add socket to epoll: {!}", .{err});
             };
+            const client = ctx.clients.get(ready_socket);
+            thr_ctx.client = client;
+            thr_ctx.fd = ready_socket;
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
                 const clientfd = timer.client.fd;
                 timer.read() catch |err| {
                     std.log.err("Failed to posix.read timer: {!}...deleting client...", .{err});
+                    thr_ctx.client = timer.client;
                     timer.client.sendError("Failed to posix.read timer", &buf) catch |sec_err| {
                         std.log.err("Failed to client.sendError: {!}", .{sec_err});
                     };
@@ -189,6 +231,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             }
 
             if ((event.events & linux.EPOLL.RDHUP) == linux.EPOLL.RDHUP) {
+                // TODO: Can't assume this is a client
                 ctx.clients.del(ready_socket, ctx.epoll) catch |err| {
                     std.log.err("Failed to del client: {!}", .{err});
                     continue;
@@ -217,7 +260,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             // TODO: do something
             // - Read the messages
             const stream = std.net.Stream{ .handle = ready_socket };
-            const client = ctx.clients.get(ready_socket);
 
             // TODO: Need fifo here
             var bytes: usize = 0;
