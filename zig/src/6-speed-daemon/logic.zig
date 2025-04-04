@@ -26,6 +26,7 @@ const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
 const TimerHashMap = std.AutoHashMap(socketfd, Timer);
 const u8Fifo = std.fifo.LinearFifo(u8, .Dynamic);
 const FdFifoHashMap = std.AutoHashMap(socketfd, u8Fifo);
+const RoadsArray = std.ArrayList(u16);
 
 pub const Context = struct {
     cars: *Cars,
@@ -321,14 +322,14 @@ pub const Client = struct {
 
 pub const Dispatcher = struct {
     fd: socketfd,
-    roads: std.ArrayList(u16),
+    roads: RoadsArray,
 
-    pub fn initFromMessage(fd: socketfd, message: Message) !Dispatcher {
+    pub fn initFromMessage(fd: socketfd, message: Message, alloc: std.mem.Allocator) !Dispatcher {
         if (message.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
 
         return Dispatcher{
             .fd = fd,
-            .roads = message.roads.toOwnedSlice(),
+            .roads = RoadsArray.fromOwnedSlice(alloc, try message.data.dispatcher.roads.toOwnedSlice()),
         };
     }
 
