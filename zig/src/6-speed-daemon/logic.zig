@@ -550,25 +550,18 @@ pub const Cars = struct {
 
 pub const Road = struct {
     road: u16,
+    // Use it directly dispatchers.{add,remove}
     dispatchers: DispatchersSet,
 
     pub fn init(alloc: std.mem.Allocator, road: u16) !Road {
         return Road{
             .road = road,
-            .dispatchers = try DispatchersSet.init(alloc),
+            .dispatchers = try DispatchersSet.initCapacity(alloc, 4),
         };
     }
 
     pub fn deinit(self: *Road) !void {
         self.dispatchers.deinit();
-    }
-
-    fn find_dispatcher(self: Road, fd: socketfd) ?i64 {
-        for (self.dispatchers.items, 0..) |dfd, i| {
-            if (fd == dfd) return i;
-        }
-
-        return null;
     }
 };
 
@@ -595,24 +588,37 @@ pub const Roads = struct {
     }
 
     // TODO: removeDispatcher
+    pub fn removeDispatcher(self: *Roads, disp: *Dispatcher) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
 
-    // pub fn addDispatcher(self: *Roads, disp: *Dispatcher) !void {
-    //     self.mutex.lock();
-    //     defer self.mutex.unlock();
-    //
-    //     // const fd = disp.fd;
-    //
-    //     // for (disp.roads.items) |road| {
-    //         // const existingroad = self.map.getPtr(road);
-    //         // if (existingroad != null and existingroad.?.dispatcher == null) {
-    //         //     existingroad.?.dispatcher = fd;
-    //         //     continue;
-    //         // }
-    //         //
-    //         // const r = Road{ .road = road, .dispatcher = fd };
-    //         // try self.map.put(road, r);
-    //     // }
-    // }
+        const fd = disp.fd;
+        for (disp.roads.items) |road| {
+            const nroad = self.map.getPtr(road);
+            if (nroad == null) continue;
+
+            try nroad.?.dispatchers.remove(fd);
+        }
+    }
+
+    pub fn addDispatcher(self: *Roads, disp: *Dispatcher, alloc: std.mem.Allocator) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const fd = disp.fd;
+
+        for (disp.roads.items) |road| {
+            const nroad = self.map.getPtr(road);
+            if (nroad != null) {
+                _ = try nroad.?.dispatchers.add(fd);
+                continue;
+            }
+
+            var r = try Road.init(alloc, road);
+            _ = try r.dispatchers.add(fd);
+            try self.map.put(road, r);
+        }
+    }
 
     pub fn get(self: *Roads, road: u16) ?*Road {
         self.mutex.lock();

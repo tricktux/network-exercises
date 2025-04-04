@@ -266,23 +266,24 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     continue;
                 }
 
+                // TODO: Check to see if there are tickets waiting for a dispatcher
                 // Add dispatcher to the Dispatchers
-                // var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
-                //     std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
-                //     thr_ctx.error_msg = "Failed to init dispatcher";
-                //     removeFd(ctx, thr_ctx);
-                //     continue;
-                // };
-                // const newclient = Client.initWithDispatcher(fd, dispatcher);
-                // ctx.clients.add(newclient) catch |err| {
-                //     std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
-                //     thr_ctx.error_msg = "Failed to add client";
-                //     removeFd(ctx, thr_ctx);
-                // };
+                var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
+                    std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to init dispatcher";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                };
+                const newclient = Client.initWithDispatcher(fd, dispatcher);
+                ctx.clients.add(newclient) catch |err| {
+                    std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to add client";
+                    removeFd(ctx, thr_ctx);
+                };
 
-                // ctx.roads.addDispatcher(&dispatcher) catch |err| {
-                    // std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
-                // };
+                ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
+                    std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
+                };
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
