@@ -9,6 +9,8 @@ const linux = std.os.linux;
 const testing = std.testing;
 const fmt = std.fmt;
 const time = std.time;
+const Type = messages.Type;
+const ClientType = logic.ClientType;
 const Thread = std.Thread;
 const MessageBoundedArray = messages.MessageBoundedArray;
 const u8BoundedArray = types.u8BoundedArray;
@@ -206,19 +208,49 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     for (&thr_ctx.msgs.buffer) |*msg| {
         switch (msg.type) {
-            messages.Type.Heartbeat => {
-                if (client == null) {
-                    std.log.err("({d}): Got heartbeat from unknown client: {d}", .{thrid, fd});
+            .Heartbeat, .ErrorM, .Ticket => {
+                std.log.debug("({d}): Got unexpected msg type: {x} from client: {d}", .{thrid, msg.type, fd});
+                thr_ctx.error_msg = "I was not expecting this type of message from you";
+                removeFd(ctx, thr_ctx);
+            },
+            .IAmCamera => {
+                std.log.debug("({d}): Got IAmCamera msg from client: {d}", .{thrid, fd});
+                if (client != null) {
+                    const t = std.enums.tagName(ClientType, client.?.type);
+                    const u = if (t == null) "unknown" else t.?;
+                    std.log.err("({d}): Client already is identified as type: {s}", .{thrid, u});
+                    thr_ctx.error_msg = "Client already is identified";
+                    removeFd(ctx, thr_ctx);
                     continue;
                 }
-                std.log.debug("({d}): Got heartbeat from client: {d}", .{thrid, fd});
-                // client.heartbeat();
+
+                // Add the cam to the cameras
+                const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
+                    std.log.err("({d}): Failed to init camera: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to init camera";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                };
+                ctx.cameras.add(fd, camera) catch |err| {
+                    std.log.err("({d}): Failed to add camera: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to add camera";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                };
+
+                // Add new client
+                const newclient = Client.initWithCamera(fd, camera);
+                ctx.clients.add(newclient) catch |err| {
+                    std.log.err("({d}): Failed to add client: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to add client";
+                    removeFd(ctx, thr_ctx);
+                };
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
                 thr_ctx.error_msg = "Received a message of invalid type";
                 removeFd(ctx, thr_ctx);
-                return;
+                continue;
             }
         }
     }
