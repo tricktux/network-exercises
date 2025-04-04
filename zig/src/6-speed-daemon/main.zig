@@ -184,40 +184,26 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     if (read_error) {
         std.log.err("({d}): error while reading from client: {d}", .{thrid, fd});
-        if (client != null) {
-            ctx.clients.del(fd, ctx.epoll) catch |err| {
-                std.log.err("Failed to del client: {!}", .{err});
-            };
-        }
-        ctx.epoll.del(fd) catch |err| {
-            std.log.err("Failed to del client: {!}", .{err});
-        };
+        thr_ctx.error_msg = "Error while reading from client";
+        removeFd(ctx, thr_ctx);
         return;
     }
 
     // - Handle read zero byte
     if (bytes == 0) {
-        if (client != null) {
-            std.log.debug("({d}): Client disconnected: {d}", .{thrid, fd});
-            ctx.clients.del(fd, ctx.epoll) catch |err| {
-                std.log.err("Failed to del client: {!}", .{err});
-            };
-            return;
-        }
-
-        std.log.debug("({d}): Client disconnected before identifying: {d}", .{thrid, fd});
-        ctx.epoll.del(fd) catch |err| {
-            std.log.err("Failed to del client: {!}", .{err});
-        };
+        std.log.debug("({d}): Closed connection for client: {d}", .{ thrid, fd });
+        removeFd(ctx, thr_ctx);
         return;
     }
     // - call decode(buf, msgs)
     const data = fifo.?.readableSlice(0);
     _ = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
         std.log.err("Failed to decode messages: {!}", .{err});
+        thr_ctx.error_msg = "Received a message of invalid type";
+        removeFd(ctx, thr_ctx);
         return;
     };
-    // - for (msgs) |msg| { switch (msg.Type) { ... } }
+
     for (&thr_ctx.msgs.buffer) |*msg| {
         switch (msg.type) {
             messages.Type.Heartbeat => {
@@ -229,7 +215,10 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 // client.heartbeat();
             },
             else => {
-                std.log.err("Unrecognized error message", .{});
+                std.log.err("Impossible!! But received a message of invalid type", .{});
+                thr_ctx.error_msg = "Received a message of invalid type";
+                removeFd(ctx, thr_ctx);
+                return;
             }
         }
     }
