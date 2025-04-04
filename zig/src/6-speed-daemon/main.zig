@@ -284,45 +284,10 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                             continue;
                         }
                         std.log.debug("({d}): Got heartbeat from client: {d}", .{thread_id, ready_socket});
-                        client.heartbeat();
+                        // client.heartbeat();
                     },
-                    messages.Type.Identify => {
-                        if (client != null) {
-                            std.log.err("({d}): Got identify from already identified client: {d}", .{thread_id, ready_socket});
-                            continue;
-                        }
-                        std.log.debug("({d}): Got identify from client: {d}", .{thread_id, ready_socket});
-                        const newclient = try logic.Client.init(ready_socket, msg.identify.id, &ctx.cars, &ctx.roads, &ctx.cameras, &ctx.tickets, &ctx.epoll, &ctx.timers);
-                        ctx.clients.add(newclient);
-                    },
-                    messages.Type.GetCars => {
-                        if (client == null) {
-                            std.log.err("({d}): Got getCars from unknown client: {d}", .{thread_id, ready_socket});
-                            continue;
-                        }
-                        std.log.debug("({d}): Got getCars from client: {d}", .{thread_id, ready_socket});
-                        client.getCars();
-                    },
-                    messages.Type.GetRoads => {
-                        if (client == null) {
-                            std.log.err("({d}): Got getRoads from unknown client: {d}", .{thread_id, ready_socket});
-                            continue;
-                        }
-                        std.log.debug("({d}): Got getRoads from client: {d}", .{thread_id, ready_socket});
-                        client.getRoads();
-                    },
-                    messages.Type.GetCameras => {
-                        if (client == null) {
-                            std.log.err("({d}): Got getCameras from unknown client: {d}", .{thread_id, ready_socket});
-                            continue;
-                        }
-                        std.log.debug("({d}): Got getCameras from client: {d}", .{thread_id, ready_socket});
-                        client.getCameras();
-                    },
-                    messages.Type.GetTickets => {
-                        if (client == null) {
-                            std.log.err("({d}): Got getTickets from unknown client: {d}", .{thread_id, ready_socket});
-                        }
+                    else => {
+                        std.log.err("Unrecognized error message", .{});
                     }
                 }
             }
