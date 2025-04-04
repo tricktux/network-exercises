@@ -255,7 +255,7 @@ pub const Clients = struct {
 pub const Client = struct {
     fd: socketfd,
     type: ClientType,
-    timer: ?Timer,
+    timer: ?Timer = null,
     data: union(enum) {
         camera: Camera,
         dispatcher: Dispatcher,
@@ -265,7 +265,6 @@ pub const Client = struct {
         return Client{
             .fd = fd,
             .type = ClientType.Camera,
-            .timer = null,
             .data = .{ .camera = cam },
         };
     }
@@ -323,7 +322,7 @@ pub const Dispatcher = struct {
     fd: socketfd,
     roads: RoadsArray,
 
-    pub fn initFromMessage(fd: socketfd, message: Message, alloc: std.mem.Allocator) !Dispatcher {
+    pub fn initFromMessage(fd: socketfd, message: *Message, alloc: std.mem.Allocator) !Dispatcher {
         if (message.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
 
         return Dispatcher{
