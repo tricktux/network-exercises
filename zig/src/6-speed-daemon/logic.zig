@@ -3,6 +3,7 @@ const messages = @import("messages.zig");
 const time = @import("time.zig");
 const types = @import("types.zig");
 const logger = @import("logger.zig");
+const Set = @import("ziglangSet").Set;
 const linux = std.os.linux;
 const testing = std.testing;
 
@@ -27,6 +28,7 @@ const TimerHashMap = std.AutoHashMap(socketfd, Timer);
 const u8Fifo = std.fifo.LinearFifo(u8, .Dynamic);
 const FdFifoHashMap = std.AutoHashMap(socketfd, u8Fifo);
 const RoadsArray = std.ArrayList(u16);
+const DispatchersSet = Set(socketfd);
 
 pub const Context = struct {
     cars: *Cars,
@@ -548,8 +550,28 @@ pub const Cars = struct {
 
 pub const Road = struct {
     road: u16,
-    dispatcher: ?socketfd = null, // Dispatcher associated with this road
+    dispatchers: DispatchersSet,
+
+    pub fn init(alloc: std.mem.Allocator, road: u16) !Road {
+        return Road{
+            .road = road,
+            .dispatchers = try DispatchersSet.init(alloc),
+        };
+    }
+
+    pub fn deinit(self: *Road) !void {
+        self.dispatchers.deinit();
+    }
+
+    fn find_dispatcher(self: Road, fd: socketfd) ?i64 {
+        for (self.dispatchers.items, 0..) |dfd, i| {
+            if (fd == dfd) return i;
+        }
+
+        return null;
+    }
 };
+
 
 pub const Roads = struct {
     map: RoadHashMap,
@@ -572,23 +594,25 @@ pub const Roads = struct {
         try self.map.put(road.road, road);
     }
 
-    pub fn addDispatcher(self: *Roads, disp: *Dispatcher) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+    // TODO: removeDispatcher
 
-        const fd = disp.fd;
-
-        for (disp.roads.items) |road| {
-            const existingroad = self.map.getPtr(road);
-            if (existingroad != null and existingroad.?.dispatcher == null) {
-                existingroad.?.dispatcher = fd;
-                continue;
-            }
-
-            const r = Road{ .road = road, .dispatcher = fd };
-            try self.map.put(road, r);
-        }
-    }
+    // pub fn addDispatcher(self: *Roads, disp: *Dispatcher) !void {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //
+    //     // const fd = disp.fd;
+    //
+    //     // for (disp.roads.items) |road| {
+    //         // const existingroad = self.map.getPtr(road);
+    //         // if (existingroad != null and existingroad.?.dispatcher == null) {
+    //         //     existingroad.?.dispatcher = fd;
+    //         //     continue;
+    //         // }
+    //         //
+    //         // const r = Road{ .road = road, .dispatcher = fd };
+    //         // try self.map.put(road, r);
+    //     // }
+    // }
 
     pub fn get(self: *Roads, road: u16) ?*Road {
         self.mutex.lock();

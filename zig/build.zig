@@ -15,6 +15,9 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // Set
+    const ziglangSet = b.dependency("ziglangSet", .{});
+
     // Utils
     const utils = b.addModule("utils", .{
         .root_source_file = b.path("src/utils/root.zig"),
@@ -143,6 +146,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    speed_daemon.root_module.addImport("ziglangSet", ziglangSet.module("ziglangSet"));
     b.installArtifact(speed_daemon);
 
     // 6 Speed Daemon
@@ -152,5 +156,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    speed_daemon_tests.root_module.addImport("ziglangSet", ziglangSet.module("ziglangSet"));
     b.installArtifact(speed_daemon_tests);
 }
