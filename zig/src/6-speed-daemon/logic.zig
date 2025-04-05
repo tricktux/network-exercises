@@ -14,9 +14,9 @@ const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
 const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
-// TODO: Make this a DoublyLinkedList
 const Ticket = messages.Ticket;
-pub const TicketsQueue = std.ArrayList(Message); // Of Type.Ticket
+// TODO: Make this a DoublyLinkedList
+pub const TicketsQueue = std.DoublyLinkedList(Message); // Of Type.Ticket
 const Tickets = std.StringHashMap(Message);
 const Observations = std.ArrayList(Observation);
 const ObservationsHashMap = std.StringHashMap(Observations);
@@ -711,7 +711,7 @@ test "Car.addObservation" {
     const allocator = testing.allocator;
 
     // Test setup
-    var tickets_queue = TicketsQueue.init(allocator);
+    var tickets_queue = TicketsQueue{};
     defer tickets_queue.deinit();
 
     // Test error cases

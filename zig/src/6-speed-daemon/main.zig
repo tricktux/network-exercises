@@ -84,8 +84,8 @@ pub fn main() !void {
     defer epoll.deinit();
     var fifos = try Fifos.init(allocator);
     defer fifos.deinit();
-    var tickets = TicketsQueue.init(allocator);
-    defer tickets.deinit();
+    // No need to deinit, the queue messages of type ticket, there's no dynamic allocation there
+    var tickets = TicketsQueue{};
     var cars = try Cars.init(allocator, &tickets);
     defer cars.deinit();
     var roads = try Roads.init(allocator);
@@ -155,6 +155,51 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
     }
 
     ctx.fifos.del(thr_ctx.fd);
+}
+
+// TODO: This tickets Queue needs to be mutex protected
+inline fn dispatchTicketsQueue(ctx: *Context, thr_ctx: *ThreadContext) void {
+    if (ctx.tickets.len == 0) return;
+
+    const thrid = std.Thread.getCurrentId();
+
+    var delete: ?*TicketsQueue.Node = undefined;
+    while (true) {
+        // Traverse Queue of Tickets waiting to be dispatched forward
+        var it = ctx.tickets.first;
+        while (it) |ticket| : (it = ticket.next) {
+            // Is this ticket's road in our road's database?
+            const road = ticket.data.data.ticket.road;
+            var road_str = ctx.roads.get(road);
+            if (road_str == null) {
+                std.log.warn("Got a ticket for a road that's not in the database....Hmmm", .{});
+                continue;
+            }
+
+            // If so, is there a dispatcher available for this road?
+            if (road_str.?.dispatchers.cardinality() == 0) continue;
+            var dispit = road_str.?.dispatchers.iterator();
+
+            // If there is, send the ticket out
+            const disp = dispit.next().?;
+            Dispatcher.sendTicket(disp.*, &ticket.data, thr_ctx.buf) catch |err| {
+                std.log.err("({d}): Failed to send ticket: {!}", .{ thrid, err });
+                thr_ctx.error_msg = "Failed to send ticket";
+                removeFd(ctx, thr_ctx);
+                continue;
+            };
+
+            // Mark this ticket for deletion from the queue
+            delete = ticket;
+            break;
+        }
+        // If no tickets were found, break out of the loop
+        if (delete == null) break;
+        // If we found a ticket to delete, remove it from the queue
+        ctx.tickets.remove(delete.?);
+        // Start again
+        delete = null;
+    }
 }
 
 // TODO: This function's length is getting out of hand
@@ -276,24 +321,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     // TODO: Search the tickets queue
                     // TODO: Turn this into a function
                     // TODO: TicketsQueue should be something easier to remove items from, like DoubleLinked List
-                    for (ctx.tickets.items) |*ticket| {
-                        const road = ticket.data.ticket.road;
-                        var road_str = ctx.roads.get(road);
-                        if (road_str == null) {
-                            std.log.warn("Got a ticket for a road that's not in the database....Hmmm", .{});
-                            continue;
-                        }
-                        if (road_str.?.dispatchers.cardinality() == 0) continue;
-                        var dispit = road_str.?.dispatchers.iterator();
-                        const disp = dispit.next().?;
-                        Dispatcher.sendTicket(disp.*, ticket, thr_ctx.buf) catch |err| {
-                            std.log.err("({d}): Failed to send ticket: {!}", .{ thrid, err });
-                            thr_ctx.error_msg = "Failed to send ticket";
-                            removeFd(ctx, thr_ctx);
-                            continue;
-                        };
-                        // TODO: Remove ticket from the queue
-                    }
                 }
 
                 // Add new client
