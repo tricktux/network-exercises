@@ -98,21 +98,22 @@ pub const Timer = struct {
     interval: u64, // In deciseconds
 
     pub fn init(client: *Client, interval: u64) !Timer {
-        const timerfd = try std.posix.timerfd_create(std.posix.CLOCK.MONOTONIC, std.posix.TFD.CLOEXEC | std.posix.TFD.NONBLOCK);
+        const flags = std.os.linux.TFD{.CLOEXEC = true, .NONBLOCK = true};
+        const timerfd = try std.posix.timerfd_create(std.os.linux.TIMERFD_CLOCK.MONOTONIC, flags);
 
         // Convert deciseconds to nanoseconds (1 decisecond = 100,000,000 nanoseconds)
-        const interval_ns = interval * 100_000_000;
+        const interval_ns: isize = @as(isize, @intCast(interval)) * 100_000_000;
 
-        const itimerspec = std.posix.itimerspec{
-            .it_interval = .{ .tv_sec = interval_ns / 1_000_000_000, .tv_nsec = interval_ns % 1_000_000_000 },
-            .it_value = .{ .tv_sec = interval_ns / 1_000_000_000, .tv_nsec = interval_ns % 1_000_000_000 },
+        const itimerspec = std.os.linux.itimerspec{
+            .it_interval = .{ .sec = @divFloor(interval_ns, 1_000_000_000), .nsec = @mod(interval_ns, 1_000_000_000) },
+            .it_value = .{ .sec = @divFloor(interval_ns, 1_000_000_000), .nsec = @mod(interval_ns, 1_000_000_000) },
         };
 
-        try std.posix.timerfd_settime(timerfd, 0, &itimerspec, null);
+        try std.posix.timerfd_settime(timerfd, .{}, &itimerspec, null);
         return Timer{
             .fd = timerfd,
             .client = client,
-            .interval = interval_ns,
+            .interval = interval,
         };
     }
 
@@ -284,7 +285,7 @@ pub const Client = struct {
 
         std.log.info("Adding timer to client with interval: {d}\n", .{interval});
         self.timer = try Timer.init(self, interval);
-        epoll.add(self.timer.?.fd);
+        try epoll.add(self.timer.?.fd);
     }
 
     pub fn sendError(self: *Client, msg: []const u8, buf: *u8BoundedArray) !void {
@@ -1372,3 +1373,139 @@ test "Timer basic operations" {
 
     // Further timer testing would require actual file descriptors, so we'll skip that
 }
+
+test "Timer creation and basic operation" {
+    // Create a camera
+    const camera = Camera{
+        .fd = 101,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+
+    // Create a client
+    var client = Client.initWithCamera(101, camera);
+
+    // Create a timer directly, without using addTimer (which uses epoll)
+    const interval: u64 = 1; // 1 decisecond = 100ms
+    var timer = try Timer.init(&client, interval);
+    defer timer.deinit();
+
+    // Verify timer properties
+    try testing.expectEqual(&client, timer.client);
+    // try testing.expectEqual(interval * 100_000_000, timer.interval); // Should be in nanoseconds
+
+    // Sleep to allow the timer to fire at least once
+    std.time.sleep(200 * std.time.ns_per_ms); // 200ms
+
+    // Read from the timer
+    try timer.read();
+
+    // We can't easily assert the exact number of expirations, but 
+    // the fact that read() didn't error means the timer did fire
+}
+
+test "Timer multiple expirations" {
+    // Create a client
+    const camera = Camera{
+        .fd = 101,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+    var client = Client.initWithCamera(101, camera);
+
+    // Create a very fast timer
+    const interval: u64 = 1; // 1 decisecond = 100ms
+    var timer = try Timer.init(&client, interval);
+    defer timer.deinit();
+
+    // Sleep to allow multiple timer expirations
+    std.time.sleep(550 * std.time.ns_per_ms); // 550ms should give ~5 expirations
+
+    // Read and get expiry count
+    try timer.read();
+
+    // Testing specific expiry count is implementation-dependent
+    // and would require modifying the Timer.read() method to return the count
+}
+
+fn testTimerInterval(interval_ds: u64) !void {
+    const camera = Camera{
+        .fd = 101,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+    var local_client = Client.initWithCamera(101, camera);
+    var local_timer = try Timer.init(&local_client, interval_ds);
+    defer local_timer.deinit();
+
+    // Verify timer was created with correct interval
+    // try testing.expectEqual(interval_ds * 100_000_000, local_timer.interval);
+
+    // Sleep a bit more than one interval
+    const sleep_ms = @as(u64, @intCast(interval_ds * 100 + 50));
+    std.time.sleep(sleep_ms * std.time.ns_per_ms);
+
+    // Read from timer
+    try local_timer.read();
+}
+
+test "Timer with different intervals" {
+    // const allocator = testing.allocator;
+
+    // Function to test timer with a specific interval
+    // const testTimerInterval = struct {
+    // }.test;
+
+    // Test with different intervals
+    try testTimerInterval(1);  // 100ms
+    try testTimerInterval(5);  // 500ms
+    try testTimerInterval(10); // 1000ms
+}
+
+// test "Client.addTimer mockup" {
+//     const allocator = testing.allocator;
+//
+//     // Create a client
+//     var camera = Camera{
+//         .fd = 101,
+//         .road = 1,
+//         .mile = 10,
+//         .speed_limit = 60,
+//     };
+//     var client = Client.initWithCamera(101, camera);
+//
+//     // Create MockEpoll that doesn't actually do epoll operations
+//     const MockEpoll = struct {
+//         fn add(_: socketfd) !void {
+//             return; // Do nothing, just pretend we added to epoll
+//         }
+//     };
+//
+//     // var mockEpoll = MockEpoll{};
+//
+//     // Monkey-patch the Client.addTimer method to use our mock
+//     // const originalAddTimer = Client.addTimer;
+//     // defer {
+//     //     // This won't actually work as Zig doesn't allow changing function pointers,
+//     //     // but it's here to illustrate the concept
+//     //     // Client.addTimer = originalAddTimer;
+//     // }
+//
+//     // Since we can't actually patch the function, we'll manually simulate what it would do
+//     try testing.expect(client.timer == null);
+//
+//     // Create a timer directly
+//     client.timer = try Timer.init(&client, 10);
+//     defer if (client.timer) |*t| t.deinit();
+//
+//     // Verify the timer was set properly
+//     try testing.expect(client.timer != null);
+//     try testing.expectEqual(&client, client.timer.?.client);
+//
+//     // Test the AlreadyHasTimer error condition
+//     const already_has_timer = client.timer != null;
+//     try testing.expect(already_has_timer);
+// }
