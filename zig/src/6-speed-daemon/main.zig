@@ -366,7 +366,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             if (ctx.timers.get(ready_socket)) |timer| {
                 thr_ctx.client = timer.client;
                 thr_ctx.fd = timer.client.fd;
-                timer.read() catch |err| {
+                _ = timer.read() catch |err| {
                     std.log.err("Failed to posix.read timer: {!}...deleting client...", .{err});
                     thr_ctx.error_msg = "Failed to posix.read timer";
                     removeFd(ctx, &thr_ctx);
