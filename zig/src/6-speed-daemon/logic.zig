@@ -597,7 +597,7 @@ pub const Roads = struct {
             const nroad = self.map.getPtr(road);
             if (nroad == null) continue;
 
-            try nroad.?.dispatchers.remove(fd);
+            _ = nroad.?.dispatchers.remove(fd);
         }
     }
 
@@ -689,11 +689,7 @@ pub const Cameras = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        if (self.map.fetchRemove(fd)) |cam| {
-            cam.value.deinit();
-        } else {
-            std.log.err("Error removing camera with id: {d}\n", .{fd});
-        }
+        _ = self.map.remove(fd);
     }
 };
 
