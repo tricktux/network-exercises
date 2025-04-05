@@ -16,11 +16,10 @@ const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
 const Ticket = messages.Ticket;
 // TODO: Make this a DoublyLinkedList
-pub const TicketsQueue = std.DoublyLinkedList(Message); // Of Type.Ticket
+pub const TicketsQueueType = std.DoublyLinkedList(Message); // Of Type.Ticket
 const Tickets = std.StringHashMap(Message);
 const Observations = std.ArrayList(Observation);
 const ObservationsHashMap = std.StringHashMap(Observations);
-const ObservationsKeysStore = std.SinglyLinkedList([]u8);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
@@ -39,6 +38,60 @@ pub const Context = struct {
     epoll: *EpollManager,
     timers: *Timers,
     fifos: *Fifos,
+};
+
+pub const TicketsQueue = struct {
+    queue: TicketsQueueType = TicketsQueueType{},
+    mutex: std.Thread.Mutex = .{},
+
+    pub fn append(self: *TicketsQueue, ticket: Message) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        var node = TicketsQueueType.Node{ .data = ticket };
+        self.queue.append(&node);
+    }
+
+    pub fn dispatchTicketsQueue(self: *TicketsQueue, roads: *Roads, buf: *u8BoundedArray) !void {
+        if (self.queue.len == 0) return;
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        var delete: ?*TicketsQueueType.Node = undefined;
+        while (true) {
+            // Traverse Queue of Tickets waiting to be dispatched forward
+            var it = self.queue.first;
+            while (it) |ticket| : (it = ticket.next) {
+                // Is this ticket's road in our road's database?
+                const road = ticket.data.data.ticket.road;
+                var road_str = roads.get(road);
+                if (road_str == null) {
+                    std.log.warn("Got a ticket for a road that's not in the database....Hmmm", .{});
+                    continue;
+                }
+
+                // If so, is there a dispatcher available for this road?
+                if (road_str.?.dispatchers.cardinality() == 0) continue;
+                var dispit = road_str.?.dispatchers.iterator();
+
+                // If there is, send the ticket out
+                const disp = dispit.next().?;
+                try Dispatcher.sendTicket(disp.*, &ticket.data, buf);
+
+                // Mark this ticket for deletion from the queue
+                delete = ticket;
+                break;
+            }
+            // If no tickets were found, break out of the loop
+            if (delete == null) break;
+            // If we found a ticket to delete, remove it from the queue
+            self.queue.remove(delete.?);
+            // Start again
+            delete = null;
+        }
+    }
+
 };
 
 pub const Fifos = struct {
@@ -361,6 +414,7 @@ pub const Observation = struct {
 pub const Car = struct {
     plate: String,
     tickets_queue: *TicketsQueue,
+    // TODO: Make this a StringSet
     tickets: Tickets, // Non owning list of all observations keys that cause a
     // ticket. For easy check if a car has a ticket on this road, on this date
     observationsmap: ObservationsHashMap,
@@ -482,7 +536,7 @@ pub const Car = struct {
             const msg = Message.initTicket(ticket);
 
             // Add the ticket to the global queue
-            try self.tickets_queue.*.append(msg);
+            self.tickets_queue.append(msg);
             try self.tickets.put(date_key, msg);
 
             std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.speed, obs1.speed_limit });
@@ -712,7 +766,6 @@ test "Car.addObservation" {
 
     // Test setup
     var tickets_queue = TicketsQueue{};
-    defer tickets_queue.deinit();
 
     // Test error cases
     try testErrorCases(allocator, &tickets_queue);
@@ -820,7 +873,7 @@ fn testSingleObservation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
     try testing.expectEqual(@as(usize, 1), car.observationsmap.count());
 
     // Verify no tickets yet (need at least 2 observations)
-    try testing.expectEqual(@as(usize, 0), tickets_queue.items.len);
+    try testing.expectEqual(@as(usize, 0), tickets_queue.queue.len);
 }
 
 fn testMultipleObservationsNoSpeeding(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
@@ -857,11 +910,11 @@ fn testMultipleObservationsNoSpeeding(allocator: std.mem.Allocator, tickets_queu
     try car.addObservation(msg2, &camera2);
 
     // Verify no tickets issued (under speed limit)
-    try testing.expectEqual(@as(usize, 0), tickets_queue.items.len);
+    try testing.expectEqual(@as(usize, 0), tickets_queue.queue.len);
 }
 
 fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    const initial_tickets = tickets_queue.items.len;
+    const initial_tickets = tickets_queue.queue.len;
 
     var car = try Car.init(allocator, tickets_queue);
     defer car.deinit();
@@ -896,10 +949,10 @@ fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
     try car.addObservation(msg2, &camera2);
 
     // Verify a ticket was issued
-    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 
     // Verify ticket details
-    const ticket = tickets_queue.items[initial_tickets];
+    const ticket = tickets_queue.queue.first.?.data;
     try testing.expectEqual(messages.Type.Ticket, ticket.type);
     try testing.expectEqualStrings("ABC123", ticket.data.ticket.plate);
     try testing.expectEqual(camera1.road, ticket.data.ticket.road);
@@ -907,7 +960,7 @@ fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
 }
 
 fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    const initial_tickets = tickets_queue.items.len;
+    const initial_tickets = tickets_queue.queue.len;
 
     var car = try Car.init(allocator, tickets_queue);
     defer car.deinit();
@@ -931,7 +984,7 @@ fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *Tickets
     try car.addObservation(msg2, &camera2);
 
     // Verify one ticket was issued
-    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 
     // Add another observation on same day/road that would cause speeding
     var camera3 = Camera{ .fd = 125, .road = 1, .mile = 170, .speed_limit = 60 };
@@ -942,11 +995,11 @@ fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *Tickets
     try car.addObservation(msg3, &camera3);
 
     // Verify no additional ticket was issued (one per day per road rule)
-    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 }
 
 fn testDifferentRoads(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    const initial_tickets = tickets_queue.items.len;
+    const initial_tickets = tickets_queue.queue.len;
 
     var car = try Car.init(allocator, tickets_queue);
     defer car.deinit();
@@ -981,11 +1034,11 @@ fn testDifferentRoads(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue
     try testing.expectEqual(@as(usize, 2), car.observationsmap.count());
 
     // Verify a ticket was issued for road 1
-    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 }
 
 fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    const initial_tickets = tickets_queue.items.len;
+    const initial_tickets = tickets_queue.queue.len;
 
     var car = try Car.init(allocator, tickets_queue);
     defer car.deinit();
@@ -1010,11 +1063,11 @@ fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     try car.addObservation(msg2, &camera2);
 
     // Verify ticket (for small time differences)
-    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 }
 
 fn testNonChronologicalOrder(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    const initial_tickets = tickets_queue.items.len;
+    const initial_tickets = tickets_queue.queue.len;
 
     var car = try Car.init(allocator, tickets_queue);
     defer car.deinit();
@@ -1041,16 +1094,16 @@ fn testNonChronologicalOrder(allocator: std.mem.Allocator, tickets_queue: *Ticke
     try car.addObservation(msg1, &camera1);
 
     // Verify a ticket was issued with correct chronological ordering
-    try testing.expectEqual(initial_tickets + 1, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 
     // Verify first observation in ticket is chronologically earlier
-    const ticket = tickets_queue.items[initial_tickets];
+    const ticket = tickets_queue.queue.first.?.data;
     try testing.expectEqual(timestamp1, ticket.data.ticket.timestamp1);
     try testing.expectEqual(timestamp2, ticket.data.ticket.timestamp2);
 }
 
 fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    const initial_tickets = tickets_queue.items.len;
+    const initial_tickets = tickets_queue.queue.len;
 
     var car = try Car.init(allocator, tickets_queue);
     defer car.deinit();
@@ -1078,7 +1131,7 @@ fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     try testing.expectEqual(@as(usize, 2), car.observationsmap.count());
 
     // Verify no tickets (observations on different days)
-    try testing.expectEqual(initial_tickets, tickets_queue.items.len);
+    try testing.expectEqual(initial_tickets, tickets_queue.queue.len);
 }
 
 test "Camera initialization from message" {
