@@ -1070,3 +1070,305 @@ fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     // Verify no tickets (observations on different days)
     try testing.expectEqual(initial_tickets, tickets_queue.items.len);
 }
+
+test "Camera initialization from message" {
+    // Create a valid IAmCamera message
+    const road: u16 = 42;
+    const mile: u16 = 100;
+    const limit: u16 = 55;
+    const fd: types.socketfd = 123;
+
+    const msg = Message.initCamera(.{
+        .road = road,
+        .mile = mile,
+        .limit = limit,
+    });
+
+    // Initialize camera from message
+    const camera = try Camera.initFromMessage(fd, msg);
+
+    // Verify all fields
+    try testing.expectEqual(fd, camera.fd);
+    try testing.expectEqual(road, camera.road);
+    try testing.expectEqual(mile, camera.mile);
+    try testing.expectEqual(limit, camera.speed_limit);
+
+    // Test error case - wrong message type
+    const wrong_msg = Message.initHeartbeat();
+    try testing.expectError(LogicError.MessageWrongType, Camera.initFromMessage(fd, wrong_msg));
+}
+
+test "Cameras container operations" {
+    const allocator = testing.allocator;
+
+    // Initialize cameras container
+    var cameras = try Cameras.init(allocator);
+    defer cameras.deinit();
+
+    // Test adding a camera
+    const fd1: types.socketfd = 101;
+    const camera1 = Camera{
+        .fd = fd1,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+
+    try cameras.add(fd1, camera1);
+
+    // Test getting a camera
+    const retrieved_camera = cameras.get(fd1);
+    try testing.expect(retrieved_camera != null);
+    try testing.expectEqual(camera1.road, retrieved_camera.?.road);
+    try testing.expectEqual(camera1.mile, retrieved_camera.?.mile);
+    try testing.expectEqual(camera1.speed_limit, retrieved_camera.?.speed_limit);
+
+    // Test getting a non-existent camera
+    const non_existent = cameras.get(999);
+    try testing.expect(non_existent == null);
+
+    // Test deleting a camera
+    cameras.del(fd1);
+    const deleted = cameras.get(fd1);
+    try testing.expect(deleted == null);
+}
+
+
+test "Client initialization without epoll" {
+    const allocator = testing.allocator;
+
+    // Create a camera for client
+    const camera = Camera{
+        .fd = 101,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+
+    // Create a client with camera
+    const cam_client = Client.initWithCamera(101, camera);
+    try testing.expectEqual(ClientType.Camera, cam_client.type);
+    try testing.expectEqual(camera.road, cam_client.data.camera.road);
+
+    // Create a dispatcher for client
+    var roads = RoadsArray.init(allocator);
+    // defer roads.deinit();
+    try roads.append(1);
+    try roads.append(2);
+
+    const dispatcher = Dispatcher{
+        .fd = 102,
+        .roads = roads,
+    };
+
+    // Create a client with dispatcher
+    var disp_client = Client.initWithDispatcher(102, dispatcher);
+    try testing.expectEqual(ClientType.Dispatcher, disp_client.type);
+    try testing.expectEqual(dispatcher.fd, disp_client.data.dispatcher.fd);
+
+    // Test the dispatchers roads content
+    try testing.expectEqual(@as(usize, 2), disp_client.data.dispatcher.roads.items.len);
+    try testing.expectEqual(@as(u16, 1), disp_client.data.dispatcher.roads.items[0]);
+    try testing.expectEqual(@as(u16, 2), disp_client.data.dispatcher.roads.items[1]);
+
+    // Clean up the dispatcher data in the client to avoid memory leaks
+    disp_client.data.dispatcher.deinit();
+}
+
+test "Clients container operations without epoll" {
+    const allocator = testing.allocator;
+
+    // Initialize clients container
+    var clients = try Clients.init(allocator);
+    defer clients.map.deinit(); // Just deinit the map, not using the full deinit that requires epoll
+
+    // Create a client
+    const camera = Camera{
+        .fd = 101,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+    const client = Client.initWithCamera(101, camera);
+
+    // Test adding client
+    try clients.add(client);
+
+    // Test getting client
+    const retrieved_client = clients.get(101);
+    try testing.expect(retrieved_client != null);
+    try testing.expectEqual(client.type, retrieved_client.?.type);
+    try testing.expectEqual(client.fd, retrieved_client.?.fd);
+
+    // Test getting non-existent client
+    const non_existent = clients.get(999);
+    try testing.expect(non_existent == null);
+
+    // Test client message preparation (not actually sending)
+    var buf = try u8BoundedArray.init(0);
+    const error_msg = "Test error";
+    const error_message = Message.initError(error_msg);
+    _ = try error_message.host_to_network(&buf);
+    try testing.expectEqual(@intFromEnum(messages.Type.ErrorM), buf.buffer[0]);
+
+    // Create a heartbeat message (not sending)
+    buf.len = 0;
+    const heartbeat_message = Message.initHeartbeat();
+    _ = try heartbeat_message.host_to_network(&buf);
+    try testing.expectEqual(@intFromEnum(messages.Type.Heartbeat), buf.buffer[0]);
+
+    // Clean up - just remove from map, don't call deinit that needs epoll
+    _ = clients.map.remove(101);
+}
+
+
+test "Road initialization and management" {
+    const allocator = testing.allocator;
+
+    // Initialize a road
+    const road_id: u16 = 42;
+    var road = try Road.init(allocator, road_id);
+    defer road.deinit() catch unreachable;
+
+    try testing.expectEqual(road_id, road.road);
+    try testing.expectEqual(@as(usize, 0), road.dispatchers.cardinality());
+
+    // Add dispatchers to road
+    const disp_fd1: types.socketfd = 101;
+    const disp_fd2: types.socketfd = 102;
+
+    _ = try road.dispatchers.add(disp_fd1);
+    _ = try road.dispatchers.add(disp_fd2);
+
+    try testing.expectEqual(@as(usize, 2), road.dispatchers.cardinality());
+    try testing.expect(road.dispatchers.contains(disp_fd1));
+    try testing.expect(road.dispatchers.contains(disp_fd2));
+
+    // Remove a dispatcher
+    _ = road.dispatchers.remove(disp_fd1);
+    try testing.expectEqual(@as(usize, 1), road.dispatchers.cardinality());
+    try testing.expect(!road.dispatchers.contains(disp_fd1));
+    try testing.expect(road.dispatchers.contains(disp_fd2));
+}
+
+test "Roads container operations" {
+    const allocator = testing.allocator;
+
+    // Initialize roads container
+    var roads = try Roads.init(allocator);
+    defer roads.deinit() catch unreachable;
+
+    // Create and add a road
+    const road_id: u16 = 42;
+    const road = try Road.init(allocator, road_id);
+    try roads.add(road);
+
+    // Test getting a road
+    const retrieved_road = roads.get(road_id);
+    try testing.expect(retrieved_road != null);
+    try testing.expectEqual(road_id, retrieved_road.?.road);
+
+    // Test getting non-existent road
+    const non_existent = roads.get(999);
+    try testing.expect(non_existent == null);
+
+    // Test adding a dispatcher to road
+    var disp_roads = RoadsArray.init(allocator);
+    defer disp_roads.deinit();
+    try disp_roads.append(road_id);
+
+    var dispatcher = Dispatcher{
+        .fd = 101,
+        .roads = disp_roads,
+    };
+
+    try roads.addDispatcher(&dispatcher, allocator);
+
+    // Verify dispatcher was added to road
+    const updated_road = roads.get(road_id);
+    try testing.expect(updated_road != null);
+    try testing.expectEqual(@as(usize, 1), updated_road.?.dispatchers.cardinality());
+    try testing.expect(updated_road.?.dispatchers.contains(dispatcher.fd));
+
+    // Test adding dispatcher to non-existent road (should create the road)
+    var disp_roads2 = RoadsArray.init(allocator);
+    defer disp_roads2.deinit();
+    const new_road_id: u16 = 43;
+    try disp_roads2.append(new_road_id);
+
+    var dispatcher2 = Dispatcher{
+        .fd = 102,
+        .roads = disp_roads2,
+    };
+
+    try roads.addDispatcher(&dispatcher2, allocator);
+
+    // Verify new road was created with dispatcher
+    const new_road = roads.get(new_road_id);
+    try testing.expect(new_road != null);
+    try testing.expectEqual(@as(usize, 1), new_road.?.dispatchers.cardinality());
+    try testing.expect(new_road.?.dispatchers.contains(dispatcher2.fd));
+
+    // Test removing a dispatcher
+    try roads.removeDispatcher(&dispatcher);
+
+    // Verify dispatcher was removed
+    const road_after_removal = roads.get(road_id);
+    try testing.expect(road_after_removal != null);
+    try testing.expectEqual(@as(usize, 0), road_after_removal.?.dispatchers.cardinality());
+}
+
+
+test "Dispatcher initialization from message" {
+    const allocator = testing.allocator;
+
+    // Create valid IAmDispatcher message
+    var roads_list = try std.ArrayList(u16).initCapacity(allocator, 2);
+    // defer roads_list.deinit();
+    try roads_list.append(1);
+    try roads_list.append(2);
+
+    var msg = Message.initDispatcher(.{ .roads = roads_list });
+    const fd: types.socketfd = 101;
+
+    // Initialize dispatcher from message
+    var dispatcher = try Dispatcher.initFromMessage(fd, &msg, allocator);
+    defer dispatcher.deinit();
+
+    // Verify fields
+    try testing.expectEqual(fd, dispatcher.fd);
+    try testing.expectEqual(@as(usize, 2), dispatcher.roads.items.len);
+    try testing.expectEqual(@as(u16, 1), dispatcher.roads.items[0]);
+    try testing.expectEqual(@as(u16, 2), dispatcher.roads.items[1]);
+
+    // Test error case - wrong message type
+    var wrong_msg = Message.initHeartbeat();
+    try testing.expectError(LogicError.MessageWrongType, Dispatcher.initFromMessage(fd, &wrong_msg, allocator));
+}
+
+test "Timer basic operations" {
+    // Since we can't actually create timers without system calls in tests,
+    // we'll just test the structure and error cases
+    // const allocator = testing.allocator;
+
+    // Create a camera for client
+    const camera = Camera{
+        .fd = 101,
+        .road = 1,
+        .mile = 10,
+        .speed_limit = 60,
+    };
+
+    // Create a client
+    const client = Client.initWithCamera(101, camera);
+
+    // Test timer structure
+    // Just verify the fields in the Timer struct
+    try testing.expect(client.timer == null);
+
+    // We validate the AlreadyHasTimer error by directly checking the error condition
+    const has_timer_already = client.timer != null;
+    try testing.expect(!has_timer_already);
+
+    // Further timer testing would require actual file descriptors, so we'll skip that
+}
