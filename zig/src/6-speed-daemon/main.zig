@@ -216,74 +216,67 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     };
 
     for (&thr_ctx.msgs.buffer) |*msg| {
+        const mt = std.enums.tagName(Type, msg.type);
+        const mts = if (mt == null) "unknown" else mt.?;
         switch (msg.type) {
             .Heartbeat, .ErrorM, .Ticket => {
-                std.log.debug("({d}): Got unexpected msg type: {x} from client: {d}", .{ thrid, msg.type, fd });
+                std.log.debug("({d}): Got unexpected msg type: {s} from client: {d}", .{ thrid, mts, fd });
                 thr_ctx.error_msg = "I was not expecting this type of message from you";
                 removeFd(ctx, thr_ctx);
             },
-            .IAmCamera => {
-                std.log.debug("({d}): Got IAmCamera msg from client: {d}", .{ thrid, fd });
+            .IAmCamera, .IAmDispatcher => {
+                std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
                 if (client != null) {
                     const t = std.enums.tagName(ClientType, client.?.type);
                     const u = if (t == null) "unknown" else t.?;
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
-                    thr_ctx.error_msg = "Client already is identified";
+                    thr_ctx.error_msg = "Can't send id message more than once";
                     removeFd(ctx, thr_ctx);
                     continue;
                 }
 
-                // Add the cam to the cameras
-                // TODO: Find out if there's a road already with this cam
-                const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
-                    std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to init camera";
-                    removeFd(ctx, thr_ctx);
-                    continue;
-                };
-                ctx.cameras.add(fd, camera) catch |err| {
-                    std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add camera";
-                    removeFd(ctx, thr_ctx);
-                    continue;
-                };
+                var newclient: Client = undefined;
+
+                if (msg.type == .IAmCamera) {
+                    // Add the cam to the cameras
+                    const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
+                        std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
+                        thr_ctx.error_msg = "Failed to init camera";
+                        removeFd(ctx, thr_ctx);
+                        continue;
+                    };
+                    ctx.cameras.add(fd, camera) catch |err| {
+                        std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
+                        thr_ctx.error_msg = "Failed to add camera";
+                        removeFd(ctx, thr_ctx);
+                        continue;
+                    };
+                    newclient = Client.initWithCamera(fd, camera);
+                } else {
+                    // Add dispatcher to the Dispatchers
+                    var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
+                        std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
+                        thr_ctx.error_msg = "Failed to init dispatcher";
+                        removeFd(ctx, thr_ctx);
+                        continue;
+                    };
+                    ctx.clients.add(newclient) catch |err| {
+                        std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
+                        thr_ctx.error_msg = "Failed to add client";
+                        removeFd(ctx, thr_ctx);
+                    };
+
+                    ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
+                        std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
+                    };
+                    newclient = Client.initWithDispatcher(fd, dispatcher);
+                }
 
                 // Add new client
-                const newclient = Client.initWithCamera(fd, camera);
                 ctx.clients.add(newclient) catch |err| {
                     std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, thr_ctx);
-                };
-            },
-            .IAmDispatcher => {
-                std.log.debug("({d}): Got IAmDispatcher msg from client: {d}", .{ thrid, fd });
-                if (client != null) {
-                    const t = std.enums.tagName(ClientType, client.?.type);
-                    const u = if (t == null) "unknown" else t.?;
-                    std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
-                    thr_ctx.error_msg = "Client already is identified";
-                    removeFd(ctx, thr_ctx);
-                    continue;
-                }
-
-                // TODO: Check to see if there are tickets waiting for a dispatcher
-                // Add dispatcher to the Dispatchers
-                var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
-                    std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to init dispatcher";
-                    removeFd(ctx, thr_ctx);
-                    continue;
-                };
-                const newclient = Client.initWithDispatcher(fd, dispatcher);
-                ctx.clients.add(newclient) catch |err| {
-                    std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add client";
-                    removeFd(ctx, thr_ctx);
-                };
-
-                ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
-                    std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
                 };
             },
             else => {
