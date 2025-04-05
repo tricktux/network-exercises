@@ -138,14 +138,13 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
                 std.log.err("Failed to client.sendError: {!}", .{err});
             };
         }
-        // TODO: If it's a dispatcher, remove the roads
-        // if (thr_ctx.client.?.type == ClientType.Dispatcher) {
-        //     for (ctx.roads.items) |road| {
-        //         if (road.?.dispatcher == thr_ctx.fd) {
-        //             road.?.dispatcher = null;
-        //         }
-        //     }
-        // }
+
+        // If it's a dispatcher, remove the roads
+        if (thr_ctx.client.?.type == ClientType.Dispatcher) {
+            ctx.roads.removeDispatcher(&thr_ctx.client.?.data.dispatcher) catch |err| {
+                std.log.err("Failed to remove dispatcher: {!}", .{err});
+            };
+        }
         ctx.clients.del(thr_ctx.fd, ctx.epoll) catch |third_err| {
             std.log.err("Failed to del client: {!}", .{third_err});
         };

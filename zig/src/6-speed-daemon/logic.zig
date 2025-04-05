@@ -591,11 +591,11 @@ pub const Roads = struct {
         try self.map.put(road.road, road);
     }
 
-    // TODO: removeDispatcher
     pub fn removeDispatcher(self: *Roads, disp: *Dispatcher) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // TODO: Should we remove the roads as well?
         const fd = disp.fd;
         for (disp.roads.items) |road| {
             const nroad = self.map.getPtr(road);
