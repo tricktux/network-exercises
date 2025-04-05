@@ -84,8 +84,8 @@ pub fn main() !void {
     defer epoll.deinit();
     var fifos = try Fifos.init(allocator);
     defer fifos.deinit();
-    // No need to deinit, the queue messages of type ticket, there's no dynamic allocation there
-    var tickets = TicketsQueue{};
+    var tickets = TicketsQueue.init(allocator);
+    defer tickets.deinit();
     var cars = try Cars.init(allocator, &tickets);
     defer cars.deinit();
     var roads = try Roads.init(allocator);

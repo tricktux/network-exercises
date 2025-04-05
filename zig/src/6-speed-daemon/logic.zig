@@ -41,15 +41,38 @@ pub const Context = struct {
 };
 
 pub const TicketsQueue = struct {
+    // Use a Set instead of queue
+    // Queue is giving use allocation problems
+    // Maybe think about this. Who can hold the queue memory?
+    // Don't understand this
     queue: TicketsQueueType = TicketsQueueType{},
     mutex: std.Thread.Mutex = .{},
+    allocator: std.mem.Allocator, // Store the allocator
 
-    pub fn append(self: *TicketsQueue, ticket: Message) void {
+    pub fn init(allocator: std.mem.Allocator) TicketsQueue {
+        return .{
+            .queue = TicketsQueueType{},
+            .mutex = .{},
+            .allocator = allocator
+        };
+    }
+
+    pub fn deinit(self: *TicketsQueue) void {
+        // Free all nodes when done
+        while (self.queue.popFirst()) |node| {
+            self.allocator.destroy(node);
+        }
+    }
+
+    pub fn append(self: *TicketsQueue, ticket: Message) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        var node = TicketsQueueType.Node{ .data = ticket };
-        self.queue.append(&node);
+        // Allocate node on heap
+        const node = try self.allocator.create(TicketsQueueType.Node);
+        node.* = TicketsQueueType.Node{ .data = ticket };
+
+        self.queue.append(node);
     }
 
     pub fn dispatchTicketsQueue(self: *TicketsQueue, roads: *Roads, buf: *u8BoundedArray) !void {
@@ -58,7 +81,7 @@ pub const TicketsQueue = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        var delete: ?*TicketsQueueType.Node = undefined;
+        var delete: ?*TicketsQueueType.Node = null;
         while (true) {
             // Traverse Queue of Tickets waiting to be dispatched forward
             var it = self.queue.first;
@@ -87,11 +110,12 @@ pub const TicketsQueue = struct {
             if (delete == null) break;
             // If we found a ticket to delete, remove it from the queue
             self.queue.remove(delete.?);
+            // Free the memory for the node
+            self.allocator.destroy(delete.?);
             // Start again
             delete = null;
         }
     }
-
 };
 
 pub const Fifos = struct {
@@ -536,7 +560,7 @@ pub const Car = struct {
             const msg = Message.initTicket(ticket);
 
             // Add the ticket to the global queue
-            self.tickets_queue.append(msg);
+            try self.tickets_queue.append(msg);
             try self.tickets.put(date_key, msg);
 
             std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.speed, obs1.speed_limit });
@@ -765,7 +789,8 @@ test "Car.addObservation" {
     const allocator = testing.allocator;
 
     // Test setup
-    var tickets_queue = TicketsQueue{};
+    var tickets_queue = TicketsQueue.init(allocator);
+    defer tickets_queue.deinit();
 
     // Test error cases
     try testErrorCases(allocator, &tickets_queue);
