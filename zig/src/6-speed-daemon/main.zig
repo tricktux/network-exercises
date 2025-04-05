@@ -275,7 +275,8 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
                     // TODO: Search the tickets queue
                     // TODO: Turn this into a function
-                    for (ctx.tickets.items) |ticket| {
+                    // TODO: TicketsQueue should be something easier to remove items from, like DoubleLinked List
+                    for (ctx.tickets.items) |*ticket| {
                         const road = ticket.data.ticket.road;
                         var road_str = ctx.roads.get(road);
                         if (road_str == null) {
@@ -285,7 +286,13 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         if (road_str.?.dispatchers.cardinality() == 0) continue;
                         var dispit = road_str.?.dispatchers.iterator();
                         const disp = dispit.next().?;
-                        _ = disp;
+                        Dispatcher.sendTicket(disp.*, ticket, thr_ctx.buf) catch |err| {
+                            std.log.err("({d}): Failed to send ticket: {!}", .{ thrid, err });
+                            thr_ctx.error_msg = "Failed to send ticket";
+                            removeFd(ctx, thr_ctx);
+                            continue;
+                        };
+                        // TODO: Remove ticket from the queue
                     }
                 }
 

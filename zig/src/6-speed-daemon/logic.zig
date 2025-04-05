@@ -339,7 +339,12 @@ pub const Dispatcher = struct {
         self.roads.deinit();
     }
 
-    // TODO: Send Ticket
+    pub fn sendTicket(fd: socketfd, ticket: *Message, buf: *u8BoundedArray) !void {
+        if (ticket.type != messages.Type.Ticket) return LogicError.MessageWrongType;
+        const stream = std.net.Stream{ .handle = fd };
+        _ = try ticket.host_to_network(buf);
+        try stream.writeAll(buf.constSlice());
+    }
 };
 
 pub const Observation = struct {
