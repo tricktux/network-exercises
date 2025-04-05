@@ -281,7 +281,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 };
             },
             .WantHeartbeat => {
-                std.log.debug("({d}): Got heartbeat msg from client: {d}", .{ thrid, fd });
+                std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval});
                 if (client == null) {
                     std.log.err("({d}): Client not identified yet", .{thrid});
                     thr_ctx.error_msg = "Client not identified yet";
@@ -299,14 +299,19 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
                 // If there's not create a new one and attach it
                 const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
-                client.?.addTimer(interval, ctx.epoll) catch |err| {
+                const timer = client.?.addTimer(interval, ctx.epoll) catch |err| {
                     std.log.err("({d}): Failed to add timer to client: {!}", .{thrid, err});
                     thr_ctx.error_msg = "Failed to init timer";
                     removeFd(ctx, thr_ctx);
                     continue;
                 };
 
-                // TODO: get the timer back to add it to ctx.timers
+                ctx.timers.add(timer) catch |err| {
+                    std.log.err("({d}): Failed to add timer: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to add timer";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                };
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});

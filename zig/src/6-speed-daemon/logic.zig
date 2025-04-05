@@ -281,12 +281,13 @@ pub const Client = struct {
         };
     }
 
-    pub fn addTimer(self: *Client, interval: u64, epoll: *EpollManager) !void {
+    pub fn addTimer(self: *Client, interval: u64, epoll: *EpollManager) !Timer {
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
         std.log.info("Adding timer to client with interval: {d}\n", .{interval});
         self.timer = try Timer.init(self, interval);
         try epoll.add(self.timer.?.fd);
+        return self.timer.?;
     }
 
     pub fn sendError(self: *Client, msg: []const u8, buf: *u8BoundedArray) !void {
