@@ -264,6 +264,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to add client";
                         removeFd(ctx, thr_ctx);
+                        continue;
                     };
 
                     ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
@@ -278,6 +279,34 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, thr_ctx);
                 };
+            },
+            .WantHeartbeat => {
+                std.log.debug("({d}): Got heartbeat msg from client: {d}", .{ thrid, fd });
+                if (client == null) {
+                    std.log.err("({d}): Client not identified yet", .{thrid});
+                    thr_ctx.error_msg = "Client not identified yet";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                }
+
+                // Check if there's a timer already associated with this client
+                if (ctx.timers.map.contains(fd)) {
+                    std.log.err("({d}): Timer already exists for client: {d}", .{thrid, fd});
+                    thr_ctx.error_msg = "Client already has a timer associated";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                }
+
+                // If there's not create a new one and attach it
+                const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
+                client.?.addTimer(interval, ctx.epoll) catch |err| {
+                    std.log.err("({d}): Failed to add timer to client: {!}", .{thrid, err});
+                    thr_ctx.error_msg = "Failed to init timer";
+                    removeFd(ctx, thr_ctx);
+                    continue;
+                };
+
+                // TODO: get the timer back to add it to ctx.timers
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
