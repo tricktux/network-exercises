@@ -89,7 +89,9 @@ pub fn main() !void {
     var cars = try Cars.init(allocator, &tickets);
     defer cars.deinit();
     var roads = try Roads.init(allocator);
-    defer roads.deinit();
+    defer roads.deinit() catch |err| {
+        std.log.err("Failed to deinit roads: {!}", .{err});
+    };
     var cameras = try Cameras.init(allocator);
     defer cameras.deinit();
     var clients = try Clients.init(allocator);

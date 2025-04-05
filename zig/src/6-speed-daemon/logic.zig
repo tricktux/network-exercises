@@ -576,7 +576,11 @@ pub const Roads = struct {
         };
     }
 
-    pub fn deinit(self: *Roads) void {
+    pub fn deinit(self: *Roads) !void {
+        var it = self.map.iterator();
+        while (it.next()) |road| {
+            try road.value_ptr.deinit();
+        }
         self.map.deinit();
     }
 
