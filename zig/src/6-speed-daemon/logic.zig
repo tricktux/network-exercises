@@ -338,6 +338,8 @@ pub const Dispatcher = struct {
     pub fn deinit(self: *Dispatcher) void {
         self.roads.deinit();
     }
+
+    // TODO: Send Ticket
 };
 
 pub const Observation = struct {

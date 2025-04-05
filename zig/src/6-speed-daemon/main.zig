@@ -157,6 +157,7 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
     ctx.fifos.del(thr_ctx.fd);
 }
 
+// TODO: This function's length is getting out of hand
 inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     const fd = thr_ctx.fd;
     const stream = std.net.Stream{ .handle = fd };
@@ -271,6 +272,21 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
                     };
                     newclient = Client.initWithDispatcher(fd, dispatcher);
+
+                    // TODO: Search the tickets queue
+                    // TODO: Turn this into a function
+                    for (ctx.tickets.items) |ticket| {
+                        const road = ticket.data.ticket.road;
+                        var road_str = ctx.roads.get(road);
+                        if (road_str == null) {
+                            std.log.warn("Got a ticket for a road that's not in the database....Hmmm", .{});
+                            continue;
+                        }
+                        if (road_str.?.dispatchers.cardinality() == 0) continue;
+                        var dispit = road_str.?.dispatchers.iterator();
+                        const disp = dispit.next().?;
+                        _ = disp;
+                    }
                 }
 
                 // Add new client
