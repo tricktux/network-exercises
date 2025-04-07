@@ -217,7 +217,10 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
         return;
     };
 
-    for (&thr_ctx.msgs.buffer) |*msg| {
+    const msgs = thr_ctx.msgs.slice();
+    var i: usize = 0;
+    while (i < msgs.len) : (i += 1) {
+        const msg = &msgs[i];
         const mt = std.enums.tagName(Type, msg.type);
         const mts = if (mt == null) "unknown" else mt.?;
         switch (msg.type) {
