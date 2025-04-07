@@ -45,11 +45,7 @@ pub const TicketsQueue = struct {
     allocator: std.mem.Allocator, // Store the allocator
 
     pub fn init(allocator: std.mem.Allocator) TicketsQueue {
-        return .{
-            .queue = TicketsQueueType{},
-            .mutex = .{},
-            .allocator = allocator
-        };
+        return .{ .queue = TicketsQueueType{}, .mutex = .{}, .allocator = allocator };
     }
 
     pub fn deinit(self: *TicketsQueue) void {
@@ -171,7 +167,7 @@ pub const Timer = struct {
     interval: u64, // In deciseconds
 
     pub fn init(client: *Client, interval: u64) !Timer {
-        const flags = std.os.linux.TFD{.CLOEXEC = true, .NONBLOCK = true};
+        const flags = std.os.linux.TFD{ .CLOEXEC = true, .NONBLOCK = true };
         const timerfd = try std.posix.timerfd_create(std.os.linux.TIMERFD_CLOCK.MONOTONIC, flags);
 
         // Convert deciseconds to nanoseconds (1 decisecond = 100,000,000 nanoseconds)
@@ -651,7 +647,6 @@ pub const Road = struct {
         self.dispatchers.deinit();
     }
 };
-
 
 pub const Roads = struct {
     map: RoadHashMap,
@@ -1220,7 +1215,6 @@ test "Cameras container operations" {
     try testing.expect(deleted == null);
 }
 
-
 test "Client initialization without epoll" {
     const allocator = testing.allocator;
 
@@ -1307,7 +1301,6 @@ test "Clients container operations without epoll" {
     // Clean up - just remove from map, don't call deinit that needs epoll
     _ = clients.map.remove(101);
 }
-
 
 test "Road initialization and management" {
     const allocator = testing.allocator;
@@ -1405,7 +1398,6 @@ test "Roads container operations" {
     try testing.expectEqual(@as(usize, 0), road_after_removal.?.dispatchers.cardinality());
 }
 
-
 test "Dispatcher initialization from message" {
     const allocator = testing.allocator;
 
@@ -1488,7 +1480,7 @@ test "Timer creation and basic operation" {
     const exp = try timer.read();
     try testing.expectEqual(2, exp); // Expecting one expiration
 
-    // We can't easily assert the exact number of expirations, but 
+    // We can't easily assert the exact number of expirations, but
     // the fact that read() didn't error means the timer did fire
 }
 

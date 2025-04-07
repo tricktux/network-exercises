@@ -290,7 +290,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 };
             },
             .WantHeartbeat => {
-                std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval});
+                std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
                 if (client == null) {
                     std.log.err("({d}): Client not identified yet", .{thrid});
                     thr_ctx.error_msg = "Client not identified yet";
@@ -300,7 +300,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
                 // Check if there's a timer already associated with this client
                 if (ctx.timers.map.contains(fd)) {
-                    std.log.err("({d}): Timer already exists for client: {d}", .{thrid, fd});
+                    std.log.err("({d}): Timer already exists for client: {d}", .{ thrid, fd });
                     thr_ctx.error_msg = "Client already has a timer associated";
                     removeFd(ctx, thr_ctx);
                     continue;
@@ -309,14 +309,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 // If there's not create a new one and attach it
                 const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
                 const timer = client.?.addTimer(interval, ctx.epoll) catch |err| {
-                    std.log.err("({d}): Failed to add timer to client: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to add timer to client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init timer";
                     removeFd(ctx, thr_ctx);
                     continue;
                 };
 
                 ctx.timers.add(timer) catch |err| {
-                    std.log.err("({d}): Failed to add timer: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to add timer: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add timer";
                     removeFd(ctx, thr_ctx);
                     continue;
@@ -348,8 +348,8 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Get Car
-                const result = ctx.cars.map.getOrPut(msg.data.plate.plate) catch |err | {
-                    std.log.err("({d}): Failed to getOrPut car: {!}", .{thrid, err});
+                const result = ctx.cars.map.getOrPut(msg.data.plate.plate) catch |err| {
+                    std.log.err("({d}): Failed to getOrPut car: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to getOrPut car";
                     removeFd(ctx, thr_ctx);
                     continue;
@@ -359,8 +359,8 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 if (result.found_existing) {
                     car = result.value_ptr;
                 } else {
-                    const ncar = Car.init(thr_ctx.alloc, ctx.tickets) catch | err | {
-                        std.log.err("({d}): Failed to init car: {!}", .{thrid, err});
+                    const ncar = Car.init(thr_ctx.alloc, ctx.tickets) catch |err| {
+                        std.log.err("({d}): Failed to init car: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to init car";
                         removeFd(ctx, thr_ctx);
                         continue;
@@ -370,14 +370,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 const ntickets = car.addObservation(msg.*, camera.?) catch |err| {
-                    std.log.err("({d}): Failed to add observation: {!}", .{thrid, err});
+                    std.log.err("({d}): Failed to add observation: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add observation";
                     removeFd(ctx, thr_ctx);
                     continue;
                 };
-                
+
                 if (ntickets > 0) {
-                    std.log.debug("({d}): Added {d} tickets to car: {s}", .{thrid, ntickets, msg.data.plate.plate});
+                    std.log.debug("({d}): Added {d} tickets to car: {s}", .{ thrid, ntickets, msg.data.plate.plate });
 
                     ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
                         std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
@@ -386,7 +386,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         continue;
                     };
                 }
-
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
