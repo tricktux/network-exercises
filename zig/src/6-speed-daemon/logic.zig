@@ -95,6 +95,7 @@ pub const TicketsQueue = struct {
 
                 // If there is, send the ticket out
                 const disp = dispit.next().?;
+                buf.clear();
                 try Dispatcher.sendTicket(disp.*, &ticket.data, buf);
 
                 // Mark this ticket for deletion from the queue
