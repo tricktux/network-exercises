@@ -15,7 +15,6 @@ const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
 const String = std.ArrayList(u8);
 const Ticket = messages.Ticket;
-// TODO: Make this a DoublyLinkedList
 pub const TicketsQueueType = std.DoublyLinkedList(Message); // Of Type.Ticket
 const Tickets = std.StringHashMap(Message);
 const Observations = std.ArrayList(Observation);
@@ -41,10 +40,6 @@ pub const Context = struct {
 };
 
 pub const TicketsQueue = struct {
-    // Use a Set instead of queue
-    // Queue is giving use allocation problems
-    // Maybe think about this. Who can hold the queue memory?
-    // Don't understand this
     queue: TicketsQueueType = TicketsQueueType{},
     mutex: std.Thread.Mutex = .{},
     allocator: std.mem.Allocator, // Store the allocator

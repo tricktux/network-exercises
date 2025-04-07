@@ -157,7 +157,6 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
     ctx.fifos.del(thr_ctx.fd);
 }
 
-// TODO: This tickets Queue needs to be mutex protected
 // TODO: This function's length is getting out of hand
 inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     const fd = thr_ctx.fd;
@@ -208,6 +207,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
         removeFd(ctx, thr_ctx);
         return;
     }
+
     // - call decode(buf, msgs)
     const data = fifo.?.readableSlice(0);
     _ = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
@@ -274,9 +274,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     };
                     newclient = Client.initWithDispatcher(fd, dispatcher);
 
-                    // TODO: Search the tickets queue
-                    // TODO: Turn this into a function
-                    // TODO: TicketsQueue should be something easier to remove items from, like DoubleLinked List
                     ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
                         std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to add tickets to queue";
