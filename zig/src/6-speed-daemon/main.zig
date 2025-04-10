@@ -122,6 +122,7 @@ pub fn main() !void {
 const ThreadContext = struct {
     buf: *u8BoundedArray,
     fd: socketfd,
+    // TODO: Make it Not optional
     client: ?*Client,
     error_msg: ?[]const u8,
     msgs: *MessageBoundedArray,
@@ -219,10 +220,37 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 std.log.debug("({d}): Got unexpected msg type: {s} from client: {d}", .{ thrid, mts, fd });
                 thr_ctx.error_msg = "I was not expecting this type of message from you";
                 removeFd(ctx, thr_ctx);
+                return;
             },
-            .IAmCamera, .IAmDispatcher => {
+            .IAmCamera => {
                 std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
-                if (client != null) {
+                if (client.?.type != .Unidentified) {
+                    const t = std.enums.tagName(ClientType, client.?.type);
+                    const u = if (t == null) "unknown" else t.?;
+                    std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
+                    thr_ctx.error_msg = "Can't send id message more than once";
+                    removeFd(ctx, thr_ctx);
+                    return;
+                }
+                // Add the cam to the cameras
+                const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
+                    std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to init camera";
+                    removeFd(ctx, thr_ctx);
+                    return;
+                };
+                client.?.initWithCamera(camera);
+                ctx.cameras.add(fd, camera) catch |err| {
+                    std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to add camera";
+                    removeFd(ctx, thr_ctx);
+                    return;
+                };
+
+            },
+            .IAmDispatcher => {
+                std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
+                if (client.?.type != .Unidentified) {
                     const t = std.enums.tagName(ClientType, client.?.type);
                     const u = if (t == null) "unknown" else t.?;
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
@@ -231,51 +259,27 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     return;
                 }
 
-                var newclient: Client = undefined;
+                // Add dispatcher to the Dispatchers
+                var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
+                    std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to init dispatcher";
+                    removeFd(ctx, thr_ctx);
+                    return;
+                };
+                client.?.initWithDispatcher(dispatcher);
 
-                if (msg.type == .IAmCamera) {
-                    // Add the cam to the cameras
-                    const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
-                        std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to init camera";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
-                    ctx.cameras.add(fd, camera) catch |err| {
-                        std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to add camera";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
-                    newclient = Client.initWithCamera(fd, camera);
-                } else {
-                    // Add dispatcher to the Dispatchers
-                    var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
-                        std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to init dispatcher";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
-                    ctx.clients.add(newclient) catch |err| {
-                        std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to add client";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
+                // Update roads database with new dispatcher
+                ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
+                    std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
+                };
 
-                    ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
-                        std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
-                    };
-                    newclient = Client.initWithDispatcher(fd, dispatcher);
-
-                    ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
-                        std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to add tickets to queue";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
-                }
-
+                // Check tickets queue for any pending tickets for this new dispatcher
+                ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
+                    std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to add tickets to queue";
+                    removeFd(ctx, thr_ctx);
+                    return;
+                };
             },
             .WantHeartbeat => {
                 std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
@@ -283,7 +287,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Client not identified yet", .{thrid});
                     thr_ctx.error_msg = "Client not identified yet";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 }
 
                 // Check if there's a timer already associated with this client
@@ -303,7 +307,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     return;
                 }
 
-                const timer = client.?.addTimer(interval, ctx.epoll) catch |err| {
+                const timer = client.?.addTimer(interval) catch |err| {
                     std.log.err("({d}): Failed to add timer to client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init timer";
                     removeFd(ctx, thr_ctx);

@@ -1187,7 +1187,11 @@ test "Client initialization without epoll" {
     };
 
     // Create a client with camera
-    const cam_client = Client.initWithCamera(101, camera);
+
+    var epoll = try EpollManager.init();
+    defer epoll.deinit();
+    var cam_client = try Client.init(allocator, 101, &epoll);
+    cam_client.initWithCamera(camera);
     try testing.expectEqual(ClientType.Camera, cam_client.type);
     try testing.expectEqual(camera.road, cam_client.data.camera.road);
 
@@ -1203,7 +1207,8 @@ test "Client initialization without epoll" {
     };
 
     // Create a client with dispatcher
-    var disp_client = Client.initWithDispatcher(102, dispatcher);
+    var disp_client = try Client.init(allocator, 102, &epoll);
+    disp_client.initWithDispatcher(dispatcher);
     try testing.expectEqual(ClientType.Dispatcher, disp_client.type);
     try testing.expectEqual(dispatcher.fd, disp_client.data.dispatcher.fd);
 
@@ -1230,7 +1235,10 @@ test "Clients container operations without epoll" {
         .mile = 10,
         .speed_limit = 60,
     };
-    const client = Client.initWithCamera(101, camera);
+    var epoll = try EpollManager.init();
+    defer epoll.deinit();
+    var client = try Client.init(allocator, 101, &epoll);
+    client.initWithCamera(camera);
 
     // Test adding client
     try clients.add(client);
@@ -1399,7 +1407,10 @@ test "Timer basic operations" {
     };
 
     // Create a client
-    const client = Client.initWithCamera(101, camera);
+    var epoll = try EpollManager.init();
+    defer epoll.deinit();
+    var client = try Client.init(std.testing.allocator, 101, &epoll);
+    client.initWithCamera(camera);
 
     // Test timer structure
     // Just verify the fields in the Timer struct
@@ -1422,7 +1433,10 @@ test "Timer creation and basic operation" {
     };
 
     // Create a client
-    var client = Client.initWithCamera(101, camera);
+    var epoll = try EpollManager.init();
+    defer epoll.deinit();
+    var client = try Client.init(std.testing.allocator, 101, &epoll);
+    client.initWithCamera(camera);
 
     // Create a timer directly, without using addTimer (which uses epoll)
     const interval: u64 = 1; // 1 decisecond = 100ms
@@ -1452,7 +1466,10 @@ test "Timer multiple expirations" {
         .mile = 10,
         .speed_limit = 60,
     };
-    var client = Client.initWithCamera(101, camera);
+    var epoll = try EpollManager.init();
+    defer epoll.deinit();
+    var client = try Client.init(std.testing.allocator, 101, &epoll);
+    client.initWithCamera(camera);
 
     // Create a very fast timer
     const interval: u64 = 1; // 1 decisecond = 100ms
