@@ -237,7 +237,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
                     thr_ctx.error_msg = "Can't send id message more than once";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 }
 
                 var newclient: Client = undefined;
@@ -248,13 +248,13 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to init camera";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
                     ctx.cameras.add(fd, camera) catch |err| {
                         std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to add camera";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
                     newclient = Client.initWithCamera(fd, camera);
                 } else {
@@ -263,13 +263,13 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to init dispatcher";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
                     ctx.clients.add(newclient) catch |err| {
                         std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to add client";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
 
                     ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
@@ -281,7 +281,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to add tickets to queue";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
                 }
 
@@ -306,23 +306,30 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Timer already exists for client: {d}", .{ thrid, fd });
                     thr_ctx.error_msg = "Client already has a timer associated";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 }
 
                 // If there's not create a new one and attach it
                 const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
+                if (interval == 0) {
+                    std.log.err("({d}): Heartbeat requested with interval 0", .{ thrid });
+                    thr_ctx.error_msg = "Heartbeat requested with interval 0";
+                    removeFd(ctx, thr_ctx);
+                    return;
+                }
+
                 const timer = client.?.addTimer(interval, ctx.epoll) catch |err| {
                     std.log.err("({d}): Failed to add timer to client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init timer";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 };
 
                 ctx.timers.add(timer) catch |err| {
                     std.log.err("({d}): Failed to add timer: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add timer";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 };
             },
             .Plate => {
@@ -331,14 +338,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Client not identified yet", .{thrid});
                     thr_ctx.error_msg = "Client not identified yet";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 }
 
                 if (client.?.type != ClientType.Camera) {
                     std.log.err("({d}): Client not identified as camera", .{thrid});
                     thr_ctx.error_msg = "Client not identified as camera";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 }
 
                 // Get camera
@@ -347,7 +354,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Failed to find camera", .{thrid});
                     thr_ctx.error_msg = "Failed to find camera";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 }
 
                 // Get Car
@@ -355,7 +362,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Failed to getOrPut car: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to getOrPut car";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 };
 
                 var car: *Car = undefined;
@@ -366,7 +373,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to init car: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to init car";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
                     result.value_ptr.* = ncar;
                     car = result.value_ptr;
@@ -376,7 +383,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     std.log.err("({d}): Failed to add observation: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add observation";
                     removeFd(ctx, thr_ctx);
-                    continue;
+                    return;
                 };
 
                 if (ntickets > 0) {
@@ -386,7 +393,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                         std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
                         thr_ctx.error_msg = "Failed to add tickets to queue";
                         removeFd(ctx, thr_ctx);
-                        continue;
+                        return;
                     };
                 }
             },
