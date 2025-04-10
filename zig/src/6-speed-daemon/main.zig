@@ -438,7 +438,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
     while (true) {
         // Clean up
         buf.clear();
-        for (&msgs.buffer) |*msg| msg.deinit();
         msgs.clear();
 
         std.log.debug("({d}): waiting for a new event...", .{thrid});
