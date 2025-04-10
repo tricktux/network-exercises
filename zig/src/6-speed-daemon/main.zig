@@ -445,11 +445,34 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_events.items[0..ready_count]) |event| {
             const ready_socket = event.data.fd;
-            // TODO: even timers need this?
-            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
-                error.FileDescriptorNotRegistered => {},
-                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
-            };
+
+            // Handle a new connection event
+            if (ready_socket == serverfd) {
+                std.log.debug("({d}): got new connection!!!", .{thrid});
+
+                const clientfd = std.posix.accept(serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
+                    std.log.err("({d}): error while accepting connection: {!}", .{ thrid, err });
+                    continue;
+                };
+
+                // TODO: Are these fatal errors? Should we return instead of
+                // continue?
+                // TODO: Create new client
+                const client = Client.init(alloc, clientfd, ctx.epoll) catch |err| {
+                    std.log.err("({d}): Failed to create a new client: {!}", .{ thrid, err });
+                    _ = std.posix.close(clientfd);
+                    continue;
+                };
+
+                // TODO: Add it to clients
+                // TODO: Remove ctx.fifos
+                ctx.fifos.add(clientfd) catch |err| {
+                    std.log.err("({d}): error while adding fifo: {!}", .{ thrid, err });
+                    _ = std.posix.close(clientfd);
+                    continue;
+                };
+                continue;
+            }
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
@@ -472,6 +495,12 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 continue;
             }
 
+
+            // TODO: even timers need this?
+            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                error.FileDescriptorNotRegistered => {},
+                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+            };
             // Setup loop variables if it's not a timer
             const client = ctx.clients.get(ready_socket);
             thr_ctx.client = client;
@@ -482,32 +511,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             if ((event.events & linux.EPOLL.RDHUP) == linux.EPOLL.RDHUP) {
                 std.log.debug("({d}): Closed connection for client: {d}", .{ thrid, ready_socket });
                 removeFd(ctx, &thr_ctx);
-                continue;
-            }
-
-            // Handle a new connection event
-            if (ready_socket == serverfd) {
-                std.log.debug("({d}): got new connection!!!", .{thrid});
-
-                const clientfd = std.posix.accept(serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
-                    std.log.err("({d}): error while accepting connection: {!}", .{ thrid, err });
-                    continue;
-                };
-
-                // For now just add it to epoll and fifos, until it identifies itself
-                // TODO: Are these fatal errors? Should we return instead of
-                // continue?
-                ctx.epoll.add(clientfd) catch |err| {
-                    std.log.err("({d}): error while accepting connection: {!}", .{ thrid, err });
-                    _ = std.posix.close(clientfd);
-                    continue;
-                };
-
-                ctx.fifos.add(clientfd) catch |err| {
-                    std.log.err("({d}): error while adding fifo: {!}", .{ thrid, err });
-                    _ = std.posix.close(clientfd);
-                    continue;
-                };
                 continue;
             }
 
