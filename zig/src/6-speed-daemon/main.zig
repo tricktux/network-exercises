@@ -446,8 +446,9 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         for (ready_events.items[0..ready_count]) |event| {
             const ready_socket = event.data.fd;
             // TODO: even timers need this?
-            defer ctx.epoll.mod(ready_socket) catch |err| {
-                std.log.err("Failed to re-add socket to epoll: {!}", .{err});
+            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                error.FileDescriptorNotRegistered => {},
+                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
             };
 
             // Check for timer event
