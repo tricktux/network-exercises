@@ -30,7 +30,6 @@ const Timers = logic.Timers;
 const Timer = logic.Timer;
 const Clients = logic.Clients;
 const Client = logic.Client;
-const Fifos = logic.Fifos;
 const Dispatcher = logic.Dispatcher;
 
 // Constants
@@ -82,8 +81,6 @@ pub fn main() !void {
     // Create the world
     var epoll = try EpollManager.init();
     defer epoll.deinit();
-    var fifos = try Fifos.init(allocator);
-    defer fifos.deinit();
     var tickets = TicketsQueue.init(allocator);
     defer tickets.deinit();
     var cars = try Cars.init(allocator, &tickets);
@@ -95,12 +92,12 @@ pub fn main() !void {
     var cameras = try Cameras.init(allocator);
     defer cameras.deinit();
     var clients = try Clients.init(allocator);
-    defer clients.deinit(&epoll) catch |err| {
+    defer clients.deinit() catch |err| {
         std.log.err("Failed to deinit clients: {!}", .{err});
     };
     var timers = try Timers.init(allocator);
     defer timers.deinit();
-    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers, .fifos = &fifos };
+    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
 
     const serverfd = server.stream.handle;
     try epoll.add(serverfd);
@@ -145,7 +142,7 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
                 std.log.err("Failed to remove dispatcher: {!}", .{err});
             };
         }
-        ctx.clients.del(thr_ctx.fd, ctx.epoll) catch |third_err| {
+        ctx.clients.del(thr_ctx.fd) catch |third_err| {
             std.log.err("Failed to del client: {!}", .{third_err});
         };
     } else {
@@ -153,8 +150,6 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
             std.log.err("Failed to del epoll: {!}", .{err});
         };
     }
-
-    ctx.fifos.del(thr_ctx.fd);
 }
 
 // TODO: This function's length is getting out of hand
@@ -166,16 +161,12 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     std.log.debug("({d}): got new message!!!", .{thrid});
 
-    var fifo = ctx.fifos.get(fd);
-    if (fifo == null) {
-        std.log.err("({d}): Failed to get fifo: {d}", .{ thrid, fd });
-        return;
-    }
+    var fifo = thr_ctx.client.?.fifo;
 
     var bytes: usize = 0;
     var read_error = false;
     while (true) {
-        const buf = fifo.?.writableWithSize(2048) catch |err| {
+        const buf = fifo.writableWithSize(2048) catch |err| {
             std.log.err("({d}): Failed to get fifo: {d}. Error: {!}", .{ thrid, fd, err });
             read_error = true;
             break;
@@ -191,7 +182,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             }
         };
         if (bytes == 0) break;
-        fifo.?.update(bytes);
+        fifo.update(bytes);
     }
 
     if (read_error) {
@@ -209,7 +200,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     }
 
     // - call decode(buf, msgs)
-    const data = fifo.?.readableSlice(0);
+    const data = fifo.readableSlice(0);
     _ = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
         std.log.err("Failed to decode messages: {!}", .{err});
         thr_ctx.error_msg = "Received a message of invalid type";
@@ -285,12 +276,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     };
                 }
 
-                // Add new client
-                ctx.clients.add(newclient) catch |err| {
-                    std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add client";
-                    removeFd(ctx, thr_ctx);
-                };
             },
             .WantHeartbeat => {
                 std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
@@ -465,11 +450,11 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 };
 
                 // TODO: Add it to clients
-                // TODO: Remove ctx.fifos
-                ctx.fifos.add(clientfd) catch |err| {
-                    std.log.err("({d}): error while adding fifo: {!}", .{ thrid, err });
-                    _ = std.posix.close(clientfd);
-                    continue;
+                // Add new client
+                ctx.clients.add(client) catch |err| {
+                    std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
+                    thr_ctx.error_msg = "Failed to add client";
+                    removeFd(ctx, &thr_ctx);
                 };
                 continue;
             }

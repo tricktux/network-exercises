@@ -24,7 +24,6 @@ const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
 const TimerHashMap = std.AutoHashMap(socketfd, Timer);
 const u8Fifo = std.fifo.LinearFifo(u8, .Dynamic);
-const FdFifoHashMap = std.AutoHashMap(socketfd, u8Fifo);
 const RoadsArray = std.ArrayList(u16);
 const DispatchersSet = Set(socketfd);
 
@@ -36,7 +35,6 @@ pub const Context = struct {
     clients: *Clients,
     epoll: *EpollManager,
     timers: *Timers,
-    fifos: *Fifos,
 };
 
 pub const TicketsQueue = struct {
@@ -110,57 +108,7 @@ pub const TicketsQueue = struct {
     }
 };
 
-pub const Fifos = struct {
-    map: FdFifoHashMap,
-    mutex: std.Thread.Mutex = .{},
-    alloc: std.mem.Allocator,
-
-    pub fn init(alloc: std.mem.Allocator) !Fifos {
-        return Fifos{
-            .map = FdFifoHashMap.init(alloc),
-            .alloc = alloc,
-        };
-    }
-
-    pub fn deinit(self: *Fifos) void {
-        var it = self.map.iterator();
-        while (it.next()) |fifo| {
-            fifo.value_ptr.deinit();
-        }
-        self.map.deinit();
-    }
-
-    pub fn add(self: *Fifos, fd: socketfd) !void {
-        if (fd == 0) return error.InvalidFd;
-
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        const fifo = u8Fifo.init(self.alloc);
-        try self.map.put(fd, fifo);
-    }
-
-    pub fn get(self: *Fifos, fd: socketfd) ?*u8Fifo {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        return self.map.getPtr(fd);
-    }
-
-    pub fn del(self: *Fifos, fd: socketfd) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        var fifo = self.map.getPtr(fd);
-        if (fifo == null) {
-            std.log.err("Failed to find fifo with fd: {d} for removal\n", .{fd});
-            return;
-        }
-        fifo.?.deinit();
-        _ = self.map.remove(fd);
-    }
-};
-
+// TODO: Remove
 pub const Timer = struct {
     fd: socketfd,
     client: *Client,
@@ -238,6 +186,7 @@ pub const Timers = struct {
 pub const ClientType = enum {
     Camera,
     Dispatcher,
+    Unidentified,
 };
 
 pub const EpollManager = struct {
@@ -287,10 +236,10 @@ pub const Clients = struct {
         };
     }
 
-    pub fn deinit(self: *Clients, epoll: *EpollManager) !void {
+    pub fn deinit(self: *Clients) !void {
         var it = self.map.iterator();
         while (it.next()) |client| {
-            try client.value_ptr.deinit(epoll);
+            try client.value_ptr.deinit();
         }
 
         self.map.deinit();
@@ -310,7 +259,7 @@ pub const Clients = struct {
         return self.map.getPtr(fd);
     }
 
-    pub fn del(self: *Clients, fd: socketfd, epoll: *EpollManager) !void {
+    pub fn del(self: *Clients, fd: socketfd) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -319,43 +268,53 @@ pub const Clients = struct {
             std.log.err("Failed to find client with fd: {d} for removal\n", .{fd});
             return;
         }
-        try client.?.deinit(epoll);
+        try client.?.deinit();
         _ = self.map.remove(fd);
     }
 };
 
+const Unidentified = struct {};
+
 pub const Client = struct {
     fd: socketfd,
     type: ClientType,
+    fifo: u8Fifo,
+    epoll: *EpollManager,
     timer: ?Timer = null,
     data: union(enum) {
         camera: Camera,
         dispatcher: Dispatcher,
+        unidentified: Unidentified,
     },
 
-    pub fn initWithCamera(fd: socketfd, cam: Camera) Client {
+    pub fn init(alloc: std.mem.Allocator, fd: socketfd, epoll: *EpollManager) !Client {
+        try epoll.add(fd);
+        const fifo = u8Fifo.init(alloc);
         return Client{
             .fd = fd,
-            .type = ClientType.Camera,
-            .data = .{ .camera = cam },
+            .fifo = fifo,
+            .epoll = epoll,
+            .type = ClientType.Unidentified,
+            .data = .{ .unidentified = Unidentified{} },
         };
     }
 
-    pub fn initWithDispatcher(fd: socketfd, disp: Dispatcher) Client {
-        std.log.info("Creating dispatcher client with fd: {d}\n", .{fd});
-        return Client{
-            .fd = fd,
-            .type = ClientType.Dispatcher,
-            .data = .{ .dispatcher = disp },
-        };
+    pub fn initWithCamera(self: *Client, cam: Camera) void {
+        self.type = ClientType.Camera;
+        self.data = .{ .camera = cam };
     }
 
-    pub fn addTimer(self: *Client, interval: u64, epoll: *EpollManager) !Timer {
+    pub fn initWithDispatcher(self: *Client, disp: Dispatcher) void {
+        self.type = ClientType.Dispatcher;
+        self.data = .{ .dispatcher = disp };
+    }
+
+    pub fn addTimer(self: *Client, interval: u64) !Timer {
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
         std.log.info("Adding timer to client with interval: {d}\n", .{interval});
         self.timer = try Timer.init(self, interval);
-        try epoll.add(self.timer.?.fd);
+        try self.epoll.add(self.timer.?.fd);
         return self.timer.?;
     }
 
@@ -374,15 +333,16 @@ pub const Client = struct {
         try stream.writeAll(buf.constSlice());
     }
 
-    pub fn deinit(self: *Client, epoll: *EpollManager) !void {
+    pub fn deinit(self: *Client) !void {
+        errdefer _ = std.posix.close(self.fd);
+        self.fifo.deinit();
+
         if (self.timer != null) {
-            try epoll.del(self.timer.?.fd);
+            try self.epoll.del(self.timer.?.fd);
             self.timer.?.deinit();
         }
 
-        epoll.del(self.fd) catch |err| {
-            std.log.err("Error removing client from epoll: {}\n", .{err});
-        };
+        try self.epoll.del(self.fd);
         _ = std.posix.close(self.fd);
         switch (self.data) {
             .dispatcher => self.data.dispatcher.deinit(),
