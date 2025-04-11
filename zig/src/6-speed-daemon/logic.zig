@@ -177,7 +177,7 @@ pub const Timers = struct {
         if (self.map.fetchRemove(fd)) |timer| {
             timer.value.deinit();
         } else {
-            std.log.err("Error removing timer with fd: {d}\n", .{fd});
+            std.log.err("Error removing timer with fd: {d}", .{fd});
         }
     }
 };
@@ -264,7 +264,7 @@ pub const Clients = struct {
 
         var client = self.map.getPtr(fd);
         if (client == null) {
-            std.log.err("Failed to find client with fd: {d} for removal\n", .{fd});
+            std.log.err("Failed to find client with fd: {d} for removal", .{fd});
             return;
         }
         try client.?.deinit();
@@ -312,7 +312,7 @@ pub const Client = struct {
     pub fn addTimer(self: *Client, interval: u64) !Timer {
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
-        std.log.info("Adding timer to client with interval: {d}\n", .{interval});
+        std.log.info("Adding timer to client with interval: {d}", .{interval});
         self.timer = try Timer.init(self, interval);
         try self.epoll.add(self.timer.?.fd);
         return self.timer.?;
@@ -327,7 +327,7 @@ pub const Client = struct {
 
     pub fn sendHeartbeat(self: *Client, buf: *u8BoundedArray) !void {
         const m = Message.initHeartbeat();
-        std.log.debug("Sending heartbeat to client with fd: {d}\n", .{self.fd});
+        std.log.debug("Sending heartbeat to client with fd: {d}", .{self.fd});
         _ = try m.host_to_network(buf);
         const stream = std.net.Stream{ .handle = self.fd };
         try stream.writeAll(buf.constSlice());
@@ -457,7 +457,7 @@ pub const Car = struct {
         const key_mem = entry.?.key_ptr.*;
         const idx = std.mem.indexOf(u8, key_mem, "-");
         if (idx == null) {
-            std.log.err("Error parsing key: {s}\n", .{key_mem});
+            std.log.err("Error parsing key: {s}", .{key_mem});
             return 0;
         }
         // Check if we've already issued a ticket for this road and date
@@ -586,7 +586,7 @@ pub const Cars = struct {
         if (self.map.fetchRemove(plate)) |car| {
             car.value.deinit();
         } else {
-            std.log.err("Error removing car with plate: {s}\n", .{plate});
+            std.log.err("Error removing car with plate: {s}", .{plate});
         }
     }
 };
@@ -680,7 +680,7 @@ pub const Roads = struct {
         if (self.map.fetchRemove(road)) |r| {
             r.value.deinit();
         } else {
-            std.log.err("Error removing road with id: {d}\n", .{road});
+            std.log.err("Error removing road with id: {d}", .{road});
         }
     }
 };
