@@ -172,11 +172,7 @@ pub const Timers = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        if (self.map.fetchRemove(fd)) |timer| {
-            timer.value.deinit();
-        } else {
-            std.log.err("Error removing timer with fd: {d}", .{fd});
-        }
+        _ = self.map.remove(fd);
     }
 };
 
@@ -233,10 +229,10 @@ pub const Clients = struct {
         };
     }
 
-    pub fn deinit(self: *Clients) !void {
+    pub fn deinit(self: *Clients, timers: *Timers) !void {
         var it = self.map.iterator();
         while (it.next()) |client| {
-            try client.value_ptr.deinit();
+            try client.value_ptr.deinit(timers);
         }
 
         self.map.deinit();
@@ -256,7 +252,7 @@ pub const Clients = struct {
         return self.map.getPtr(fd);
     }
 
-    pub fn del(self: *Clients, fd: socketfd) !void {
+    pub fn del(self: *Clients, fd: socketfd, timers: *Timers) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -265,7 +261,7 @@ pub const Clients = struct {
             std.log.err("Failed to find client with fd: {d} for removal", .{fd});
             return;
         }
-        try client.?.deinit();
+        try client.?.deinit(timers);
         _ = self.map.remove(fd);
     }
 };
@@ -346,13 +342,14 @@ pub const Client = struct {
     }
 
     // TODO: Remove from timers
-    pub fn deinit(self: *Client) !void {
+    pub fn deinit(self: *Client, timers: *Timers) !void {
         errdefer _ = std.posix.close(self.fd);
         self.fifo.deinit();
 
         if (self.timer != null) {
             std.log.debug("Removing timer from client fd: {d}", .{self.fd});
             try self.epoll.del(self.timer.?.fd);
+            timers.del(self.timer.?.fd);
             self.timer.?.deinit();
         }
 
@@ -447,7 +444,7 @@ pub const Car = struct {
         // Get the unique key for this observation
         var buf: [1024]u8 = undefined;
         const key = try createUniqueKey(cam.road, timestamp, &buf);
-        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH:mm:ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
+        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
         // Add to observations map or create a new one key

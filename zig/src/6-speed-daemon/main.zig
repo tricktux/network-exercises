@@ -88,12 +88,12 @@ pub fn main() !void {
     defer roads.deinit() catch |err| {
         std.log.err("Failed to deinit roads: {!}", .{err});
     };
-    var clients = try Clients.init(allocator);
-    defer clients.deinit() catch |err| {
-        std.log.err("Failed to deinit clients: {!}", .{err});
-    };
     var timers = try Timers.init(allocator);
     defer timers.deinit();
+    var clients = try Clients.init(allocator);
+    defer clients.deinit(&timers) catch |err| {
+        std.log.err("Failed to deinit clients: {!}", .{err});
+    };
     var ctx: Context = .{ .cars = &cars, .roads = &roads, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
 
     const serverfd = server.stream.handle;
@@ -140,7 +140,7 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
             std.log.err("Failed to remove dispatcher: {!}", .{err});
         };
     }
-    ctx.clients.del(thr_ctx.fd) catch |third_err| {
+    ctx.clients.del(thr_ctx.fd, ctx.timers) catch |third_err| {
         std.log.err("Failed to del client: {!}", .{third_err});
     };
 }
