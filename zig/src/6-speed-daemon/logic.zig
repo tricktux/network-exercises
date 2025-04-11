@@ -691,7 +691,7 @@ pub const Camera = struct {
     mile: u16,
     speed_limit: u16,
 
-    pub fn initFromMessage(fd: socketfd, message: Message) !Camera {
+    pub fn initFromMessage(fd: socketfd, message: *Message) !Camera {
         if (message.type != messages.Type.IAmCamera) return LogicError.MessageWrongType;
 
         return Camera{
@@ -1120,14 +1120,14 @@ test "Camera initialization from message" {
     const limit: u16 = 55;
     const fd: types.socketfd = 123;
 
-    const msg = Message.initCamera(.{
+    var msg = Message.initCamera(.{
         .road = road,
         .mile = mile,
         .limit = limit,
     });
 
     // Initialize camera from message
-    const camera = try Camera.initFromMessage(fd, msg);
+    const camera = try Camera.initFromMessage(fd, &msg);
 
     // Verify all fields
     try testing.expectEqual(fd, camera.fd);
@@ -1136,8 +1136,8 @@ test "Camera initialization from message" {
     try testing.expectEqual(limit, camera.speed_limit);
 
     // Test error case - wrong message type
-    const wrong_msg = Message.initHeartbeat();
-    try testing.expectError(LogicError.MessageWrongType, Camera.initFromMessage(fd, wrong_msg));
+    var wrong_msg = Message.initHeartbeat();
+    try testing.expectError(LogicError.MessageWrongType, Camera.initFromMessage(fd, &wrong_msg));
 }
 
 test "Cameras container operations" {

@@ -102,6 +102,7 @@ pub fn main() !void {
     const serverfd = server.stream.handle;
     try epoll.add(serverfd);
 
+    // handle_events(&ctx, serverfd, allocator);
     // Initialize Threads
     const cpus = try std.Thread.getCpuCount();
     var threads = try std.ArrayList(std.Thread).initCapacity(allocator, cpus);
@@ -227,7 +228,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     return;
                 }
                 // Add the cam to the cameras
-                const camera = Camera.initFromMessage(fd, msg.*) catch |err| {
+                const camera = Camera.initFromMessage(fd, msg) catch |err| {
                     std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init camera";
                     removeFd(ctx, thr_ctx);
@@ -492,6 +493,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             }
 
             // Then it must be we got a new message
+            // TODO: Return bool signaling if we should epoll_mod
             handleMessages(ctx, &thr_ctx);
         }
     }
