@@ -13,7 +13,6 @@ const socketfd = types.socketfd;
 const CameraHashMap = std.AutoHashMap(std.posix.socket_t, Camera);
 const RoadHashMap = std.AutoHashMap(u16, Road);
 const ArrayCameraId = std.ArrayList(socketfd);
-const String = std.ArrayList(u8);
 const Ticket = messages.Ticket;
 pub const TicketsQueueType = std.DoublyLinkedList(Message); // Of Type.Ticket
 const Tickets = std.StringHashMap(Message);
@@ -401,7 +400,7 @@ pub const Observation = struct {
 };
 
 pub const Car = struct {
-    plate: String,
+    plate: []const u8,
     tickets_queue: *TicketsQueue,
     // TODO: Make this a StringSet
     tickets: Tickets, // Non owning list of all observations keys that cause a
@@ -409,9 +408,9 @@ pub const Car = struct {
     observationsmap: ObservationsHashMap,
     alloc: std.mem.Allocator,
 
-    pub fn init(alloc: std.mem.Allocator, tickets: *TicketsQueue) !Car {
+    pub fn init(alloc: std.mem.Allocator, plate: []const u8, tickets: *TicketsQueue) !Car {
         return Car{
-            .plate = try String.initCapacity(alloc, 32),
+            .plate = plate,
             .tickets_queue = tickets,
             .tickets = Tickets.init(alloc),
             .observationsmap = ObservationsHashMap.init(alloc),
@@ -420,7 +419,6 @@ pub const Car = struct {
     }
 
     pub fn deinit(self: *Car) void {
-        self.plate.deinit();
         self.tickets.deinit();
         var it = self.observationsmap.iterator();
         while (it.next()) |observations| {
@@ -439,15 +437,15 @@ pub const Car = struct {
     pub fn addObservation(self: *Car, message: *Message, cam: *Camera) !u32 {
         if (message.type != messages.Type.Plate) return LogicError.MessageWrongType;
         if (message.data.plate.plate.len == 0) return LogicError.EmptyPlate;
-        if (self.plate.items.len == 0) return LogicError.EmptyPlate;
-        if (!std.mem.eql(u8, message.data.plate.plate, self.plate.items)) return LogicError.PlateMismatch;
+        if (self.plate.len == 0) return LogicError.EmptyPlate;
+        if (!std.mem.eql(u8, message.data.plate.plate, self.plate)) return LogicError.PlateMismatch;
 
         const timestamp = messages.timestamp_to_date(message.data.plate.timestamp);
 
         // Get the unique key for this observation
         var buf: [1024]u8 = undefined;
         const key = try createUniqueKey(cam.road, timestamp, &buf);
-        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate.items, timestamp, cam.road, cam.mile, cam.speed_limit });
+        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
         // Add to observations map or create a new one key
@@ -515,7 +513,7 @@ pub const Car = struct {
 
             // Create a new ticket
             var ticket = Ticket.init();
-            ticket.plate = self.plate.items;
+            ticket.plate = self.plate;
             ticket.road = cam.road;
             ticket.mile1 = obs1.mile;
             ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
@@ -530,7 +528,7 @@ pub const Car = struct {
             try self.tickets.put(date_key, msg);
             tickets += 1;
 
-            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate.items, cam.road, ticket.speed, obs1.speed_limit });
+            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit });
 
             // Only issue one ticket per day per road
             return tickets;
@@ -566,20 +564,25 @@ pub const Cars = struct {
 
         while (it.next()) |car| {
             car.value_ptr.deinit();
+            self.allocator.free(car.key_ptr.*);
         }
 
         self.map.deinit();
     }
 
-    pub fn add(self: *Cars, plate: []const u8) !void {
+    pub fn getOrPut(self: *Cars, plate: []const u8, tickets: *TicketsQueue) !*Car {
         if (plate.len == 0) return LogicError.EmptyPlate;
 
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        var car = try Car.init(self.allocator, self.tickets_queue);
-        car.plate.appendSlice(plate);
-        try self.map.put(car.plate.items, car);
+        const result = try self.map.getOrPut(plate);
+        if (result.found_existing) return result.value_ptr;
+
+        result.key_ptr.* = try self.allocator.dupe(u8, plate);
+        const ncar = try Car.init(self.allocator, result.key_ptr.*, tickets);
+        result.value_ptr.* = ncar;
+        return result.value_ptr;
     }
 
     pub fn get(self: *Cars, plate: []const u8) !?*Car {
@@ -598,6 +601,7 @@ pub const Cars = struct {
         defer self.mutex.unlock();
 
         if (self.map.fetchRemove(plate)) |car| {
+            self.allocator.free(car.key);
             car.value.deinit();
         } else {
             std.log.err("Error removing car with plate: {s}", .{plate});
@@ -753,9 +757,8 @@ test "Car.addObservation" {
 }
 
 fn testErrorCases(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     var camera = Camera{
         .fd = 123,
@@ -780,20 +783,6 @@ fn testErrorCases(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !v
         try testing.expectError(LogicError.EmptyPlate, car.addObservation(&msg, &camera));
     }
 
-    // Car with empty plate
-    {
-        var car_empty = try Car.init(allocator, tickets_queue);
-        defer car_empty.deinit();
-        // Plate not set
-
-        var msg = messages.Message{
-            .type = messages.Type.Plate,
-            .data = .{ .plate = .{ .plate = "XYZ789", .timestamp = 0 } },
-            // Initialize other required fields
-        };
-        try testing.expectError(LogicError.EmptyPlate, car_empty.addObservation(&msg, &camera));
-    }
-
     // Plate mismatch
     {
         var msg = messages.Message{
@@ -806,9 +795,8 @@ fn testErrorCases(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !v
 }
 
 fn testSingleObservation(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     var camera = Camera{
         .fd = 123,
@@ -834,9 +822,8 @@ fn testSingleObservation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
 }
 
 fn testMultipleObservationsNoSpeeding(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     // First observation
     var camera1 = Camera{
@@ -873,9 +860,8 @@ fn testMultipleObservationsNoSpeeding(allocator: std.mem.Allocator, tickets_queu
 fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     // First observation
     var camera1 = Camera{
@@ -919,9 +905,8 @@ fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
 fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     // Create a speeding violation
     var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
@@ -958,9 +943,8 @@ fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *Tickets
 fn testDifferentRoads(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     // Road 1
     var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
@@ -997,9 +981,8 @@ fn testDifferentRoads(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue
 fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     // First observation
     var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
@@ -1026,9 +1009,8 @@ fn testTimeThreshold(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
 fn testNonChronologicalOrder(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
     var camera2 = Camera{ .fd = 124, .road = 1, .mile = 90, .speed_limit = 60 };
@@ -1062,9 +1044,8 @@ fn testNonChronologicalOrder(allocator: std.mem.Allocator, tickets_queue: *Ticke
 fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, tickets_queue);
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
     defer car.deinit();
-    try car.plate.appendSlice("ABC123");
 
     // Day 1
     var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };

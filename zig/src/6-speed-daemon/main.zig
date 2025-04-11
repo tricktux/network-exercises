@@ -306,27 +306,12 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Get Car
-                // TODO: Bug here. Need to allocate this value
-                const result = ctx.cars.map.getOrPut(msg.data.plate.plate) catch |err| {
+                var car = ctx.cars.getOrPut(msg.data.plate.plate, ctx.tickets) catch |err| {
                     std.log.err("({d}): Failed to getOrPut car: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to getOrPut car";
                     removeFd(ctx, thr_ctx);
                     return;
                 };
-
-                var car: *Car = undefined;
-                if (result.found_existing) {
-                    car = result.value_ptr;
-                } else {
-                    const ncar = Car.init(thr_ctx.alloc, ctx.tickets) catch |err| {
-                        std.log.err("({d}): Failed to init car: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to init car";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
-                    result.value_ptr.* = ncar;
-                    car = result.value_ptr;
-                }
 
                 const ntickets = car.addObservation(msg, &client.data.camera) catch |err| {
                     std.log.err("({d}): Failed to add observation: {!}", .{ thrid, err });
