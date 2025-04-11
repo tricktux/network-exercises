@@ -368,7 +368,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
                 thr_ctx.error_msg = "Received a message of invalid type";
                 removeFd(ctx, thr_ctx);
-                continue;
+                return;
             },
         }
     }
