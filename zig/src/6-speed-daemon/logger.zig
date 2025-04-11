@@ -43,28 +43,26 @@ pub fn customLogFn(
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
 
     // Write to stderr
-    nosuspend {
-        // const stderr = std.io.getStdErr().writer();
-        // stderr.print(prefix ++ format ++ "\n", args) catch {};
+    // const stderr = std.io.getStdErr().writer();
+    // stderr.print(prefix ++ format ++ "\n", args) catch {};
 
-        // Write to log file if open
+    // Write to log file if open
+    if (log_file) |file| {
         mutex.lock();
         defer mutex.unlock();
 
-        if (log_file) |file| {
-            // file.writer().print(prefix ++ format ++ "\n", args) catch {};
-            // Get current timestamp
-            const timestamp = std.time.timestamp();
+        // file.writer().print(prefix ++ format ++ "\n", args) catch {};
+        // Get current timestamp
+        const timestamp = std.time.timestamp();
 
-            // Format the log message
-            const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
-                // If formatting fails, still try to log something
-                file.writer().print("[{d}] ERROR formatting log message\n", .{timestamp}) catch {};
-                return;
-            };
+        // Format the log message
+        const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
+            // If formatting fails, still try to log something
+            file.writer().print("[{d}] ERROR formatting log message\n", .{timestamp}) catch {};
+            return;
+        };
 
-            // Write with timestamp
-            file.writer().print("[{d}] {s}\n", .{ timestamp, formatted_msg }) catch {};
-        }
+        // Write with timestamp
+        file.writer().print("[{d}] {s}\n", .{ timestamp, formatted_msg }) catch {};
     }
 }
