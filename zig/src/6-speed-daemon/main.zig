@@ -372,6 +372,9 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             },
         }
     }
+    ctx.epoll.mod(fd) catch |err| switch (err) {
+        else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+    };
 }
 
 fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
@@ -413,10 +416,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         for (ready_events.items[0..ready_count]) |event| {
             const ready_socket = event.data.fd;
             // TODO: even timers need this?
-            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
-                error.FileDescriptorNotRegistered => {},
-                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
-            };
 
             // Handle a new connection event
             if (ready_socket == serverfd) {
@@ -442,6 +441,9 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, &thr_ctx);
                 };
+                ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                    else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+                };
                 continue;
             }
 
@@ -463,6 +465,9 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     continue;
                 };
                 std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thrid, timer.client.fd });
+                ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                    else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+                };
                 continue;
             }
 
