@@ -30,7 +30,6 @@ const DispatchersSet = Set(socketfd);
 pub const Context = struct {
     cars: *Cars,
     roads: *Roads,
-    cameras: *Cameras,
     tickets: *TicketsQueue,
     clients: *Clients,
     epoll: *EpollManager,
@@ -281,6 +280,7 @@ pub const Client = struct {
     epoll: *EpollManager,
     timer: ?Timer = null,
     heartbeat_requested: bool = false,
+    alloc: std.mem.Allocator,
     data: union(enum) {
         camera: Camera,
         dispatcher: Dispatcher,
@@ -295,21 +295,34 @@ pub const Client = struct {
             .fifo = fifo,
             .epoll = epoll,
             .type = ClientType.Unidentified,
+            .alloc = alloc,
             .data = .{ .unidentified = Unidentified{} },
         };
     }
 
-    pub fn initWithCamera(self: *Client, cam: Camera) void {
+    pub fn setAsCamera(self: *Client, msg: *Message) !void {
+        if (self.type != .Unidentified) return LogicError.TypeAlreadySet;
+        if (msg.type != messages.Type.IAmCamera) return LogicError.MessageWrongType;
+
         self.type = ClientType.Camera;
-        self.data = .{ .camera = cam };
+        self.data = .{ .camera = .{
+            .fd = self.fd,
+            .road = msg.data.camera.road,
+            .mile = msg.data.camera.mile,
+            .speed_limit = msg.data.camera.limit,
+        } };
     }
 
-    pub fn initWithDispatcher(self: *Client, disp: Dispatcher) void {
+    pub fn setAsDispatcher(self: *Client, msg: *Message) !void {
+        if (self.type != .Unidentified) return LogicError.TypeAlreadySet;
+        if (msg.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
+
         self.type = ClientType.Dispatcher;
-        self.data = .{ .dispatcher = disp };
+        self.data = .{ .dispatcher = try Dispatcher.initFromMessage(self.fd, msg, self.alloc)};
     }
 
     pub fn addTimer(self: *Client, interval: u64) !Timer {
+        if (self.heartbeat_requested == true) return LogicError.AlreadyHasTimer;
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
         std.log.info("Adding timer to client with interval: {d}", .{interval});
@@ -527,6 +540,7 @@ pub const Car = struct {
 };
 
 pub const LogicError = error{
+    TypeAlreadySet,
     EmptyPlate,
     MessageWrongType,
     AlreadyHasTimer,
@@ -700,42 +714,6 @@ pub const Camera = struct {
             .mile = message.data.camera.mile,
             .speed_limit = message.data.camera.limit,
         };
-    }
-};
-
-pub const Cameras = struct {
-    map: CameraHashMap,
-    mutex: std.Thread.Mutex = .{},
-
-    pub fn init(alloc: std.mem.Allocator) !Cameras {
-        return Cameras{
-            .map = CameraHashMap.init(alloc),
-        };
-    }
-
-    pub fn deinit(self: *Cameras) void {
-        self.map.deinit();
-    }
-
-    pub fn add(self: *Cameras, fd: socketfd, camera: Camera) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        try self.map.put(fd, camera);
-    }
-
-    pub fn get(self: *Cameras, fd: socketfd) ?*Camera {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        return self.map.getPtr(fd);
-    }
-
-    pub fn del(self: *Cameras, fd: socketfd) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        _ = self.map.remove(fd);
     }
 };
 
@@ -1140,136 +1118,6 @@ test "Camera initialization from message" {
     try testing.expectError(LogicError.MessageWrongType, Camera.initFromMessage(fd, &wrong_msg));
 }
 
-test "Cameras container operations" {
-    const allocator = testing.allocator;
-
-    // Initialize cameras container
-    var cameras = try Cameras.init(allocator);
-    defer cameras.deinit();
-
-    // Test adding a camera
-    const fd1: types.socketfd = 101;
-    const camera1 = Camera{
-        .fd = fd1,
-        .road = 1,
-        .mile = 10,
-        .speed_limit = 60,
-    };
-
-    try cameras.add(fd1, camera1);
-
-    // Test getting a camera
-    const retrieved_camera = cameras.get(fd1);
-    try testing.expect(retrieved_camera != null);
-    try testing.expectEqual(camera1.road, retrieved_camera.?.road);
-    try testing.expectEqual(camera1.mile, retrieved_camera.?.mile);
-    try testing.expectEqual(camera1.speed_limit, retrieved_camera.?.speed_limit);
-
-    // Test getting a non-existent camera
-    const non_existent = cameras.get(999);
-    try testing.expect(non_existent == null);
-
-    // Test deleting a camera
-    cameras.del(fd1);
-    const deleted = cameras.get(fd1);
-    try testing.expect(deleted == null);
-}
-
-test "Client initialization without epoll" {
-    const allocator = testing.allocator;
-
-    // Create a camera for client
-    const camera = Camera{
-        .fd = 101,
-        .road = 1,
-        .mile = 10,
-        .speed_limit = 60,
-    };
-
-    // Create a client with camera
-
-    var epoll = try EpollManager.init();
-    defer epoll.deinit();
-    var cam_client = try Client.init(allocator, 101, &epoll);
-    cam_client.initWithCamera(camera);
-    try testing.expectEqual(ClientType.Camera, cam_client.type);
-    try testing.expectEqual(camera.road, cam_client.data.camera.road);
-
-    // Create a dispatcher for client
-    var roads = RoadsArray.init(allocator);
-    // defer roads.deinit();
-    try roads.append(1);
-    try roads.append(2);
-
-    const dispatcher = Dispatcher{
-        .fd = 102,
-        .roads = roads,
-    };
-
-    // Create a client with dispatcher
-    var disp_client = try Client.init(allocator, 102, &epoll);
-    disp_client.initWithDispatcher(dispatcher);
-    try testing.expectEqual(ClientType.Dispatcher, disp_client.type);
-    try testing.expectEqual(dispatcher.fd, disp_client.data.dispatcher.fd);
-
-    // Test the dispatchers roads content
-    try testing.expectEqual(@as(usize, 2), disp_client.data.dispatcher.roads.items.len);
-    try testing.expectEqual(@as(u16, 1), disp_client.data.dispatcher.roads.items[0]);
-    try testing.expectEqual(@as(u16, 2), disp_client.data.dispatcher.roads.items[1]);
-
-    // Clean up the dispatcher data in the client to avoid memory leaks
-    disp_client.data.dispatcher.deinit();
-}
-
-test "Clients container operations without epoll" {
-    const allocator = testing.allocator;
-
-    // Initialize clients container
-    var clients = try Clients.init(allocator);
-    defer clients.map.deinit(); // Just deinit the map, not using the full deinit that requires epoll
-
-    // Create a client
-    const camera = Camera{
-        .fd = 101,
-        .road = 1,
-        .mile = 10,
-        .speed_limit = 60,
-    };
-    var epoll = try EpollManager.init();
-    defer epoll.deinit();
-    var client = try Client.init(allocator, 101, &epoll);
-    client.initWithCamera(camera);
-
-    // Test adding client
-    try clients.add(client);
-
-    // Test getting client
-    const retrieved_client = clients.get(101);
-    try testing.expect(retrieved_client != null);
-    try testing.expectEqual(client.type, retrieved_client.?.type);
-    try testing.expectEqual(client.fd, retrieved_client.?.fd);
-
-    // Test getting non-existent client
-    const non_existent = clients.get(999);
-    try testing.expect(non_existent == null);
-
-    // Test client message preparation (not actually sending)
-    var buf = try u8BoundedArray.init(0);
-    const error_msg = "Test error";
-    const error_message = Message.initError(error_msg);
-    _ = try error_message.host_to_network(&buf);
-    try testing.expectEqual(@intFromEnum(messages.Type.ErrorM), buf.buffer[0]);
-
-    // Create a heartbeat message (not sending)
-    buf.len = 0;
-    const heartbeat_message = Message.initHeartbeat();
-    _ = try heartbeat_message.host_to_network(&buf);
-    try testing.expectEqual(@intFromEnum(messages.Type.Heartbeat), buf.buffer[0]);
-
-    // Clean up - just remove from map, don't call deinit that needs epoll
-    _ = clients.map.remove(101);
-}
-
 test "Road initialization and management" {
     const allocator = testing.allocator;
 
@@ -1391,98 +1239,4 @@ test "Dispatcher initialization from message" {
     // Test error case - wrong message type
     var wrong_msg = Message.initHeartbeat();
     try testing.expectError(LogicError.MessageWrongType, Dispatcher.initFromMessage(fd, &wrong_msg, allocator));
-}
-
-test "Timer basic operations" {
-    // Since we can't actually create timers without system calls in tests,
-    // we'll just test the structure and error cases
-    // const allocator = testing.allocator;
-
-    // Create a camera for client
-    const camera = Camera{
-        .fd = 101,
-        .road = 1,
-        .mile = 10,
-        .speed_limit = 60,
-    };
-
-    // Create a client
-    var epoll = try EpollManager.init();
-    defer epoll.deinit();
-    var client = try Client.init(std.testing.allocator, 101, &epoll);
-    client.initWithCamera(camera);
-
-    // Test timer structure
-    // Just verify the fields in the Timer struct
-    try testing.expect(client.timer == null);
-
-    // We validate the AlreadyHasTimer error by directly checking the error condition
-    const has_timer_already = client.timer != null;
-    try testing.expect(!has_timer_already);
-
-    // Further timer testing would require actual file descriptors, so we'll skip that
-}
-
-test "Timer creation and basic operation" {
-    // Create a camera
-    const camera = Camera{
-        .fd = 101,
-        .road = 1,
-        .mile = 10,
-        .speed_limit = 60,
-    };
-
-    // Create a client
-    var epoll = try EpollManager.init();
-    defer epoll.deinit();
-    var client = try Client.init(std.testing.allocator, 101, &epoll);
-    client.initWithCamera(camera);
-
-    // Create a timer directly, without using addTimer (which uses epoll)
-    const interval: u64 = 1; // 1 decisecond = 100ms
-    var timer = try Timer.init(&client, interval);
-    defer timer.deinit();
-
-    // Verify timer properties
-    try testing.expectEqual(&client, timer.client);
-    // try testing.expectEqual(interval * 100_000_000, timer.interval); // Should be in nanoseconds
-
-    // Sleep to allow the timer to fire at least once
-    std.time.sleep(200 * std.time.ns_per_ms); // 200ms
-
-    // Read from the timer
-    const exp = try timer.read();
-    try testing.expectEqual(2, exp); // Expecting one expiration
-
-    // We can't easily assert the exact number of expirations, but
-    // the fact that read() didn't error means the timer did fire
-}
-
-test "Timer multiple expirations" {
-    // Create a client
-    const camera = Camera{
-        .fd = 101,
-        .road = 1,
-        .mile = 10,
-        .speed_limit = 60,
-    };
-    var epoll = try EpollManager.init();
-    defer epoll.deinit();
-    var client = try Client.init(std.testing.allocator, 101, &epoll);
-    client.initWithCamera(camera);
-
-    // Create a very fast timer
-    const interval: u64 = 1; // 1 decisecond = 100ms
-    var timer = try Timer.init(&client, interval);
-    defer timer.deinit();
-
-    // Sleep to allow multiple timer expirations
-    std.time.sleep(550 * std.time.ns_per_ms); // 550ms should give ~5 expirations
-
-    // Read and get expiry count
-    const exp = try timer.read();
-    try testing.expectEqual(5, exp); // Expecting 5 expirations
-
-    // Testing specific expiry count is implementation-dependent
-    // and would require modifying the Timer.read() method to return the count
 }

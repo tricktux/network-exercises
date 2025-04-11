@@ -21,7 +21,6 @@ const Cars = logic.Cars;
 const Car = logic.Car;
 const Roads = logic.Roads;
 const Road = logic.Road;
-const Cameras = logic.Cameras;
 const Camera = logic.Camera;
 const Tickets = logic.Tickets;
 const TicketsQueue = logic.TicketsQueue;
@@ -89,15 +88,13 @@ pub fn main() !void {
     defer roads.deinit() catch |err| {
         std.log.err("Failed to deinit roads: {!}", .{err});
     };
-    var cameras = try Cameras.init(allocator);
-    defer cameras.deinit();
     var clients = try Clients.init(allocator);
     defer clients.deinit() catch |err| {
         std.log.err("Failed to deinit clients: {!}", .{err});
     };
     var timers = try Timers.init(allocator);
     defer timers.deinit();
-    var ctx: Context = .{ .cars = &cars, .roads = &roads, .cameras = &cameras, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
+    var ctx: Context = .{ .cars = &cars, .roads = &roads, .tickets = &tickets, .clients = &clients, .epoll = &epoll, .timers = &timers };
 
     const serverfd = server.stream.handle;
     try epoll.add(serverfd);
@@ -227,21 +224,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     removeFd(ctx, thr_ctx);
                     return;
                 }
-                // Add the cam to the cameras
-                const camera = Camera.initFromMessage(fd, msg) catch |err| {
+
+                // Set client as camera
+                client.setAsCamera(msg) catch |err| {
                     std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init camera";
                     removeFd(ctx, thr_ctx);
                     return;
                 };
-                client.initWithCamera(camera);
-                ctx.cameras.add(fd, camera) catch |err| {
-                    std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add camera";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
-
             },
             .IAmDispatcher => {
                 std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
@@ -255,16 +245,15 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Add dispatcher to the Dispatchers
-                var dispatcher = Dispatcher.initFromMessage(fd, msg, thr_ctx.alloc) catch |err| {
+                client.setAsDispatcher(msg) catch |err| {
                     std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init dispatcher";
                     removeFd(ctx, thr_ctx);
                     return;
                 };
-                client.initWithDispatcher(dispatcher);
 
                 // Update roads database with new dispatcher
-                ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
+                ctx.roads.addDispatcher(&client.data.dispatcher, thr_ctx.alloc) catch |err| {
                     std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
                 };
 
@@ -316,16 +305,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     return;
                 }
 
-                // Get camera
-                // TODO: Why the need for cameras?
-                const camera = ctx.cameras.get(fd);
-                if (camera == null) {
-                    std.log.err("({d}): Failed to find camera", .{thrid});
-                    thr_ctx.error_msg = "Failed to find camera";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                }
-
                 // Get Car
                 // TODO: Bug here. Need to allocate this value
                 const result = ctx.cars.map.getOrPut(msg.data.plate.plate) catch |err| {
@@ -349,7 +328,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     car = result.value_ptr;
                 }
 
-                const ntickets = car.addObservation(msg, camera.?) catch |err| {
+                const ntickets = car.addObservation(msg, &client.data.camera) catch |err| {
                     std.log.err("({d}): Failed to add observation: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add observation";
                     removeFd(ctx, thr_ctx);
