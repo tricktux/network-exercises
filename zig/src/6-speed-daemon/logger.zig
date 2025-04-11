@@ -51,18 +51,19 @@ pub fn customLogFn(
         mutex.lock();
         defer mutex.unlock();
 
-        // file.writer().print(prefix ++ format ++ "\n", args) catch {};
-        // Get current timestamp
-        const timestamp = std.time.timestamp();
+        // Get current timestamp with millisecond precision
+        const nano_timestamp = std.time.nanoTimestamp();
+        const seconds = @divFloor(nano_timestamp, std.time.ns_per_s);
+        const milliseconds = @divFloor(@mod(nano_timestamp, std.time.ns_per_s), std.time.ns_per_ms);
 
         // Format the log message
         const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
             // If formatting fails, still try to log something
-            file.writer().print("[{d}] ERROR formatting log message\n", .{timestamp}) catch {};
+            file.writer().print("[{d}.{d:0>3}] ERROR formatting log message\n", .{seconds, milliseconds}) catch {};
             return;
         };
 
-        // Write with timestamp
-        file.writer().print("[{d}] {s}\n", .{ timestamp, formatted_msg }) catch {};
+        // Write with timestamp including milliseconds
+        file.writer().print("[{d}.{d:0>3}] {s}\n", .{ seconds, milliseconds, formatted_msg }) catch {};
     }
 }
