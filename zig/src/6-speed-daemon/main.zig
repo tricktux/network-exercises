@@ -276,7 +276,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 };
             },
             .WantHeartbeat => {
-                std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
+                std.log.debug("({d}): Got want_heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
 
                 // Check if there's a timer already associated with this client
                 if ((client.heartbeat_requested == true) or (client.timer != null)) {
@@ -308,13 +308,6 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             },
             .Plate => {
                 std.log.debug("({d}): Got plate msg from client: {d}", .{ thrid, fd });
-                if (client == null) {
-                    std.log.err("({d}): Client not identified yet", .{thrid});
-                    thr_ctx.error_msg = "Client not identified yet";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                }
-
                 if (client.type != ClientType.Camera) {
                     std.log.err("({d}): Client not identified as camera", .{thrid});
                     thr_ctx.error_msg = "Client not identified as camera";
@@ -419,6 +412,11 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_events.items[0..ready_count]) |event| {
             const ready_socket = event.data.fd;
+            // TODO: even timers need this?
+            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                error.FileDescriptorNotRegistered => {},
+                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+            };
 
             // Handle a new connection event
             if (ready_socket == serverfd) {
@@ -446,12 +444,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 };
                 continue;
             }
-
-            // TODO: even timers need this?
-            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
-                error.FileDescriptorNotRegistered => {},
-                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
-            };
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
@@ -489,7 +481,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
             // Handle a closing connection event
             if ((event.events & linux.EPOLL.RDHUP) == linux.EPOLL.RDHUP) {
-                std.log.debug("({d}): Closed connection for client: {d}", .{ thrid, ready_socket });
+                std.log.debug("({d}): Received RDHUP for client: {d}. Bye Bye", .{ thrid, ready_socket });
                 removeFd(ctx, &thr_ctx);
                 continue;
             }
