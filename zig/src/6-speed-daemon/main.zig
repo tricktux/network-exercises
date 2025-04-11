@@ -317,6 +317,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Get camera
+                // TODO: Why the need for cameras?
                 const camera = ctx.cameras.get(fd);
                 if (camera == null) {
                     std.log.err("({d}): Failed to find camera", .{thrid});
@@ -326,6 +327,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 }
 
                 // Get Car
+                // TODO: Bug here. Need to allocate this value
                 const result = ctx.cars.map.getOrPut(msg.data.plate.plate) catch |err| {
                     std.log.err("({d}): Failed to getOrPut car: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to getOrPut car";
@@ -347,7 +349,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     car = result.value_ptr;
                 }
 
-                const ntickets = car.addObservation(msg.*, camera.?) catch |err| {
+                const ntickets = car.addObservation(msg, camera.?) catch |err| {
                     std.log.err("({d}): Failed to add observation: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add observation";
                     removeFd(ctx, thr_ctx);
@@ -372,6 +374,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 return;
             },
         }
+        msg.deinit();
     }
     ctx.epoll.mod(fd) catch |err| switch (err) {
         else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
