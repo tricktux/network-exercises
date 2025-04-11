@@ -108,7 +108,6 @@ pub const TicketsQueue = struct {
     }
 };
 
-// TODO: Remove
 pub const Timer = struct {
     fd: socketfd,
     client: *Client,
@@ -281,6 +280,7 @@ pub const Client = struct {
     fifo: u8Fifo,
     epoll: *EpollManager,
     timer: ?Timer = null,
+    heartbeat_requested: bool = false,
     data: union(enum) {
         camera: Camera,
         dispatcher: Dispatcher,

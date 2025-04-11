@@ -123,34 +123,28 @@ const ThreadContext = struct {
     buf: *u8BoundedArray,
     fd: socketfd,
     // TODO: Make it Not optional
-    client: ?*Client,
+    client: *Client,
     error_msg: ?[]const u8,
     msgs: *MessageBoundedArray,
     alloc: std.mem.Allocator,
 };
 
 inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
-    if (thr_ctx.client != null) {
-        if (thr_ctx.error_msg != null) {
-            thr_ctx.client.?.sendError(thr_ctx.error_msg.?, thr_ctx.buf) catch |err| {
-                std.log.err("Failed to client.sendError: {!}", .{err});
-            };
-        }
-
-        // If it's a dispatcher, remove the roads
-        if (thr_ctx.client.?.type == ClientType.Dispatcher) {
-            ctx.roads.removeDispatcher(&thr_ctx.client.?.data.dispatcher) catch |err| {
-                std.log.err("Failed to remove dispatcher: {!}", .{err});
-            };
-        }
-        ctx.clients.del(thr_ctx.fd) catch |third_err| {
-            std.log.err("Failed to del client: {!}", .{third_err});
-        };
-    } else {
-        ctx.epoll.del(thr_ctx.fd) catch |err| {
-            std.log.err("Failed to del epoll: {!}", .{err});
+    if (thr_ctx.error_msg != null) {
+        thr_ctx.client.sendError(thr_ctx.error_msg.?, thr_ctx.buf) catch |err| {
+            std.log.err("Failed to client.sendError: {!}", .{err});
         };
     }
+
+    // If it's a dispatcher, remove the roads
+    if (thr_ctx.client.type == ClientType.Dispatcher) {
+        ctx.roads.removeDispatcher(&thr_ctx.client.data.dispatcher) catch |err| {
+            std.log.err("Failed to remove dispatcher: {!}", .{err});
+        };
+    }
+    ctx.clients.del(thr_ctx.fd) catch |third_err| {
+        std.log.err("Failed to del client: {!}", .{third_err});
+    };
 }
 
 // TODO: This function's length is getting out of hand
@@ -162,7 +156,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     std.log.debug("({d}): got new message!!!", .{thrid});
 
-    var fifo = thr_ctx.client.?.fifo;
+    var fifo = thr_ctx.client.fifo;
 
     var bytes: usize = 0;
     var read_error = false;
@@ -224,8 +218,8 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             },
             .IAmCamera => {
                 std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
-                if (client.?.type != .Unidentified) {
-                    const t = std.enums.tagName(ClientType, client.?.type);
+                if (client.type != .Unidentified) {
+                    const t = std.enums.tagName(ClientType, client.type);
                     const u = if (t == null) "unknown" else t.?;
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
                     thr_ctx.error_msg = "Can't send id message more than once";
@@ -239,7 +233,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     removeFd(ctx, thr_ctx);
                     return;
                 };
-                client.?.initWithCamera(camera);
+                client.initWithCamera(camera);
                 ctx.cameras.add(fd, camera) catch |err| {
                     std.log.err("({d}): Failed to add camera: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add camera";
@@ -250,8 +244,8 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             },
             .IAmDispatcher => {
                 std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
-                if (client.?.type != .Unidentified) {
-                    const t = std.enums.tagName(ClientType, client.?.type);
+                if (client.type != .Unidentified) {
+                    const t = std.enums.tagName(ClientType, client.type);
                     const u = if (t == null) "unknown" else t.?;
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
                     thr_ctx.error_msg = "Can't send id message more than once";
@@ -266,7 +260,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     removeFd(ctx, thr_ctx);
                     return;
                 };
-                client.?.initWithDispatcher(dispatcher);
+                client.initWithDispatcher(dispatcher);
 
                 // Update roads database with new dispatcher
                 ctx.roads.addDispatcher(&dispatcher, thr_ctx.alloc) catch |err| {
@@ -283,31 +277,22 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             },
             .WantHeartbeat => {
                 std.log.debug("({d}): Got heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
-                if (client == null) {
-                    std.log.err("({d}): Client not identified yet", .{thrid});
-                    thr_ctx.error_msg = "Client not identified yet";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                }
 
                 // Check if there's a timer already associated with this client
-                if (ctx.timers.map.contains(fd)) {
+                if ((client.heartbeat_requested == true) or (client.timer != null)) {
                     std.log.err("({d}): Timer already exists for client: {d}", .{ thrid, fd });
-                    thr_ctx.error_msg = "Client already has a timer associated";
+                    thr_ctx.error_msg = "Client already had a WantHeartbeat request";
                     removeFd(ctx, thr_ctx);
                     return;
                 }
-
                 // If there's not create a new one and attach it
                 const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
                 if (interval == 0) {
-                    std.log.err("({d}): Heartbeat requested with interval 0", .{ thrid });
-                    thr_ctx.error_msg = "Heartbeat requested with interval 0";
-                    removeFd(ctx, thr_ctx);
-                    return;
+                    client.heartbeat_requested = true;
+                    continue;
                 }
 
-                const timer = client.?.addTimer(interval) catch |err| {
+                const timer = client.addTimer(interval) catch |err| {
                     std.log.err("({d}): Failed to add timer to client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to init timer";
                     removeFd(ctx, thr_ctx);
@@ -330,7 +315,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     return;
                 }
 
-                if (client.?.type != ClientType.Camera) {
+                if (client.type != ClientType.Camera) {
                     std.log.err("({d}): Client not identified as camera", .{thrid});
                     thr_ctx.error_msg = "Client not identified as camera";
                     removeFd(ctx, thr_ctx);
@@ -420,7 +405,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
         return;
     };
 
-    var thr_ctx = ThreadContext{ .fd = 0, .error_msg = null, .buf = &buf, .client = null, .msgs = &msgs, .alloc = alloc };
+    var thr_ctx = ThreadContext{ .fd = 0, .error_msg = null, .buf = &buf, .client = undefined, .msgs = &msgs, .alloc = alloc };
     const thrid = std.Thread.getCurrentId();
 
     std.log.debug("We are listeninig baby!!!...", .{});
@@ -446,14 +431,13 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
                 // TODO: Are these fatal errors? Should we return instead of
                 // continue?
-                // TODO: Create new client
+                // Create new client
                 const client = Client.init(alloc, clientfd, ctx.epoll) catch |err| {
                     std.log.err("({d}): Failed to create a new client: {!}", .{ thrid, err });
                     _ = std.posix.close(clientfd);
                     continue;
                 };
 
-                // TODO: Add it to clients
                 // Add new client
                 ctx.clients.add(client) catch |err| {
                     std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
@@ -462,6 +446,12 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 };
                 continue;
             }
+
+            // TODO: even timers need this?
+            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                error.FileDescriptorNotRegistered => {},
+                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+            };
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
@@ -484,15 +474,16 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 continue;
             }
 
-
-            // TODO: even timers need this?
-            defer ctx.epoll.mod(ready_socket) catch |err| switch (err) {
-                error.FileDescriptorNotRegistered => {},
-                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
-            };
             // Setup loop variables if it's not a timer
             const client = ctx.clients.get(ready_socket);
-            thr_ctx.client = client;
+            if (client == null) {
+                std.log.err("({d}): Failed to find client: {d}", .{ thrid, ready_socket });
+                ctx.epoll.del(ready_socket) catch |err| {
+                    std.log.err("Failed to del client: {!}", .{err});
+                };
+                continue;
+            }
+            thr_ctx.client = client.?;
             thr_ctx.fd = ready_socket;
             thr_ctx.error_msg = null;
 
