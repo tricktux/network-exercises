@@ -88,6 +88,8 @@ pub const TicketsQueue = struct {
                 // If there is, send the ticket out
                 const disp = dispit.next().?;
                 buf.clear();
+                const sticket = ticket.data.data.ticket;
+                std.log.debug("ticket: road: {d}, plate: {s}, speed: {d}, to dispatcher: {d}", .{sticket.road, sticket.plate, sticket.speed, disp.*});
                 try Dispatcher.sendTicket(disp.*, &ticket.data, buf);
 
                 // Mark this ticket for deletion from the queue
@@ -671,6 +673,7 @@ pub const Roads = struct {
         const fd = disp.fd;
 
         for (disp.roads.items) |road| {
+            std.log.debug("Adding dispatcher: {d} to road: {d}", .{fd, road});
             const nroad = self.map.getPtr(road);
             if (nroad != null) {
                 _ = try nroad.?.dispatchers.add(fd);
