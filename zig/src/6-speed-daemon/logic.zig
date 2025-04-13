@@ -224,10 +224,12 @@ pub const EpollManager = struct {
 pub const Clients = struct {
     map: ClientHashMap,
     mutex: std.Thread.Mutex = .{},
+    alloc: std.mem.Allocator,
 
     pub fn init(alloc: std.mem.Allocator) !Clients {
         return Clients{
             .map = ClientHashMap.init(alloc),
+            .alloc = alloc,
         };
     }
 
@@ -240,11 +242,12 @@ pub const Clients = struct {
         self.map.deinit();
     }
 
-    pub fn add(self: *Clients, client: Client) !void {
+    pub fn add(self: *Clients, fd: socketfd, epoll: *EpollManager) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        try self.map.put(client.fd, client);
+        const client = try Client.init(self.alloc, fd, epoll);
+        try self.map.put(fd, client);
     }
 
     pub fn get(self: *Clients, fd: socketfd) ?*Client {

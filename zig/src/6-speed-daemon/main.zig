@@ -401,7 +401,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             msgs.clear();
 
             const ready_socket = event.data.fd;
-            // TODO: even timers need this?
 
             // Handle a new connection event
             if (ready_socket == serverfd) {
@@ -415,15 +414,8 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 // Create new client
                 std.log.debug("({d}): got new connection: {d}!!!", .{thrid, clientfd});
 
-                const client = Client.init(alloc, clientfd, ctx.epoll) catch |err| {
-                    std.log.err("({d}): Failed to create a new client: {!}", .{ thrid, err });
-                    _ = std.posix.close(clientfd);
-                    continue;
-                };
-
                 // Add new client
-                // TODO: Create the client internally, not passed through this
-                ctx.clients.add(client) catch |err| {
+                ctx.clients.add(clientfd, ctx.epoll) catch |err| {
                     std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add client";
                     removeFd(ctx, &thr_ctx);
