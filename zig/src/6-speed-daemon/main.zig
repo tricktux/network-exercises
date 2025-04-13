@@ -154,7 +154,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     std.log.debug("({d}): got new message from: {d}!!!", .{thrid, fd});
 
-    var fifo = thr_ctx.client.fifo;
+    var fifo = &thr_ctx.client.fifo;
     // TODO: Fifo not holding the data
     std.log.debug("({d}): fifo.len: {d}", .{ thrid, fifo.readableLength() });
 
