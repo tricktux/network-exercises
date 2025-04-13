@@ -520,7 +520,7 @@ pub const Car = struct {
             ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
             ticket.mile2 = obs2.mile;
             ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
-            ticket.speed = @as(u16, @intFromFloat(speed + 0.5)); // Round to nearest integer
+            ticket.speed = @as(u16, @intFromFloat(speed*100 + 0.5)); // Round to nearest integer
 
             const msg = Message.initTicket(ticket);
 
