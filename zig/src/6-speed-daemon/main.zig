@@ -194,12 +194,24 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
 
     // - call decode(buf, msgs)
     const data = fifo.readableSlice(0);
-    _ = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
+    const len = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
         std.log.err("Failed to decode messages: {!}", .{err});
         thr_ctx.error_msg = "Received a message of invalid type";
         removeFd(ctx, thr_ctx);
         return;
     };
+    std.log.debug("({d}): data.len: {d}, len: {d}, fifo.readableLength: {d}", .{ thrid, data.len, len, fifo.readableLength() });
+    if (len == 0 or thr_ctx.msgs.len == 0) {
+        std.log.debug("({d}): No messages to decode", .{ thrid });
+        ctx.epoll.mod(fd) catch |err| switch (err) {
+            else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+        };
+        return;
+    }
+
+    if (len > fifo.readableLength())
+        std.log.err("({d}): len: {d} > fifo.readableLength: {d}", .{ thrid, len, fifo.readableLength() });
+    defer fifo.discard(len);
 
     const msgs = thr_ctx.msgs.slice();
     var i: usize = 0;
