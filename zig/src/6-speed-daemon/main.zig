@@ -386,14 +386,15 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
-        // Clean up
-        buf.clear();
-        msgs.clear();
 
         std.log.debug("({d}): waiting for a new event...", .{thrid});
         const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
         std.log.debug("got '{d}' events", .{ready_count});
         for (ready_events.items[0..ready_count]) |event| {
+            // Clean up
+            buf.clear();
+            msgs.clear();
+
             const ready_socket = event.data.fd;
             // TODO: even timers need this?
 
