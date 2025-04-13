@@ -152,9 +152,11 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     const client = thr_ctx.client;
     const thrid = std.Thread.getCurrentId();
 
-    std.log.debug("({d}): got new message!!!", .{thrid});
+    std.log.debug("({d}): got new message from: {d}!!!", .{thrid, fd});
 
     var fifo = thr_ctx.client.fifo;
+    // TODO: Fifo not holding the data
+    std.log.debug("({d}): fifo.len: {d}", .{ thrid, fifo.readableLength() });
 
     var bytes: usize = 0;
     var read_error = false;
@@ -175,6 +177,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
             }
         };
         if (bytes == 0) break;
+        std.log.debug("({d}): read {d} bytes from client: {d}", .{ thrid, bytes, fd });
         fifo.update(bytes);
     }
 
@@ -268,6 +271,8 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 ctx.roads.addDispatcher(&client.data.dispatcher, thr_ctx.alloc) catch |err| {
                     std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
                 };
+
+                // std.log.debug("({d}): Added dispatcher: {s}", .{ thrid, client.data.dispatcher.name });
 
                 // Check tickets queue for any pending tickets for this new dispatcher
                 ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
@@ -400,8 +405,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
             // Handle a new connection event
             if (ready_socket == serverfd) {
-                std.log.debug("({d}): got new connection!!!", .{thrid});
-
                 const clientfd = std.posix.accept(serverfd, null, null, std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC) catch |err| {
                     std.log.err("({d}): error while accepting connection: {!}", .{ thrid, err });
                     continue;
@@ -410,6 +413,8 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 // TODO: Are these fatal errors? Should we return instead of
                 // continue?
                 // Create new client
+                std.log.debug("({d}): got new connection: {d}!!!", .{thrid, clientfd});
+
                 const client = Client.init(alloc, clientfd, ctx.epoll) catch |err| {
                     std.log.err("({d}): Failed to create a new client: {!}", .{ thrid, err });
                     _ = std.posix.close(clientfd);
@@ -417,6 +422,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 };
 
                 // Add new client
+                // TODO: Create the client internally, not passed through this
                 ctx.clients.add(client) catch |err| {
                     std.log.err("({d}): Failed to add client: {!}", .{ thrid, err });
                     thr_ctx.error_msg = "Failed to add client";

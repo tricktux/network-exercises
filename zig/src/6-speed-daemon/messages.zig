@@ -179,18 +179,29 @@ const Messages = struct {
 
 const DecodeError = error{
     InvalidMessageType,
+    UnexpectedMessage,
     NotEnoughBytes,
 };
 
 pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Allocator) !u16 {
     if (buf.len < 2) return 0;
+    if (array.len != 0) {
+        std.log.err("(decode): array not empty: {d}", .{ array.len });
+        return 0;
+    }
+    std.log.debug("(decode): buf.len: {d}", .{ buf.len });
 
     var start: u16 = 0;
     var len: u16 = 0;
 
     while (start < buf.len) {
         const mtype: Type = @enumFromInt(buf[start]);
+        std.log.debug("(decode): mtype: {x}", .{ mtype });
         switch (mtype) {
+            .ErrorM, .Heartbeat, .Ticket => {
+                std.log.info("(decode): Decoding error or heartbeat or ticket unexpected message", .{});
+                return error.UnexpectedMessage;
+            },
             Type.Plate => {
                 if (buf.len - start < 7) break;
 
@@ -248,10 +259,16 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 try array.append(m);
             },
             Type.IAmDispatcher => {
-                if (buf.len - start < 3) break;
+                if (buf.len - start < 4) {
+                    std.log.warn("(decode): IAmDispatcher message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    break;
+                }
                 std.log.info("(decode): Decoding dispatcher message", .{});
                 const numroads: u8 = buf[start + 1];
-                if (buf.len < numroads * 2 + 1) break;
+                if (buf.len < numroads * 2 + 1) {
+                    std.log.warn("(decode): IAmDispatcher message too short: buf.len: {d}, numroads * 2 + 1: {d}", .{buf.len, numroads * 2 + 1});
+                    break;
+                }
                 var roadsstart = start + 2;
                 var roads = try std.ArrayList(u16).initCapacity(alloc, numroads);
                 var i: u8 = 0;
@@ -318,11 +335,11 @@ test "decode - valid Plate message" {
     try testing.expectEqual(@as(u16, @intCast(full_buf.items.len)), bytes_consumed);
     try testing.expectEqual(@as(usize, 1), array.len);
 
-    const msg = array.buffer[0];
+    var msg = array.buffer[0];
     try testing.expectEqual(Type.Plate, msg.type);
     try testing.expectEqualStrings(plate_str, msg.data.plate.plate);
     try testing.expectEqual(timestamp, msg.data.plate.timestamp);
-    for (&array.buffer) |*msgs| msgs.deinit();
+    msg.deinit();
 }
 
 test "decode - insufficient bytes for plate data" {
@@ -338,7 +355,6 @@ test "decode - insufficient bytes for plate data" {
     const result = decode(&buf, &array, std.testing.allocator);
     try testing.expectEqual(@as(usize, 0), array.len);
     try testing.expectEqual(@as(u16, 0), result);
-    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode - insufficient bytes for timestamp" {
@@ -355,7 +371,6 @@ test "decode - insufficient bytes for timestamp" {
     const result = try decode(buf.items, &array, std.testing.allocator);
     try testing.expectEqual(0, result);
     try testing.expectEqual(0, array.len);
-    for (&array.buffer) |*msg| msg.deinit();
 }
 
 test "decode - plate messages" {
@@ -495,6 +510,32 @@ test "decode IAmDispatcher" {
     defer buf.deinit();
     const numroads: u8 = 3;
     const roads = [_]u16{ 123, 456, 789 };
+    try buf.append(@intFromEnum(Type.IAmDispatcher));
+    try buf.append(numroads);
+    var i: u8 = 0;
+    while (i < numroads) : (i += 1) {
+        var road_bytes: [2]u8 = undefined;
+        std.mem.writeInt(u16, &road_bytes, roads[i], .big);
+        try buf.appendSlice(&road_bytes);
+    }
+    const bytes_consumed = try decode(buf.items, &array, std.testing.allocator);
+    try testing.expectEqual(@as(u16, @intCast(buf.items.len)), bytes_consumed);
+    try testing.expectEqual(@as(usize, 1), array.len);
+    const msg = array.buffer[0];
+    try testing.expectEqual(Type.IAmDispatcher, msg.type);
+    i = 0;
+    while (i < numroads) : (i += 1) {
+        try testing.expectEqual(roads[i], msg.data.dispatcher.roads.items[i]);
+    }
+    for (&array.buffer) |*msgs| msgs.deinit();
+}
+
+test "decode another IAmDispatcher" {
+    var array = try MessageBoundedArray.init(0);
+    var buf = std.ArrayList(u8).init(testing.allocator);
+    defer buf.deinit();
+    const numroads: u8 = 1;
+    const roads = [_]u16{ 123 };
     try buf.append(@intFromEnum(Type.IAmDispatcher));
     try buf.append(numroads);
     var i: u8 = 0;
