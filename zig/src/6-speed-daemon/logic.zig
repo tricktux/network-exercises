@@ -905,7 +905,7 @@ fn testSpeedingViolation(allocator: std.mem.Allocator, tickets_queue: *TicketsQu
     try testing.expectEqual(messages.Type.Ticket, ticket.type);
     try testing.expectEqualStrings("ABC123", ticket.data.ticket.plate);
     try testing.expectEqual(camera1.road, ticket.data.ticket.road);
-    try testing.expectEqual(@as(u16, 80), ticket.data.ticket.speed); // Calculated speed
+    try testing.expectEqual(@as(u16, 8000), ticket.data.ticket.speed); // Calculated speed
 }
 
 fn testNoTicketDuplication(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
