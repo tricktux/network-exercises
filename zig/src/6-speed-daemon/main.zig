@@ -182,7 +182,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) !void {
     // - call decode(buf, msgs)
     const data = fifo.readableSlice(0);
     const len = try messages.decode(data, thr_ctx.msgs, thr_ctx.alloc);
-    std.log.debug("({d}): data.len: {d}, len: {d}, fifo.readableLength: {d}", .{ thrid, data.len, len, fifo.readableLength() });
+    std.log.debug("({d}): data.len: {d}, len: {d}, fifo.len: {d}, msgs.len: {d}", .{ thrid, data.len, len, fifo.readableLength(), thr_ctx.msgs.len });
     if (len == 0 or thr_ctx.msgs.len == 0) {
         std.log.debug("({d}): No messages to decode for client: {d}", .{ thrid, fd });
         return;
