@@ -542,6 +542,7 @@ pub const Car = struct {
 };
 
 pub const LogicError = error{
+    UnexpectedMessageType,
     TypeAlreadySet,
     EmptyPlate,
     MessageWrongType,

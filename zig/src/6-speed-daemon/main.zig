@@ -146,7 +146,7 @@ inline fn removeFd(ctx: *Context, thr_ctx: *ThreadContext) void {
 }
 
 // TODO: This function's length is getting out of hand
-inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
+inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) !void {
     const fd = thr_ctx.fd;
     const stream = std.net.Stream{ .handle = fd };
     const client = thr_ctx.client;
@@ -159,20 +159,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
     std.log.debug("({d}): fifo.len: {d}", .{ thrid, fifo.readableLength() });
 
     var bytes: usize = 0;
-    var read_error = false;
     while (true) {
-        const buf = fifo.writableWithSize(2048) catch |err| {
-            std.log.err("({d}): Failed to get fifo: {d}. Error: {!}", .{ thrid, fd, err });
-            read_error = true;
-            break;
-        };
+        const buf = try fifo.writableWithSize(2048);
         bytes = stream.read(buf) catch |err| {
             switch (err) {
                 error.WouldBlock => break,
                 else => {
                     std.log.err("error while reading from client: {!}", .{err});
-                    read_error = true;
-                    break;
+                    return err;
                 },
             }
         };
@@ -181,34 +175,16 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
         fifo.update(bytes);
     }
 
-    if (read_error) {
-        std.log.err("({d}): error while reading from client: {d}", .{ thrid, fd });
-        thr_ctx.error_msg = "Error while reading from client";
-        removeFd(ctx, thr_ctx);
-        return;
-    }
-
     // - Handle read zero byte
-    if (bytes == 0) {
-        std.log.debug("({d}): Closed connection for client: {d}", .{ thrid, fd });
-        removeFd(ctx, thr_ctx);
-        return;
-    }
+    // TODO: This would cause an error. epoll.mod will be called
+    if (bytes == 0) return error.ClientClosedConnection;
 
     // - call decode(buf, msgs)
     const data = fifo.readableSlice(0);
-    const len = messages.decode(data, thr_ctx.msgs, thr_ctx.alloc) catch |err| {
-        std.log.err("Failed to decode messages: {!}", .{err});
-        thr_ctx.error_msg = "Received a message of invalid type";
-        removeFd(ctx, thr_ctx);
-        return;
-    };
+    const len = try messages.decode(data, thr_ctx.msgs, thr_ctx.alloc);
     std.log.debug("({d}): data.len: {d}, len: {d}, fifo.readableLength: {d}", .{ thrid, data.len, len, fifo.readableLength() });
     if (len == 0 or thr_ctx.msgs.len == 0) {
-        std.log.debug("({d}): No messages to decode", .{ thrid });
-        ctx.epoll.mod(fd) catch |err| switch (err) {
-            else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
-        };
+        std.log.debug("({d}): No messages to decode for client: {d}", .{ thrid, fd });
         return;
     }
 
@@ -225,9 +201,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
         switch (msg.type) {
             .Heartbeat, .ErrorM, .Ticket => {
                 std.log.debug("({d}): Got unexpected msg type: {s} from client: {d}", .{ thrid, mts, fd });
-                thr_ctx.error_msg = "I was not expecting this type of message from you";
-                removeFd(ctx, thr_ctx);
-                return;
+                return error.UnexpectedMessageType;
             },
             .IAmCamera => {
                 std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
@@ -235,18 +209,11 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     const t = std.enums.tagName(ClientType, client.type);
                     const u = if (t == null) "unknown" else t.?;
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
-                    thr_ctx.error_msg = "Can't send id message more than once";
-                    removeFd(ctx, thr_ctx);
-                    return;
+                    return error.ClientAlreadyIdentified;
                 }
 
                 // Set client as camera
-                client.setAsCamera(msg) catch |err| {
-                    std.log.err("({d}): Failed to init camera: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to init camera";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                try client.setAsCamera(msg);
             },
             .IAmDispatcher => {
                 std.log.debug("({d}): Got {s} msg from client: {d}", .{ thrid, mts, fd });
@@ -254,33 +221,19 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     const t = std.enums.tagName(ClientType, client.type);
                     const u = if (t == null) "unknown" else t.?;
                     std.log.err("({d}): Client already is identified as type: {s}", .{ thrid, u });
-                    thr_ctx.error_msg = "Can't send id message more than once";
-                    removeFd(ctx, thr_ctx);
-                    return;
+                    return error.ClientAlreadyIdentified;
                 }
 
                 // Add dispatcher to the Dispatchers
-                client.setAsDispatcher(msg) catch |err| {
-                    std.log.err("({d}): Failed to init dispatcher: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to init dispatcher";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                try client.setAsDispatcher(msg);
 
                 // Update roads database with new dispatcher
-                ctx.roads.addDispatcher(&client.data.dispatcher, thr_ctx.alloc) catch |err| {
-                    std.log.err("({d}): Failed to add road: {!}", .{ thrid, err });
-                };
+                try ctx.roads.addDispatcher(&client.data.dispatcher, thr_ctx.alloc);
 
                 // std.log.debug("({d}): Added dispatcher: {s}", .{ thrid, client.data.dispatcher.name });
 
                 // Check tickets queue for any pending tickets for this new dispatcher
-                ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
-                    std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add tickets to queue";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                try ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf);
             },
             .WantHeartbeat => {
                 std.log.debug("({d}): Got want_heartbeat msg from client: {d} with interval: {d}", .{ thrid, fd, msg.data.want_heartbeat.interval });
@@ -288,9 +241,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                 // Check if there's a timer already associated with this client
                 if ((client.heartbeat_requested == true) or (client.timer != null)) {
                     std.log.err("({d}): Timer already exists for client: {d}", .{ thrid, fd });
-                    thr_ctx.error_msg = "Client already had a WantHeartbeat request";
-                    removeFd(ctx, thr_ctx);
-                    return;
+                    return error.TimerAlreadyExists;
                 }
                 // If there's not create a new one and attach it
                 const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
@@ -299,67 +250,35 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) void {
                     continue;
                 }
 
-                const timer = client.addTimer(interval) catch |err| {
-                    std.log.err("({d}): Failed to add timer to client: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to init timer";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                const timer = try client.addTimer(interval);
 
-                ctx.timers.add(timer) catch |err| {
-                    std.log.err("({d}): Failed to add timer: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add timer";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                try ctx.timers.add(timer);
             },
             .Plate => {
                 std.log.debug("({d}): Got plate msg from client: {d}", .{ thrid, fd });
                 if (client.type != ClientType.Camera) {
                     std.log.err("({d}): Client not identified as camera", .{thrid});
-                    thr_ctx.error_msg = "Client not identified as camera";
-                    removeFd(ctx, thr_ctx);
-                    return;
+                    return error.ClientNotIdentifiedAsCamera;
                 }
 
                 // Get Car
-                var car = ctx.cars.getOrPut(msg.data.plate.plate, ctx.tickets) catch |err| {
-                    std.log.err("({d}): Failed to getOrPut car: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to getOrPut car";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                var car = try ctx.cars.getOrPut(msg.data.plate.plate, ctx.tickets);
 
-                const ntickets = car.addObservation(msg, &client.data.camera) catch |err| {
-                    std.log.err("({d}): Failed to add observation: {!}", .{ thrid, err });
-                    thr_ctx.error_msg = "Failed to add observation";
-                    removeFd(ctx, thr_ctx);
-                    return;
-                };
+                const ntickets = try car.addObservation(msg, &client.data.camera);
 
                 if (ntickets > 0) {
                     std.log.debug("({d}): Added {d} tickets to car: {s}", .{ thrid, ntickets, msg.data.plate.plate });
 
-                    ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf) catch |err| {
-                        std.log.err("({d}): Failed to add tickets to queue: {!}", .{ thrid, err });
-                        thr_ctx.error_msg = "Failed to add tickets to queue";
-                        removeFd(ctx, thr_ctx);
-                        return;
-                    };
+                    try ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf);
                 }
             },
             else => {
                 std.log.err("Impossible!! But received a message of invalid type", .{});
-                thr_ctx.error_msg = "Received a message of invalid type";
-                removeFd(ctx, thr_ctx);
-                return;
+                return error.InvalidMessageType;
             },
         }
         msg.deinit();
     }
-    ctx.epoll.mod(fd) catch |err| switch (err) {
-        else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
-    };
 }
 
 fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) void {
@@ -471,8 +390,28 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             }
 
             // Then it must be we got a new message
-            // TODO: Return bool signaling if we should epoll_mod
-            handleMessages(ctx, &thr_ctx);
+            handleMessages(ctx, &thr_ctx) catch |err| switch (err) {
+                error.ClientClosedConnection => {
+                    std.log.debug("({d}): Client closed connection: {d}", .{ thrid, ready_socket });
+                    removeFd(ctx, &thr_ctx);
+                    continue;
+                },
+                else => {
+                    std.log.err("({d}): Error while handleMessages with client: {d}. Error: {!}", .{ thrid, ready_socket, err });
+                    buf.clear();
+                    if (std.fmt.format(buf.writer().any(), "Error while handleMessages with client: {d}. Error: {!}", .{ ready_socket, err })) {
+                        thr_ctx.error_msg = buf.constSlice();
+                    } else |err2| {
+                        std.log.err("Failed to format error message: {!}", .{err2});
+                        thr_ctx.error_msg = "Error while handleMessages";
+                    }
+                    removeFd(ctx, &thr_ctx);
+                    continue;
+                }
+            };
+            ctx.epoll.mod(ready_socket) catch |err| switch (err) {
+                else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
+            };
         }
     }
 }
