@@ -532,7 +532,7 @@ pub const Car = struct {
             try self.tickets.put(date_key, msg);
             tickets += 1;
 
-            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit });
+            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit*100 });
 
             // Only issue one ticket per day per road
             return tickets;
