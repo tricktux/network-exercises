@@ -406,6 +406,8 @@ pub const Observation = struct {
 pub const Car = struct {
     plate: []const u8,
     tickets_queue: *TicketsQueue,
+    observations: Observations,
+    buf: [1024]u8 = undefined,
     // TODO: Make this a StringSet
     tickets: Tickets, // Non owning list of all observations keys that cause a
     // ticket. For easy check if a car has a ticket on this road, on this date
@@ -416,6 +418,7 @@ pub const Car = struct {
         return Car{
             .plate = plate,
             .tickets_queue = tickets,
+            .observations = try Observations.initCapacity(alloc, 4),
             .tickets = Tickets.init(alloc),
             .observationsmap = ObservationsHashMap.init(alloc),
             .alloc = alloc,
@@ -432,8 +435,125 @@ pub const Car = struct {
         self.observationsmap.deinit();
     }
 
+    fn ticketForKey(self: *Car, key: []const u8) !bool {
+        const idx = std.mem.indexOf(u8, key, "-");
+        if (idx == null) {
+            std.log.err("Error parsing key: {s}", .{key});
+            return error.ParsingCarKey;
+        }
+        // Check if we've already issued a ticket for this road and date
+        const date_key = key[idx.? + 1 ..];
+        if (self.tickets.contains(date_key)) {
+            // We've already issued a ticket to this car for this date
+            std.log.info("Ticket already issued for car on this date: {s}", .{date_key});
+            return true;
+        }
+
+        return false;
+    }
+
+    fn getDateKey(timestamp: time.DateTime, buf: []u8) ![]u8 {
+        return try std.fmt.bufPrint(buf, "{MM/DD/YYYY}", .{ timestamp });
+    }
+
     fn createUniqueKey(road: u16, timestamp: time.DateTime, buf: []u8) ![]u8 {
         return try std.fmt.bufPrint(buf, "{d}-{MM/DD/YYYY}", .{ road, timestamp });
+    }
+
+    fn insertObservationForDate(self: *Car, key: []const u8, observation: *Observation) !?*Observations {
+        if (key.len == 0) return null;
+        // No need to add observations to a day with tickets
+        if (self.ticketForKey(key)) return null;
+
+        var observations: *Observations = undefined;
+        const entry = self.observationsmap.getEntry(key);
+        if (entry != null) {
+            observations = entry.?.value_ptr;
+            try observations.append(observation);
+        } else {
+            // Create a permanent copy of the key
+            const key_dupe = try self.alloc.dupe(u8, key);
+
+            // Add it to the observation to the map
+            var obs = try Observations.initCapacity(self.alloc, 4);
+            observations = &obs;
+            try obs.append(observation);
+            try self.observationsmap.put(key_dupe, obs);
+        }
+
+        return observations;
+    }
+
+    // Check to see if there's a ticket for this date already before returning anything
+    fn collectObservationsForDate(self: *Car, key: []const u8) !?*Observations {
+        if (key.len == 0) return null;
+
+        // No need to add observations to a day with tickets
+        if (self.ticketForKey(key)) return null;
+
+        return self.observationsmap.get(key);
+    }
+
+    // TODO: Ticket is assigned on every day for the timestamp tuple
+    fn checkObservationsForSpeed(self: *Car, road: u16) !u32 {
+        if (self.observations.items.len == 0) return 0;
+
+        // Sort observations by timestamp
+        std.sort.block(Observation, self.observations.items, {}, Observation.lessThan);
+
+        // We have more than one observation on the same day on the same road
+        // Check if there has been a violation
+        // - If there's an entry we aleady issued a ticket for this date. return
+        // Compute speed as (mile2 - mile1)/(time2 - time1)
+        // If speed > speed_limit, add ticket to tickets_queue and to tickets list
+        // Compute speed for each pair of observations
+        var tickets: u32 = 0;
+        for (self.observations.items, 0..) |_, i| {
+            if (i == 0) continue; // Skip first observation, we need pairs
+
+            const obs1 = self.observations.items[i - 1];
+            const obs2 = self.observations.items[i];
+
+            // Calculate time difference in hours
+            const time_diff_sec = obs2.timestamp.toUnix() - obs1.timestamp.toUnix();
+            const time_diff_hours = @as(f64, @floatFromInt(time_diff_sec)) / (60.0 * 60.0);
+
+            // Skip if time difference is too small to avoid division by zero
+            if (time_diff_hours <= 0.001) continue;
+
+            // Calculate distance in miles (absolute value)
+            const distance = @as(f64, @floatFromInt(if (obs2.mile > obs1.mile) obs2.mile - obs1.mile else obs1.mile - obs2.mile));
+
+            // Calculate speed in miles per hour
+            const speed = distance / time_diff_hours;
+
+            // Check if speed exceeds the limit
+            if (speed <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
+
+            // Create a new ticket
+            var ticket = Ticket.init();
+            ticket.plate = self.plate;
+            ticket.road = road;
+            ticket.mile1 = obs1.mile;
+            ticket.timestamp1 = @as(u32, @intCast(obs1.timestamp.toUnix()));
+            ticket.mile2 = obs2.mile;
+            ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
+            ticket.speed = @as(u16, @intFromFloat(speed*100 + 0.5)); // Round to nearest integer
+
+            const msg = Message.initTicket(ticket);
+
+            // Add the ticket to the global queue
+            const date_key = self.getDateKey(obs1.timestamp, self.buf);
+            try self.tickets_queue.append(msg);
+            try self.tickets.put(date_key, msg);
+            tickets += 1;
+
+            // Does the ticket spans multiple days?
+            // const sec
+
+            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, road, ticket.speed, obs1.speed_limit*100 });
+        }
+        return tickets;
     }
 
     // TODO: Check after calling this function the global tickets_queue and send
@@ -446,11 +566,23 @@ pub const Car = struct {
 
         const timestamp = messages.timestamp_to_date(message.data.plate.timestamp);
 
+        // TODO: Insert the new observation
+        // Collect all observations for this observation date, plus the previous and next day
+        // Now you loop through that set of observations
+
         // Get the unique key for this observation
-        var buf: [1024]u8 = undefined;
-        const key = try createUniqueKey(cam.road, timestamp, &buf);
+        // TODO: Make this buffer part of the class
+        // var buf: [1024]u8 = undefined;
+        const key = try createUniqueKey(cam.road, timestamp, &self.buf);
         std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
+
+        // TODO: Need to check the previous day and the next day as well
+        // const prev_day: u64 = time.DateTime.initUnix(timestamp.toUnix() - 86400);
+        // const next_day: u64 = time.DateTime.initUnix(timestamp.toUnix() + 86400);
+
+        // Gather all observations for this day, the previous and the next day
+        // That's what you loop through
 
         // Add to observations map or create a new one key
         var observations: Observations = undefined;
