@@ -89,7 +89,7 @@ pub const TicketsQueue = struct {
                 const disp = dispit.next().?;
                 buf.clear();
                 const sticket = ticket.data.data.ticket;
-                std.log.debug("ticket: road: {d}, plate: {s}, speed: {d}, to dispatcher: {d}", .{sticket.road, sticket.plate, sticket.speed, disp.*});
+                std.log.debug("ticket: road: {d}, plate: {s}, speed: {d}, to dispatcher: {d}", .{ sticket.road, sticket.plate, sticket.speed, disp.* });
                 try Dispatcher.sendTicket(disp.*, &ticket.data, buf);
 
                 // Mark this ticket for deletion from the queue
@@ -318,7 +318,7 @@ pub const Client = struct {
         if (msg.type != messages.Type.IAmDispatcher) return LogicError.MessageWrongType;
 
         self.type = ClientType.Dispatcher;
-        self.data = .{ .dispatcher = try Dispatcher.initFromMessage(self.fd, msg, self.alloc)};
+        self.data = .{ .dispatcher = try Dispatcher.initFromMessage(self.fd, msg, self.alloc) };
     }
 
     pub fn addTimer(self: *Client, interval: u64) !Timer {
@@ -436,7 +436,7 @@ pub const Car = struct {
     }
 
     fn getDateKey(timestamp: time.DateTime, buf: []u8) ![]u8 {
-        return try std.fmt.bufPrint(buf, "{MM/DD/YYYY}", .{ timestamp });
+        return try std.fmt.bufPrint(buf, "{MM/DD/YYYY}", .{timestamp});
     }
 
     // TODO: Check after calling this function the global tickets_queue and send
@@ -450,7 +450,7 @@ pub const Car = struct {
         const timestamp = messages.timestamp_to_date(message.data.plate.timestamp);
 
         // Get the unique key for this observation
-        const key= try std.fmt.bufPrint(&self.buf, "{d}", .{ cam.road });
+        const key = try std.fmt.bufPrint(&self.buf, "{d}", .{cam.road});
         std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
@@ -483,7 +483,7 @@ pub const Car = struct {
         var tickets: u32 = 0;
         var num_obs: f64 = 0.0;
         var aggreg_spd: f64 = 0.0;
-        // Need to keep track 
+        // Need to keep track
         var earliest_obs: *Observation = &observations.items[0];
         for (observations.items, 0..) |_, i| {
             if (i == 0) continue; // Skip first observation, we need pairs
@@ -532,7 +532,7 @@ pub const Car = struct {
             ticket.timestamp1 = timestamp1;
             ticket.mile2 = obs2.mile;
             ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
-            ticket.speed = @as(u16, @intFromFloat(avg_spd*100 + 0.5)); // Round to nearest integer
+            ticket.speed = @as(u16, @intFromFloat(avg_spd * 100 + 0.5)); // Round to nearest integer
 
             const msg = Message.initTicket(ticket);
 
@@ -540,7 +540,7 @@ pub const Car = struct {
             try self.tickets_queue.append(msg);
             tickets += 1;
 
-            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit*100 });
+            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit * 100 });
             continue;
         }
         return tickets;
@@ -683,7 +683,7 @@ pub const Roads = struct {
         const fd = disp.fd;
 
         for (disp.roads.items) |road| {
-            std.log.debug("Adding dispatcher: {d} to road: {d}", .{fd, road});
+            std.log.debug("Adding dispatcher: {d} to road: {d}", .{ fd, road });
             const nroad = self.map.getPtr(road);
             if (nroad != null) {
                 _ = try nroad.?.dispatchers.add(fd);

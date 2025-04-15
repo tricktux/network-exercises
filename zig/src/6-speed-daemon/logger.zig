@@ -59,7 +59,7 @@ pub fn customLogFn(
         // Format the log message
         const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
             // If formatting fails, still try to log something
-            file.writer().print("[{d}.{d:0>3}] ERROR formatting log message\n", .{seconds, milliseconds}) catch {};
+            file.writer().print("[{d}.{d:0>3}] ERROR formatting log message\n", .{ seconds, milliseconds }) catch {};
             return;
         };
 

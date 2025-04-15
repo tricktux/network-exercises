@@ -186,10 +186,10 @@ const DecodeError = error{
 pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Allocator) !u16 {
     if (buf.len < 2) return 0;
     if (array.len != 0) {
-        std.log.err("(decode): array not empty: {d}", .{ array.len });
+        std.log.err("(decode): array not empty: {d}", .{array.len});
         return 0;
     }
-    std.log.debug("(decode): buf.len: {d}", .{ buf.len });
+    std.log.debug("(decode): buf.len: {d}", .{buf.len});
 
     var start: u16 = 0;
     var len: u16 = 0;
@@ -198,7 +198,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
     while (start < buf.len) {
         msg_len = 0;
         const mtype: Type = @enumFromInt(buf[start]);
-        std.log.debug("(decode): mtype: {x}", .{ mtype });
+        std.log.debug("(decode): mtype: {x}", .{mtype});
         switch (mtype) {
             .ErrorM, .Heartbeat, .Ticket => {
                 std.log.info("(decode): Decoding error or heartbeat or ticket unexpected message", .{});
@@ -206,7 +206,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
             },
             Type.Plate => {
                 if (buf.len - start < 7) {
-                    std.log.warn("(decode): Plate message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): Plate message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
 
@@ -216,7 +216,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 const platestart = start + 2;
                 const plateend = platestart + platelen;
                 if (buf.len < plateend) {
-                    std.log.warn("(decode): Plate message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): Plate message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
                 // TODO: Transfer ownership to the message?
@@ -225,7 +225,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 const timestampstart = plateend;
                 const timestampend = timestampstart + 4;
                 if (buf.len < timestampend) {
-                    std.log.warn("(decode): Plate message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): Plate message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
                 const timestamp: u32 = std.mem.readVarInt(u32, buf[timestampstart..timestampend], .big);
@@ -241,7 +241,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
             },
             Type.WantHeartbeat => {
                 if (buf.len - start < 3) {
-                    std.log.warn("(decode): WantHeartbeat message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): WantHeartbeat message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
 
@@ -249,7 +249,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
                 const intervalstart = start + 1;
                 const intervalend = intervalstart + 4;
                 if (buf.len < intervalend) {
-                    std.log.warn("(decode): WantHeartbeat message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): WantHeartbeat message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
                 const interval: u32 = std.mem.readVarInt(u32, buf[intervalstart..intervalend], .big);
@@ -261,7 +261,7 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
             },
             Type.IAmCamera => {
                 if (buf.len - start < 7) {
-                    std.log.warn("(decode): IAmCamera message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): IAmCamera message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
 
@@ -283,13 +283,13 @@ pub fn decode(buf: []const u8, array: *MessageBoundedArray, alloc: std.mem.Alloc
             },
             Type.IAmDispatcher => {
                 if (buf.len - start < 4) {
-                    std.log.warn("(decode): IAmDispatcher message too short: buf.len: {d}, start: {d}", .{buf.len, start});
+                    std.log.warn("(decode): IAmDispatcher message too short: buf.len: {d}, start: {d}", .{ buf.len, start });
                     break;
                 }
                 std.log.info("(decode): Decoding dispatcher message", .{});
                 const numroads: u8 = buf[start + 1];
                 if (buf.len < numroads * 2 + 1) {
-                    std.log.warn("(decode): IAmDispatcher message too short: buf.len: {d}, numroads * 2 + 1: {d}", .{buf.len, numroads * 2 + 1});
+                    std.log.warn("(decode): IAmDispatcher message too short: buf.len: {d}, numroads * 2 + 1: {d}", .{ buf.len, numroads * 2 + 1 });
                     break;
                 }
                 var roadsstart = start + 2;
@@ -559,7 +559,7 @@ test "decode another IAmDispatcher" {
     var buf = std.ArrayList(u8).init(testing.allocator);
     defer buf.deinit();
     const numroads: u8 = 1;
-    const roads = [_]u16{ 123 };
+    const roads = [_]u16{123};
     try buf.append(@intFromEnum(Type.IAmDispatcher));
     try buf.append(numroads);
     var i: u8 = 0;

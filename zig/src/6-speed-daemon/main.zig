@@ -152,7 +152,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) !void {
     const client = thr_ctx.client;
     const thrid = std.Thread.getCurrentId();
 
-    std.log.debug("({d}): got new message from: {d}!!!", .{thrid, fd});
+    std.log.debug("({d}): got new message from: {d}!!!", .{ thrid, fd });
 
     var fifo = &thr_ctx.client.fifo;
     // TODO: Fifo not holding the data
@@ -310,7 +310,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
     std.log.debug("We are listeninig baby!!!...", .{});
     while (true) {
-
         std.log.debug("({d}): waiting for a new event...", .{thrid});
         const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
         std.log.debug("got '{d}' events", .{ready_count});
@@ -331,7 +330,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                 // TODO: Are these fatal errors? Should we return instead of
                 // continue?
                 // Create new client
-                std.log.debug("({d}): got new connection: {d}!!!", .{thrid, clientfd});
+                std.log.debug("({d}): got new connection: {d}!!!", .{ thrid, clientfd });
 
                 // Add new client
                 ctx.clients.add(clientfd, ctx.epoll) catch |err| {
@@ -407,7 +406,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     }
                     removeFd(ctx, &thr_ctx);
                     continue;
-                }
+                },
             };
             ctx.epoll.mod(ready_socket) catch |err| switch (err) {
                 else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
