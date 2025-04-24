@@ -17,7 +17,7 @@ const Ticket = messages.Ticket;
 pub const TicketsQueueType = std.DoublyLinkedList(Message); // Of Type.Ticket
 const Tickets = Set([]const u8);
 const Observations = std.ArrayList(Observation);
-const ObservationsHashMap = std.StringHashMap(Observations);
+const ObservationsHashMap = std.AutoHashMap(u16, Observations);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
@@ -430,7 +430,6 @@ pub const Car = struct {
         var it = self.observationsmap.iterator();
         while (it.next()) |observations| {
             observations.value_ptr.deinit();
-            self.alloc.free(observations.key_ptr.*);
         }
         self.observationsmap.deinit();
     }
@@ -450,7 +449,7 @@ pub const Car = struct {
         const timestamp = messages.timestamp_to_date(message.data.plate.timestamp);
 
         // Get the unique key for this observation
-        const key = try std.fmt.bufPrint(&self.buf, "{d}", .{cam.road});
+        const key = cam.road;
         std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
@@ -461,13 +460,10 @@ pub const Car = struct {
             observations = entry.?.value_ptr.*;
             try observations.append(o);
         } else {
-            // Create a permanent copy of the key
-            const key_dupe = try self.alloc.dupe(u8, key);
-
             // Add it to the observation to the map
             var obs = try Observations.initCapacity(self.alloc, 4);
             try obs.append(o);
-            try self.observationsmap.put(key_dupe, obs);
+            try self.observationsmap.put(key, obs);
             return 0;
         }
 
