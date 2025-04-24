@@ -406,7 +406,6 @@ pub const Observation = struct {
 pub const Car = struct {
     plate: []const u8,
     tickets_queue: *TicketsQueue,
-    observations: Observations,
     buf: [1024]u8 = undefined,
     // TODO: Make this a StringSet
     tickets: Tickets, // Non owning list of all observations keys that cause a
@@ -418,7 +417,6 @@ pub const Car = struct {
         return Car{
             .plate = plate,
             .tickets_queue = tickets,
-            .observations = try Observations.initCapacity(alloc, 4),
             .tickets = Tickets.init(alloc),
             .observationsmap = ObservationsHashMap.init(alloc),
             .alloc = alloc,
