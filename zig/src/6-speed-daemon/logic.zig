@@ -407,7 +407,6 @@ pub const Car = struct {
     plate: []const u8,
     tickets_queue: *TicketsQueue,
     buf: [1024]u8 = undefined,
-    // TODO: Make this a StringSet
     tickets: Tickets, // Non owning list of all observations keys that cause a
     // ticket. For easy check if a car has a ticket on this road, on this date
     observationsmap: ObservationsHashMap,
@@ -470,7 +469,7 @@ pub const Car = struct {
 
         // We have more than one observation on the same day on the same road
         // Check if there has been a violation
-        // - If there's an entry we aleady issued a ticket for this date. return
+        // - If there's an entry we already issued a ticket for this date. return
         // Compute speed as (mile2 - mile1)/(time2 - time1)
         // If speed > speed_limit, add ticket to tickets_queue and to tickets list
         // Compute speed for each pair of observations
@@ -505,18 +504,16 @@ pub const Car = struct {
             if (avg_spd <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
 
             // Speed infriction detected
+            const date_key1 = try getDateKey(earliest_obs.timestamp, &self.buf);
+            const exists_day1_not = try self.tickets.add(date_key1);
+
             // Reset avg_spd computation
             const timestamp1 = @as(u32, @intCast(earliest_obs.timestamp.toUnix()));
             if (i + 1 < observations.items.len) earliest_obs = &observations.items[i + 1];
             aggreg_spd = 0.0;
             num_obs = 0.0;
 
-            const date_key1 = try getDateKey(obs1.timestamp, &self.buf);
-            const exists_day1 = try self.tickets.add(date_key1);
-            const date_key2 = try getDateKey(obs2.timestamp, self.buf[512..]);
-            const exists_day2 = try self.tickets.add(date_key2);
-
-            if (exists_day1 or exists_day2) continue;
+            if (!exists_day1_not) continue;
 
             // Create a new ticket
             var ticket = Ticket.init();
