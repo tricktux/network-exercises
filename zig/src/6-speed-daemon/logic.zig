@@ -757,6 +757,9 @@ test "Car.addObservation" {
 
     // Test different days
     try testDifferentDays(allocator, &tickets_queue);
+
+    // Test overnight
+    try testOvernight(allocator, &tickets_queue);
 }
 
 fn testErrorCases(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
@@ -1073,6 +1076,37 @@ fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
 
     // Verify no tickets (observations on different days)
     try testing.expectEqual(initial_tickets, tickets_queue.queue.len);
+}
+
+fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
+    const initial_tickets = tickets_queue.queue.len;
+
+    var car = try Car.init(allocator, "ABC123", tickets_queue);
+    defer car.deinit();
+
+    // Day 1
+    var camera1 = Camera{ .fd = 123, .road = 1, .mile = 10, .speed_limit = 60 };
+    const timestamp1 = 1625180400; // July 1, 2021 11pm
+    var msg1 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp1 } },
+    };
+    _ = try car.addObservation(&msg1, &camera1);
+
+    // Day 2 - would be speeding if on same day
+    var camera2 = Camera{ .fd = 124, .road = 1, .mile = 190, .speed_limit = 60 };
+    const timestamp2 = timestamp1 + 7200; // 2 hours later (next day)
+    var msg2 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp2 } },
+    };
+    _ = try car.addObservation(&msg2, &camera2);
+
+    // Verify separate entries for different days
+    try testing.expectEqual(@as(usize, 2), car.observationsmap.getEntry(1).?.value_ptr.items.len);
+
+    // Verify no tickets (observations on different days)
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 }
 
 test "Camera initialization from message" {
