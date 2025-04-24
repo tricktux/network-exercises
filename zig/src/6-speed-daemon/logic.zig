@@ -452,10 +452,10 @@ pub const Car = struct {
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
         // Add to observations map or create a new one key
-        var observations: Observations = undefined;
+        var observations: *Observations = undefined;
         const entry = self.observationsmap.getEntry(key);
         if (entry != null) {
-            observations = entry.?.value_ptr.*;
+            observations = entry.?.value_ptr;
             try observations.append(o);
         } else {
             // Add it to the observation to the map
@@ -1072,7 +1072,7 @@ fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     _ = try car.addObservation(&msg2, &camera2);
 
     // Verify separate entries for different days
-    try testing.expectEqual(@as(usize, 2), car.observationsmap.count());
+    try testing.expectEqual(@as(usize, 2), car.observationsmap.getEntry(1).?.value_ptr.items.len);
 
     // Verify no tickets (observations on different days)
     try testing.expectEqual(initial_tickets, tickets_queue.queue.len);
