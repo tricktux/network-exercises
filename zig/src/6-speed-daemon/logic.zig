@@ -506,6 +506,11 @@ pub const Car = struct {
             // Speed infriction detected
             const date_key1 = try getDateKey(earliest_obs.timestamp, &self.buf);
             const exists_day1_not = try self.tickets.add(date_key1);
+            const exists_day2_not = exists_day1_not;
+            const date_key2 = try getDateKey(obs2.timestamp, &self.buf);
+            if (!std.mem.eql(u8, date_key1, date_key2)) {
+                exists_day2_not = try self.tickets.add(date_key2);
+            }
 
             // Reset avg_spd computation
             const timestamp1 = @as(u32, @intCast(earliest_obs.timestamp.toUnix()));
@@ -513,7 +518,7 @@ pub const Car = struct {
             aggreg_spd = 0.0;
             num_obs = 0.0;
 
-            if (!exists_day1_not) continue;
+            if (!exists_day1_not or !exists_day2_not) continue;
 
             // Create a new ticket
             var ticket = Ticket.init();
@@ -1078,6 +1083,7 @@ fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
     try testing.expectEqual(initial_tickets, tickets_queue.queue.len);
 }
 
+// TODO: test if we can give a ticket for the second. I believe we shouldn't be able to
 fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
