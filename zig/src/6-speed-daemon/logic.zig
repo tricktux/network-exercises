@@ -506,15 +506,16 @@ pub const Car = struct {
             // Speed infriction detected
             const date_key1 = try getDateKey(earliest_obs.timestamp, &self.buf);
             const exists_day1_not = try self.tickets.add(date_key1);
-            const exists_day2_not = exists_day1_not;
-            const date_key2 = try getDateKey(obs2.timestamp, &self.buf);
+            var exists_day2_not = exists_day1_not;
+            const date_key2 = try getDateKey(obs2.timestamp, self.buf[512..]);
             if (!std.mem.eql(u8, date_key1, date_key2)) {
                 exists_day2_not = try self.tickets.add(date_key2);
             }
 
             // Reset avg_spd computation
             const timestamp1 = @as(u32, @intCast(earliest_obs.timestamp.toUnix()));
-            if (i + 1 < observations.items.len) earliest_obs = &observations.items[i + 1];
+            const mile1 = earliest_obs.mile;
+            earliest_obs = &observations.items[i - 1];
             aggreg_spd = 0.0;
             num_obs = 0.0;
 
@@ -524,7 +525,7 @@ pub const Car = struct {
             var ticket = Ticket.init();
             ticket.plate = self.plate;
             ticket.road = cam.road;
-            ticket.mile1 = obs1.mile;
+            ticket.mile1 = mile1;
             ticket.timestamp1 = timestamp1;
             ticket.mile2 = obs2.mile;
             ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
@@ -537,7 +538,6 @@ pub const Car = struct {
             tickets += 1;
 
             std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit * 100 });
-            continue;
         }
         return tickets;
     }
@@ -1099,7 +1099,7 @@ fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !vo
     };
     _ = try car.addObservation(&msg1, &camera1);
 
-    // Day 2 - would be speeding if on same day
+    // Day 2
     var camera2 = Camera{ .fd = 124, .road = 1, .mile = 190, .speed_limit = 60 };
     const timestamp2 = timestamp1 + 7200; // 2 hours later (next day)
     var msg2 = messages.Message{
@@ -1111,7 +1111,20 @@ fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !vo
     // Verify separate entries for different days
     try testing.expectEqual(@as(usize, 2), car.observationsmap.getEntry(1).?.value_ptr.items.len);
 
-    // Verify no tickets (observations on different days)
+    // Verify there's a ticket for (observations on different days)
+    try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
+
+    // Verify no ticket more tickets for the second day
+    // Day 2
+    var camera3 = Camera{ .fd = 125, .road = 1, .mile = 390, .speed_limit = 60 };
+    const timestamp3 = timestamp2 + 7200; // 2 hours later (next day)
+    var msg3 = messages.Message{
+        .type = messages.Type.Plate,
+        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp3 } },
+    };
+    _ = try car.addObservation(&msg3, &camera3);
+
+    // Verify there's no more tickets issued
     try testing.expectEqual(initial_tickets + 1, tickets_queue.queue.len);
 }
 
