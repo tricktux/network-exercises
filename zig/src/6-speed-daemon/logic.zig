@@ -447,7 +447,7 @@ pub const Car = struct {
 
         // Get the unique key for this observation
         const key = cam.road;
-        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS A}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
+        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
         const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
         // Add to observations map or create a new one key
@@ -461,6 +461,7 @@ pub const Car = struct {
             var obs = try Observations.initCapacity(self.alloc, 4);
             try obs.append(o);
             try self.observationsmap.put(key, obs);
+            std.log.debug("addObservation: First observation for road: {d}....Returning", .{cam.road});
             return 0;
         }
 
@@ -483,6 +484,7 @@ pub const Car = struct {
 
             const obs1 = &observations.items[i - 1];
             const obs2 = &observations.items[i];
+            std.log.debug("addObservation loop: i: {d}, earliest_obs: {MM/DD/YYYY HH-mm-ss.SSS}, obs1: {MM/DD/YYYY HH-mm-ss.SSS}, obs2: {MM/DD/YYYY HH-mm-ss.SSS}", .{i, earliest_obs.timestamp, obs1.timestamp, obs2.timestamp});
 
             // Calculate time difference in hours
             const time_diff_sec = obs2.timestamp.toUnix() - obs1.timestamp.toUnix();
@@ -502,6 +504,7 @@ pub const Car = struct {
 
             // Check if speed exceeds the limit
             if (avg_spd <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
+            std.log.debug("Detected avg_spd: '{d}', above speed_limit: '{d}'", .{avg_spd, obs1.speed_limit});
 
             // Speed infriction detected
             const date_key1 = try getDateKey(earliest_obs.timestamp, &self.buf);
@@ -515,11 +518,18 @@ pub const Car = struct {
             // Reset avg_spd computation
             const timestamp1 = @as(u32, @intCast(earliest_obs.timestamp.toUnix()));
             const mile1 = earliest_obs.mile;
-            earliest_obs = &observations.items[i - 1];
+            earliest_obs = &observations.items[i];
             aggreg_spd = 0.0;
             num_obs = 0.0;
 
-            if (!exists_day1_not or !exists_day2_not) continue;
+            if (!exists_day1_not) {
+                std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date: {s}", .{ self.plate, cam.road, date_key1 });
+                continue;
+            }
+            if (!exists_day2_not) {
+                std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date: {s}", .{ self.plate, cam.road, date_key2 });
+                continue;
+            }
 
             // Create a new ticket
             var ticket = Ticket.init();
@@ -731,6 +741,8 @@ pub const Camera = struct {
 
 test "Car.addObservation" {
     const allocator = testing.allocator;
+
+    testing.log_level = std.log.Level.debug;
 
     // Test setup
     var tickets_queue = TicketsQueue.init(allocator);
@@ -1087,7 +1099,7 @@ fn testDifferentDays(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue)
 fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !void {
     const initial_tickets = tickets_queue.queue.len;
 
-    var car = try Car.init(allocator, "ABC123", tickets_queue);
+    var car = try Car.init(allocator, "ABC124", tickets_queue);
     defer car.deinit();
 
     // Day 1
@@ -1095,7 +1107,7 @@ fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !vo
     const timestamp1 = 1625180400; // July 1, 2021 11pm
     var msg1 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp1 } },
+        .data = .{ .plate = .{ .plate = "ABC124", .timestamp = timestamp1 } },
     };
     _ = try car.addObservation(&msg1, &camera1);
 
@@ -1104,7 +1116,7 @@ fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !vo
     const timestamp2 = timestamp1 + 7200; // 2 hours later (next day)
     var msg2 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp2 } },
+        .data = .{ .plate = .{ .plate = "ABC124", .timestamp = timestamp2 } },
     };
     _ = try car.addObservation(&msg2, &camera2);
 
@@ -1120,7 +1132,7 @@ fn testOvernight(allocator: std.mem.Allocator, tickets_queue: *TicketsQueue) !vo
     const timestamp3 = timestamp2 + 7200; // 2 hours later (next day)
     var msg3 = messages.Message{
         .type = messages.Type.Plate,
-        .data = .{ .plate = .{ .plate = "ABC123", .timestamp = timestamp3 } },
+        .data = .{ .plate = .{ .plate = "ABC124", .timestamp = timestamp3 } },
     };
     _ = try car.addObservation(&msg3, &camera3);
 
