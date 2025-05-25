@@ -393,13 +393,15 @@ pub const Dispatcher = struct {
 };
 
 pub const Observation = struct {
-    timestamp: time.DateTime,
+    timestamp: u32,
+    datestamp: time.DateTime,
+
     road: u16,
     mile: u16,
     speed_limit: u16,
 
     fn lessThan(_: void, a: Observation, b: Observation) bool {
-        return a.timestamp.toUnixMilli() < b.timestamp.toUnixMilli();
+        return a.timestamp < b.timestamp;
     }
 };
 
@@ -443,12 +445,13 @@ pub const Car = struct {
         if (self.plate.len == 0) return LogicError.EmptyPlate;
         if (!std.mem.eql(u8, message.data.plate.plate, self.plate)) return LogicError.PlateMismatch;
 
-        const timestamp = messages.timestamp_to_date(message.data.plate.timestamp);
+        const datestamp = messages.timestamp_to_date(message.data.plate.timestamp);
+        const timestamp = message.data.plate.timestamp;
 
         // Get the unique key for this observation
         const key = cam.road;
-        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, timestamp, cam.road, cam.mile, cam.speed_limit });
-        const o = Observation{ .timestamp = timestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
+        std.log.info("Adding observation to car with plate: {s}, timestamp: {MM/DD/YYYY HH-mm-ss.SSS}, road: {d}, mile: {d}, limit: {d}", .{ self.plate, datestamp, cam.road, cam.mile, cam.speed_limit });
+        const o = Observation{ .timestamp = timestamp, .datestamp = datestamp, .road = cam.road, .mile = cam.mile, .speed_limit = cam.speed_limit };
 
         // Add to observations map or create a new one key
         var observations: *Observations = undefined;
@@ -484,10 +487,10 @@ pub const Car = struct {
 
             const obs1 = &observations.items[i - 1];
             const obs2 = &observations.items[i];
-            std.log.debug("addObservation loop: i: {d}, earliest_obs: {MM/DD/YYYY HH-mm-ss.SSS}, obs1: {MM/DD/YYYY HH-mm-ss.SSS}, obs2: {MM/DD/YYYY HH-mm-ss.SSS}", .{i, earliest_obs.timestamp, obs1.timestamp, obs2.timestamp});
+            std.log.debug("addObservation loop: i: {d}, earliest_obs: {MM/DD/YYYY HH-mm-ss.SSS}, obs1: {MM/DD/YYYY HH-mm-ss.SSS}, obs2: {MM/DD/YYYY HH-mm-ss.SSS}", .{ i, earliest_obs.datestamp, obs1.datestamp, obs2.datestamp });
 
             // Calculate time difference in hours
-            const time_diff_sec = obs2.timestamp.toUnix() - obs1.timestamp.toUnix();
+            const time_diff_sec = obs2.timestamp - obs1.timestamp;
             const time_diff_hours = @as(f64, @floatFromInt(time_diff_sec)) / (60.0 * 60.0);
 
             // Skip if time difference is too small to avoid division by zero
@@ -507,16 +510,17 @@ pub const Car = struct {
             std.log.debug("Detected avg_spd: '{d}', above speed_limit: '{d}'", .{avg_spd, obs1.speed_limit});
 
             // Speed infriction detected
-            const date_key1 = try getDateKey(earliest_obs.timestamp, &self.buf);
+            const date_key1 = try getDateKey(earliest_obs.datestamp, &self.buf);
             const exists_day1_not = try self.tickets.add(date_key1);
             var exists_day2_not = exists_day1_not;
-            const date_key2 = try getDateKey(obs2.timestamp, self.buf[512..]);
+            const date_key2 = try getDateKey(obs2.datestamp, self.buf[512..]);
             if (!std.mem.eql(u8, date_key1, date_key2)) {
                 exists_day2_not = try self.tickets.add(date_key2);
             }
 
             // Reset avg_spd computation
-            const timestamp1 = @as(u32, @intCast(earliest_obs.timestamp.toUnix()));
+            const t1 = earliest_obs.timestamp;
+            const dt1 = earliest_obs.datestamp;
             const mile1 = earliest_obs.mile;
             earliest_obs = &observations.items[i];
             aggreg_spd = 0.0;
@@ -536,9 +540,9 @@ pub const Car = struct {
             ticket.plate = self.plate;
             ticket.road = cam.road;
             ticket.mile1 = mile1;
-            ticket.timestamp1 = timestamp1;
+            ticket.timestamp1 = t1;
             ticket.mile2 = obs2.mile;
-            ticket.timestamp2 = @as(u32, @intCast(obs2.timestamp.toUnix()));
+            ticket.timestamp2 = obs2.timestamp;
             ticket.speed = @as(u16, @intFromFloat(avg_spd * 100 + 0.5)); // Round to nearest integer
 
             const msg = Message.initTicket(ticket);
@@ -547,7 +551,8 @@ pub const Car = struct {
             try self.tickets_queue.append(msg);
             tickets += 1;
 
-            std.log.info("Issued ticket for car with plate: {s}, road: {d}, speed: {d}/{d}", .{ self.plate, cam.road, ticket.speed, obs1.speed_limit * 100 });
+            std.log.info("Issued ticket for car with p: {s}, r: {d}, t1: {d}, t2: {d}, s: {d}/{d}", .{ self.plate, cam.road, t1, ticket.timestamp2, ticket.speed, obs1.speed_limit * 100 });
+            std.log.debug("T1: {MM/DD/YYYY HH-mm-ss.SSS}, T2: {MM/DD/YYYY HH-mm-ss.SSS}", .{ dt1, obs2.datestamp });
         }
         return tickets;
     }
