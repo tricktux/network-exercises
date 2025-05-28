@@ -120,7 +120,6 @@ pub fn main() !void {
 const ThreadContext = struct {
     buf: *u8BoundedArray,
     fd: socketfd,
-    // TODO: Make it Not optional
     client: *Client,
     error_msg: ?[]const u8,
     msgs: *MessageBoundedArray,
@@ -246,13 +245,14 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) !void {
                 // If there's not create a new one and attach it
                 const interval = @as(u64, @intCast(msg.data.want_heartbeat.interval));
                 if (interval == 0) {
+                    std.log.warn("({d}): Timer interval is zero. Ignoring request from: {d}", .{ thrid, fd });
                     client.heartbeat_requested = true;
                     continue;
                 }
 
                 const timer = try client.addTimer(interval);
-
                 try ctx.timers.add(timer);
+                std.log.debug("({d}): Added timer: {d} with interval: {d}, to client: {d}", .{ thrid, timer.fd, timer.interval, timer.client.fd });
             },
             .Plate => {
                 std.log.debug("({d}): Got plate msg from client: {d}", .{ thrid, fd });
@@ -312,7 +312,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
     while (true) {
         std.log.debug("({d}): waiting for a new event...", .{thrid});
         const ready_count = std.posix.epoll_wait(ctx.epoll.epollfd, ready_events.items, -1);
-        std.log.debug("got '{d}' events", .{ready_count});
+        std.log.debug("({d}): got '{d}' events", .{ thrid, ready_count});
         for (ready_events.items[0..ready_count]) |event| {
             // Clean up
             buf.clear();
@@ -346,6 +346,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
+                std.log.debug("({d}): got a timer event: {d}", .{ thrid, timer.fd});
                 thr_ctx.client = timer.client;
                 thr_ctx.fd = timer.client.fd;
                 _ = timer.read() catch |err| {

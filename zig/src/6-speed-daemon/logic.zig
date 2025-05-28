@@ -412,6 +412,7 @@ pub const Car = struct {
     tickets: Tickets, // Non owning list of all observations keys that cause a
     // ticket. For easy check if a car has a ticket on this road, on this date
     observationsmap: ObservationsHashMap,
+    mutex: std.Thread.Mutex = .{},
     alloc: std.mem.Allocator,
 
     pub fn init(alloc: std.mem.Allocator, plate: []const u8, tickets: *TicketsQueue) !Car {
@@ -444,6 +445,9 @@ pub const Car = struct {
         if (message.data.plate.plate.len == 0) return LogicError.EmptyPlate;
         if (self.plate.len == 0) return LogicError.EmptyPlate;
         if (!std.mem.eql(u8, message.data.plate.plate, self.plate)) return LogicError.PlateMismatch;
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
 
         const datestamp = messages.timestamp_to_date(message.data.plate.timestamp);
         const timestamp = message.data.plate.timestamp;
