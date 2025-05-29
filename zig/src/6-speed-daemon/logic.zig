@@ -21,7 +21,7 @@ const ObservationsHashMap = std.AutoHashMap(u16, Observations);
 const CarHashMap = std.StringHashMap(Car);
 const ClientHashMap = std.AutoHashMap(socketfd, Client);
 const EpollEventsArray = std.BoundedArray(linux.epoll_event, 256);
-const TimerHashMap = std.AutoHashMap(socketfd, Timer);
+const TimerHashMap = std.AutoHashMap(socketfd, *Timer);
 const u8Fifo = std.fifo.LinearFifo(u8, .Dynamic);
 const RoadsArray = std.ArrayList(u16);
 const DispatchersSet = Set(socketfd);
@@ -158,7 +158,7 @@ pub const Timers = struct {
         self.map.deinit();
     }
 
-    pub fn add(self: *Timers, timer: Timer) !void {
+    pub fn add(self: *Timers, timer: *Timer) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
         try self.map.put(timer.fd, timer);
@@ -167,7 +167,7 @@ pub const Timers = struct {
     pub fn get(self: *Timers, fd: socketfd) ?*Timer {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.map.getPtr(fd);
+        return self.map.get(fd);
     }
 
     pub fn del(self: *Timers, fd: socketfd) void {
@@ -321,14 +321,14 @@ pub const Client = struct {
         self.data = .{ .dispatcher = try Dispatcher.initFromMessage(self.fd, msg, self.alloc) };
     }
 
-    pub fn addTimer(self: *Client, interval: u64) !Timer {
+    pub fn addTimer(self: *Client, interval: u64) !*Timer {
         if (self.heartbeat_requested == true) return LogicError.AlreadyHasTimer;
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
         std.log.info("Adding timer to client with interval: {d}", .{interval});
         self.timer = try Timer.init(self, interval);
         try self.epoll.add(self.timer.?.fd);
-        return self.timer.?;
+        return &self.timer.?;
     }
 
     pub fn sendError(self: *Client, msg: []const u8, buf: *u8BoundedArray) !void {
