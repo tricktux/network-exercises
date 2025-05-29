@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub var log_file: ?std.fs.File = null;
-pub var mutex = std.Thread.Mutex{};
+// pub var mutex = std.Thread.Mutex{};
 pub var buf: [2046]u8 = undefined;
 
 // TODO: pass log full path here
@@ -10,7 +10,7 @@ pub fn init() !void {
     if (log_file != null) return;
 
     const timestamp = std.time.timestamp();
-    const filename = try std.fmt.bufPrint(&buf, "/tmp/client_log_{d}.txt", .{timestamp});
+    const filename = try std.fmt.bufPrint(&buf, "/tmp/speed-daemon-{d}.txt", .{timestamp});
 
     log_file = try std.fs.cwd().createFile(filename, .{});
     try log_file.?.writer().print("=== Log started at timestamp {d} ===\n", .{timestamp});
@@ -48,8 +48,8 @@ pub fn customLogFn(
 
     // Write to log file if open
     if (log_file) |file| {
-        mutex.lock();
-        defer mutex.unlock();
+        // mutex.lock();
+        // defer mutex.unlock();
 
         // Get current timestamp with millisecond precision
         const nano_timestamp = std.time.nanoTimestamp();
