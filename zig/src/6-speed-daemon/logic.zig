@@ -113,7 +113,7 @@ pub const Timer = struct {
     client: *Client,
     interval: u64, // In deciseconds
 
-    pub fn init(client: *Client, interval: u64) !Timer {
+    pub fn init(client: *Client, interval: u64, alloc: std.mem.Allocator) !*Timer {
         const flags = std.os.linux.TFD{ .CLOEXEC = true, .NONBLOCK = true };
         const timerfd = try std.posix.timerfd_create(std.os.linux.TIMERFD_CLOCK.MONOTONIC, flags);
 
@@ -126,11 +126,12 @@ pub const Timer = struct {
         };
 
         try std.posix.timerfd_settime(timerfd, .{}, &itimerspec, null);
-        return Timer{
-            .fd = timerfd,
-            .client = client,
-            .interval = interval,
-        };
+        var timer_ptr = try alloc.create(Timer);
+        errdefer alloc.destroy(timer_ptr);
+        timer_ptr.fd = timerfd;
+        timer_ptr.client = client;
+        timer_ptr.interval = interval;
+        return timer_ptr;
     }
 
     pub fn read(self: *Timer) !u64 {
@@ -278,7 +279,7 @@ pub const Client = struct {
     type: ClientType,
     fifo: u8Fifo,
     epoll: *EpollManager,
-    timer: ?Timer = null,
+    timer: ?*Timer = null,
     heartbeat_requested: bool = false,
     alloc: std.mem.Allocator,
     data: union(enum) {
@@ -326,9 +327,9 @@ pub const Client = struct {
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
         std.log.info("Adding timer to client with interval: {d}", .{interval});
-        self.timer = try Timer.init(self, interval);
+        self.timer = try Timer.init(self, interval, self.alloc);
         try self.epoll.add(self.timer.?.fd);
-        return &self.timer.?;
+        return self.timer.?;
     }
 
     pub fn sendError(self: *Client, msg: []const u8, buf: *u8BoundedArray) !void {
@@ -356,6 +357,8 @@ pub const Client = struct {
             try self.epoll.del(self.timer.?.fd);
             timers.del(self.timer.?.fd);
             self.timer.?.deinit();
+            self.alloc.destroy(self.timer.?);  // Free the heap-allocated timer
+            self.timer = null;
         }
 
         try self.epoll.del(self.fd);

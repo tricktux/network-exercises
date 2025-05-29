@@ -367,6 +367,9 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
                 };
                 continue;
+            } else {
+                std.log.debug("({d}): No timer event for socket: {d}", .{ thrid, ready_socket });
+                ctx.timers.del(ready_socket);
             }
 
             // Setup loop variables if it's not a timer
