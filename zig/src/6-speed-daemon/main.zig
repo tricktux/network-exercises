@@ -252,7 +252,7 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) !void {
 
                 const timer = try client.addTimer(interval);
                 try ctx.timers.add(timer);
-                std.log.debug("({d}): Added timer: {d} with interval: {d}, to client: {d}", .{ thrid, timer.fd, timer.interval, timer.client.fd });
+                std.log.debug("({d}): Added timer: {d} with interval: {d}, to client: {d}", .{ thrid, timer.timerfd, timer.interval, timer.clientfd });
             },
             .Plate => {
                 std.log.debug("({d}): Got plate msg from client: {d}", .{ thrid, fd });
@@ -346,9 +346,19 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
 
             // Check for timer event
             if (ctx.timers.get(ready_socket)) |timer| {
-                std.log.debug("({d}): got a timer event: {d}", .{ thrid, timer.fd});
-                thr_ctx.client = timer.client;
-                thr_ctx.fd = timer.client.fd;
+                std.log.debug("({d}): got a timer event: {d}", .{ thrid, timer.timerfd});
+                // Setup loop variables if it's not a timer
+                const client = ctx.clients.get(ready_socket);
+                if (client == null) {
+                    std.log.err("({d}): Failed to find client: {d}", .{ thrid, ready_socket });
+                    ctx.timers.del(ready_socket);
+                    ctx.epoll.del(timer.clientfd) catch |err| {
+                        std.log.err("Failed to del client: {!}", .{err});
+                    };
+                    continue;
+                }
+                thr_ctx.client = client.?;
+                thr_ctx.fd = client.?.fd;
                 _ = timer.read() catch |err| {
                     std.log.err("Failed to posix.read timer: {!}...deleting client...", .{err});
                     thr_ctx.error_msg = "Failed to posix.read timer";
@@ -356,13 +366,13 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     continue;
                 };
 
-                timer.client.sendHeartbeat(&buf) catch |err| {
+                client.?.sendHeartbeat(&buf) catch |err| {
                     std.log.err("Failed to client.sendHeartbeat: {!}", .{err});
                     thr_ctx.error_msg = "Failed to sendHeartbeat";
                     removeFd(ctx, &thr_ctx);
                     continue;
                 };
-                std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thrid, timer.client.fd });
+                std.log.debug("({d}): Sent heartbeat to client: {d}", .{ thrid, client.?.fd });
                 ctx.epoll.mod(ready_socket) catch |err| switch (err) {
                     else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
                 };

@@ -109,11 +109,11 @@ pub const TicketsQueue = struct {
 };
 
 pub const Timer = struct {
-    fd: socketfd,
-    client: *Client,
+    timerfd: socketfd,
+    clientfd: socketfd,
     interval: u64, // In deciseconds
 
-    pub fn init(client: *Client, interval: u64, alloc: std.mem.Allocator) !*Timer {
+    pub fn init(clientfd: socketfd, interval: u64, alloc: std.mem.Allocator) !*Timer {
         const flags = std.os.linux.TFD{ .CLOEXEC = true, .NONBLOCK = true };
         const timerfd = try std.posix.timerfd_create(std.os.linux.TIMERFD_CLOCK.MONOTONIC, flags);
 
@@ -128,20 +128,20 @@ pub const Timer = struct {
         try std.posix.timerfd_settime(timerfd, .{}, &itimerspec, null);
         var timer_ptr = try alloc.create(Timer);
         errdefer alloc.destroy(timer_ptr);
-        timer_ptr.fd = timerfd;
-        timer_ptr.client = client;
+        timer_ptr.timerfd = timerfd;
+        timer_ptr.clientfd = clientfd;
         timer_ptr.interval = interval;
         return timer_ptr;
     }
 
     pub fn read(self: *Timer) !u64 {
         var expiry_count: u64 = 0;
-        _ = try std.posix.read(self.fd, std.mem.asBytes(&expiry_count));
+        _ = try std.posix.read(self.timerfd, std.mem.asBytes(&expiry_count));
         return expiry_count;
     }
 
     pub fn deinit(self: *Timer) void {
-        _ = std.posix.close(self.fd);
+        _ = std.posix.close(self.timerfd);
     }
 };
 
@@ -162,7 +162,7 @@ pub const Timers = struct {
     pub fn add(self: *Timers, timer: *Timer) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        try self.map.put(timer.fd, timer);
+        try self.map.put(timer.timerfd, timer);
     }
 
     pub fn get(self: *Timers, fd: socketfd) ?*Timer {
@@ -327,8 +327,8 @@ pub const Client = struct {
         if (self.timer != null) return LogicError.AlreadyHasTimer;
 
         std.log.info("Adding timer to client with interval: {d}", .{interval});
-        self.timer = try Timer.init(self, interval, self.alloc);
-        try self.epoll.add(self.timer.?.fd);
+        self.timer = try Timer.init(self.fd, interval, self.alloc);
+        try self.epoll.add(self.timer.?.timerfd);
         return self.timer.?;
     }
 
@@ -354,8 +354,8 @@ pub const Client = struct {
 
         if (self.timer != null) {
             std.log.debug("Removing timer from client fd: {d}", .{self.fd});
-            try self.epoll.del(self.timer.?.fd);
-            timers.del(self.timer.?.fd);
+            try self.epoll.del(self.timer.?.timerfd);
+            timers.del(self.timer.?.timerfd);
             self.timer.?.deinit();
             self.alloc.destroy(self.timer.?);  // Free the heap-allocated timer
             self.timer = null;
