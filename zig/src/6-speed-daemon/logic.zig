@@ -69,7 +69,7 @@ pub const TicketsQueue = struct {
         defer self.mutex.unlock();
 
         var delete: ?*TicketsQueueType.Node = null;
-        while (true) {
+        for (0..self.queue.len) |_| {
             // Traverse Queue of Tickets waiting to be dispatched forward
             var it = self.queue.first;
             while (it) |ticket| : (it = ticket.next) {
