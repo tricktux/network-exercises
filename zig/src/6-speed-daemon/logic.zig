@@ -487,16 +487,13 @@ pub const Car = struct {
         // If speed > speed_limit, add ticket to tickets_queue and to tickets list
         // Compute speed for each pair of observations
         var tickets: u32 = 0;
-        var num_obs: f64 = 0.0;
-        var aggreg_spd: f64 = 0.0;
         // Need to keep track
-        var earliest_obs: *Observation = &observations.items[0];
         for (observations.items, 0..) |_, i| {
             if (i == 0) continue; // Skip first observation, we need pairs
 
             const obs1 = &observations.items[i - 1];
             const obs2 = &observations.items[i];
-            std.log.debug("addObservation loop: i: {d}, earliest_obs: {MM/DD/YYYY HH-mm-ss.SSS}, obs1: {MM/DD/YYYY HH-mm-ss.SSS}, obs2: {MM/DD/YYYY HH-mm-ss.SSS}", .{ i, earliest_obs.datestamp, obs1.datestamp, obs2.datestamp });
+            std.log.debug("addObservation loop: i: {d}, obs1: {MM/DD/YYYY HH-mm-ss.SSS}, obs2: {MM/DD/YYYY HH-mm-ss.SSS}", .{ i, obs1.datestamp, obs2.datestamp });
 
             // Calculate time difference in hours
             const time_diff_sec = obs2.timestamp - obs1.timestamp;
@@ -510,24 +507,13 @@ pub const Car = struct {
 
             // Calculate speed in miles per hour
             const speed = distance / time_diff_hours;
-            aggreg_spd += speed;
-            num_obs += 1.0;
-            const avg_spd = aggreg_spd / num_obs;
 
             // Check if speed exceeds the limit
-            if (avg_spd <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
-            std.log.debug("Detected avg_spd: '{d}', above speed_limit: '{d}'", .{ avg_spd, obs1.speed_limit });
-
-            // Reset avg_spd computation
-            const t1 = earliest_obs.timestamp;
-            const dt1 = earliest_obs.datestamp;
-            const mile1 = earliest_obs.mile;
-            earliest_obs = &observations.items[i];
-            aggreg_spd = 0.0;
-            num_obs = 0.0;
+            if (speed <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
+            std.log.debug("Detected speed: '{d}', above speed_limit: '{d}'", .{ speed, obs1.speed_limit });
 
             // Speed infriction detected
-            const date_key1 = try getDateKey(dt1, &self.buf);
+            const date_key1 = try getDateKey(obs1.datestamp, &self.buf);
             if (self.tickets.contains(date_key1)) {
                 std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date1: {s}", .{ self.plate, cam.road, date_key1 });
                 continue;
@@ -549,11 +535,11 @@ pub const Car = struct {
             var ticket = Ticket.init();
             ticket.plate = self.plate;
             ticket.road = cam.road;
-            ticket.mile1 = mile1;
-            ticket.timestamp1 = t1;
+            ticket.mile1 = obs1.mile;
+            ticket.timestamp1 = obs1.timestamp;
             ticket.mile2 = obs2.mile;
             ticket.timestamp2 = obs2.timestamp;
-            ticket.speed = @as(u16, @intFromFloat(avg_spd * 100 + 0.5)); // Round to nearest integer
+            ticket.speed = @as(u16, @intFromFloat(speed * 100 + 0.5)); // Round to nearest integer
 
             const msg = Message.initTicket(ticket);
 
@@ -561,8 +547,8 @@ pub const Car = struct {
             try self.tickets_queue.append(msg);
             tickets += 1;
 
-            std.log.info("Issued ticket for car with p: {s}, r: {d}, t1: {d}, t2: {d}, s: {d}/{d}", .{ self.plate, cam.road, t1, ticket.timestamp2, ticket.speed, obs1.speed_limit * 100 });
-            std.log.debug("T1: {MM/DD/YYYY HH-mm-ss.SSS}, T2: {MM/DD/YYYY HH-mm-ss.SSS}", .{ dt1, obs2.datestamp });
+            std.log.info("Issued ticket for car with p: {s}, r: {d}, t1: {d}, t2: {d}, s: {d}/{d}", .{ self.plate, cam.road, obs1.timestamp, ticket.timestamp2, ticket.speed, obs1.speed_limit * 100 });
+            std.log.debug("T1: {MM/DD/YYYY HH-mm-ss.SSS}, T2: {MM/DD/YYYY HH-mm-ss.SSS}", .{ obs1.datestamp, obs2.datestamp });
         }
         return tickets;
     }
