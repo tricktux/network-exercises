@@ -348,7 +348,7 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
             if (ctx.timers.get(ready_socket)) |timer| {
                 std.log.debug("({d}): got a timer event: {d}", .{ thrid, timer.timerfd});
                 // Setup loop variables if it's not a timer
-                const client = ctx.clients.get(ready_socket);
+                const client = ctx.clients.get(timer.clientfd);
                 if (client == null) {
                     std.log.err("({d}): Failed to find client: {d}", .{ thrid, ready_socket });
                     ctx.timers.del(ready_socket);
@@ -377,9 +377,6 @@ fn handle_events(ctx: *Context, serverfd: socketfd, alloc: std.mem.Allocator) vo
                     else => std.log.err("Failed to re-add socket to epoll: {!}", .{err}),
                 };
                 continue;
-            } else {
-                std.log.debug("({d}): No timer event for socket: {d}", .{ thrid, ready_socket });
-                ctx.timers.del(ready_socket);
             }
 
             // Setup loop variables if it's not a timer
