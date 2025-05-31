@@ -76,10 +76,7 @@ pub const TicketsQueue = struct {
                 // Is this ticket's road in our road's database?
                 const road = ticket.data.data.ticket.road;
                 var road_str = roads.get(road);
-                if (road_str == null) {
-                    std.log.warn("Got a ticket for a road that's not in the database....Hmmm", .{});
-                    continue;
-                }
+                if (road_str == null) continue;
 
                 // If so, is there a dispatcher available for this road?
                 if (road_str.?.dispatchers.cardinality() == 0) continue;
@@ -88,7 +85,7 @@ pub const TicketsQueue = struct {
                 // If there is, send the ticket out
                 const disp = dispit.next().?;
                 buf.clear();
-                const sticket = ticket.data.data.ticket;
+                const sticket = &ticket.data.data.ticket;
                 std.log.debug("ticket: road: {d}, plate: {s}, speed: {d}, to dispatcher: {d}", .{ sticket.road, sticket.plate, sticket.speed, disp.* });
                 try Dispatcher.sendTicket(disp.*, &ticket.data, buf);
 
@@ -429,12 +426,17 @@ pub const Car = struct {
     }
 
     pub fn deinit(self: *Car) void {
-        self.tickets.deinit();
         var it = self.observationsmap.iterator();
         while (it.next()) |observations| {
             observations.value_ptr.deinit();
         }
         self.observationsmap.deinit();
+
+        var itt = self.tickets.iterator();
+        while (itt.next()) |ticket| {
+            self.alloc.free(ticket.*);
+        }
+        self.tickets.deinit();
     }
 
     fn getDateKey(timestamp: time.DateTime, buf: []u8) ![]u8 {
@@ -514,16 +516,7 @@ pub const Car = struct {
 
             // Check if speed exceeds the limit
             if (avg_spd <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
-            std.log.debug("Detected avg_spd: '{d}', above speed_limit: '{d}'", .{avg_spd, obs1.speed_limit});
-
-            // Speed infriction detected
-            const date_key1 = try getDateKey(earliest_obs.datestamp, &self.buf);
-            const exists_day1_not = try self.tickets.add(date_key1);
-            var exists_day2_not = exists_day1_not;
-            const date_key2 = try getDateKey(obs2.datestamp, self.buf[512..]);
-            if (!std.mem.eql(u8, date_key1, date_key2)) {
-                exists_day2_not = try self.tickets.add(date_key2);
-            }
+            std.log.debug("Detected avg_spd: '{d}', above speed_limit: '{d}'", .{ avg_spd, obs1.speed_limit });
 
             // Reset avg_spd computation
             const t1 = earliest_obs.timestamp;
@@ -533,13 +526,23 @@ pub const Car = struct {
             aggreg_spd = 0.0;
             num_obs = 0.0;
 
-            if (!exists_day1_not) {
-                std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date: {s}", .{ self.plate, cam.road, date_key1 });
+            // Speed infriction detected
+            const date_key1 = try getDateKey(dt1, &self.buf);
+            if (self.tickets.contains(date_key1)) {
+                std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date1: {s}", .{ self.plate, cam.road, date_key1 });
                 continue;
             }
-            if (!exists_day2_not) {
-                std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date: {s}", .{ self.plate, cam.road, date_key2 });
-                continue;
+            const dk1 = try self.alloc.dupe(u8, date_key1);
+            _ = try self.tickets.add(dk1);
+
+            const date_key2 = try getDateKey(obs2.datestamp, self.buf[512..]);
+            if (!std.mem.eql(u8, dk1, date_key2)) {
+                if (self.tickets.contains(date_key2)) {
+                    std.log.info("Car with plate: {s}, already has ticket for road: {d}, on date2: {s}", .{ self.plate, cam.road, date_key2 });
+                    continue;
+                }
+                const dk2 = try self.alloc.dupe(u8, date_key2);
+                _ = try self.tickets.add(dk2);
             }
 
             // Create a new ticket
