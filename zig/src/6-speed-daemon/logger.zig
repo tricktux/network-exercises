@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub var log_file: ?std.fs.File = null;
-// pub var mutex = std.Thread.Mutex{};
+pub var mutex = std.Thread.Mutex{};
 pub var buf: [2046]u8 = undefined;
 
 // TODO: pass log full path here
@@ -48,8 +48,8 @@ pub fn customLogFn(
 
     // Write to log file if open
     if (log_file) |file| {
-        // mutex.lock();
-        // defer mutex.unlock();
+        mutex.lock();
+        defer mutex.unlock();
 
         // Get current timestamp with millisecond precision
         const nano_timestamp = std.time.nanoTimestamp();

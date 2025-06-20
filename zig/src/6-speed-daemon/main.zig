@@ -262,13 +262,15 @@ inline fn handleMessages(ctx: *Context, thr_ctx: *ThreadContext) !void {
                 }
 
                 // Get Car
-                var car = try ctx.cars.getOrPut(msg.data.plate.plate, ctx.tickets);
-
-                const ntickets = try car.addObservation(msg, &client.data.camera);
-
+                var ntickets: u32 = 0;
+                {
+                    ctx.cars.mutex.lock();
+                    defer ctx.cars.mutex.unlock();
+                    var car = try ctx.cars.getOrPut(msg.data.plate.plate, ctx.tickets);
+                    ntickets = try car.addObservation(msg, &client.data.camera);
+                }
                 if (ntickets > 0) {
                     std.log.debug("({d}): Added {d} tickets to car: {s}", .{ thrid, ntickets, msg.data.plate.plate });
-
                     try ctx.tickets.dispatchTicketsQueue(ctx.roads, thr_ctx.buf);
                 }
             },

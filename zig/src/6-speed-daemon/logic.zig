@@ -86,7 +86,7 @@ pub const TicketsQueue = struct {
                 const disp = dispit.next().?;
                 buf.clear();
                 const sticket = &ticket.data.data.ticket;
-                std.log.debug("ticket: road: {d}, plate: {s}, speed: {d}, to dispatcher: {d}", .{ sticket.road, sticket.plate, sticket.speed, disp.* });
+                std.log.debug("sending ticket: road: {d}, plate: {s}, speed: {d}, to dispatcher: {d}", .{ sticket.road, sticket.plate, sticket.speed, disp.* });
                 try Dispatcher.sendTicket(disp.*, &ticket.data, buf);
 
                 // Mark this ticket for deletion from the queue
@@ -451,8 +451,8 @@ pub const Car = struct {
         if (self.plate.len == 0) return LogicError.EmptyPlate;
         if (!std.mem.eql(u8, message.data.plate.plate, self.plate)) return LogicError.PlateMismatch;
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        // self.mutex.lock();
+        // defer self.mutex.unlock();
 
         const datestamp = messages.timestamp_to_date(message.data.plate.timestamp);
         const timestamp = message.data.plate.timestamp;
@@ -509,7 +509,7 @@ pub const Car = struct {
             const speed = distance / time_diff_hours;
 
             // Check if speed exceeds the limit
-            if (speed <= @as(f64, @floatFromInt(obs1.speed_limit))) continue;
+            if (speed <= @as(f64, @floatFromInt(obs1.speed_limit)) + 0.5) continue;
             std.log.debug("Detected speed: '{d}', above speed_limit: '{d}'", .{ speed, obs1.speed_limit });
 
             // Speed infriction detected
@@ -591,8 +591,8 @@ pub const Cars = struct {
     pub fn getOrPut(self: *Cars, plate: []const u8, tickets: *TicketsQueue) !*Car {
         if (plate.len == 0) return LogicError.EmptyPlate;
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        // self.mutex.lock();
+        // defer self.mutex.unlock();
 
         const result = try self.map.getOrPut(plate);
         if (result.found_existing) return result.value_ptr;
