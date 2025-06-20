@@ -13,7 +13,7 @@ const assert = std.debug.assert;
 const testing = std.testing;
 const Mutex = std.Thread.Mutex;
 const allocator = std.heap.page_allocator;
-const page_size = std.mem.page_size;
+const page_size = 4096;
 
 const FREE_CAPACITY = 0.5; // Percentage
 
@@ -129,7 +129,7 @@ test "Queue push_ex and get_writable_data" {
         try queue.push_ex(10);
     }
     const writable = queue.get_writable_data();
-    try testing.expectEqual(@as(usize, std.mem.page_size - 10), writable.len);
+    try testing.expectEqual(@as(usize, 4096 - 10), writable.len);
     try testing.expectEqualSlices(u8, "0123456789", queue.peek());
 }
 

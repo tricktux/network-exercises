@@ -127,7 +127,7 @@ fn processMessages(messages: []const u8, send_fifo: *u8fifo, alloc: std.mem.Allo
         idx.? += start;
 
         // We got a full message, decode it
-        const resp = try send_fifo.writableWithSize(std.mem.page_size);
+        const resp = try send_fifo.writableWithSize(4096);
 
         // debug("\t\t\tINFO({d}): processing: '{s}', start: '{d}', end: '{d}'\n", .{ thread_id, messages[start..idx.?], start, idx.? });
         const number = parse_request(messages[start..idx.?], alloc) catch |err| {
@@ -174,7 +174,7 @@ fn handle_connection(connection: std.net.Server.Connection, alloc: std.mem.Alloc
 
     while (true) {
         debug("\tINFO({d}): waiting for some data...\n", .{thread_id});
-        const data = recv_fifo.writableWithSize(std.mem.page_size * 4) catch |err| {
+        const data = recv_fifo.writableWithSize(4096 * 4) catch |err| {
             debug("\tERROR({d}): error while recv_fifo.writableWithSize: {!}\n", .{ thread_id, err });
             return;
         };
