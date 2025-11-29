@@ -41,165 +41,165 @@ pub fn build(b: *std.Build) void {
     // });
 
     // 1 Prime Time
-    const prime_time = b.addExecutable(.{
-        .name = "prime-time",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/1-prime-time/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    prime_time.root_module.addImport("utils", utils);
-    b.installArtifact(prime_time);
-
-    // 1 Prime Time Tests
-    const prime_time_tests = b.addTest(.{
-        .name = "prime-time-tests",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/1-prime-time/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(prime_time_tests);
-
-    // 2 Means to an end
-    const means2an_end = b.addExecutable(.{
-        .name = "means-to-an-end",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/2-means-to-an-end/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(means2an_end);
-
-    // 2 Means to an end Tests
-    const means2an_end_tests = b.addTest(.{
-        .name = "means-to-an-end-tests",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/2-means-to-an-end/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(means2an_end_tests);
-
-    // 3 Budget Chat
-    const budget_chat = b.addExecutable(.{
-        .name = "budget-chat",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/3-budget-chat/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(budget_chat);
-
-    // 3 Budget Chat
-    const budget_chat_tests = b.addTest(.{
-        .name = "budget-chat-tests",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/3-budget-chat/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(budget_chat_tests);
-
-    // 4 Unusual Database Program
-    const unusual_database = b.addExecutable(.{
-        .name = "unusual-database",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/4-unusual-database/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(unusual_database);
-
-    // 4 Unusual Database Program
-    const unusual_database_tests = b.addTest(.{
-        .name = "unusual-database-tests",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/4-unusual-database/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(unusual_database_tests);
-
-    // 5 Mob in the Middle
-    const mob_in_them_middle = b.addExecutable(.{
-        .name = "mob-in-the-middle",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/5-mob-in-the-middle/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(mob_in_them_middle);
-
-    // 4 Unusual Database Program
-    const mob_in_them_middle_tests = b.addTest(.{
-        .name = "mob-in-the-middle-tests",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/5-mob-in-the-middle/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-        }),
-    });
-    b.installArtifact(mob_in_them_middle_tests);
+    // const prime_time = b.addExecutable(.{
+    //     .name = "prime-time",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/1-prime-time/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // prime_time.root_module.addImport("utils", utils);
+    // b.installArtifact(prime_time);
+    //
+    // // 1 Prime Time Tests
+    // const prime_time_tests = b.addTest(.{
+    //     .name = "prime-time-tests",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/1-prime-time/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(prime_time_tests);
+    //
+    // // 2 Means to an end
+    // const means2an_end = b.addExecutable(.{
+    //     .name = "means-to-an-end",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/2-means-to-an-end/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(means2an_end);
+    //
+    // // 2 Means to an end Tests
+    // const means2an_end_tests = b.addTest(.{
+    //     .name = "means-to-an-end-tests",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/2-means-to-an-end/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(means2an_end_tests);
+    //
+    // // 3 Budget Chat
+    // const budget_chat = b.addExecutable(.{
+    //     .name = "budget-chat",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/3-budget-chat/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(budget_chat);
+    //
+    // // 3 Budget Chat
+    // const budget_chat_tests = b.addTest(.{
+    //     .name = "budget-chat-tests",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/3-budget-chat/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(budget_chat_tests);
+    //
+    // // 4 Unusual Database Program
+    // const unusual_database = b.addExecutable(.{
+    //     .name = "unusual-database",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/4-unusual-database/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(unusual_database);
+    //
+    // // 4 Unusual Database Program
+    // const unusual_database_tests = b.addTest(.{
+    //     .name = "unusual-database-tests",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/4-unusual-database/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(unusual_database_tests);
+    //
+    // // 5 Mob in the Middle
+    // const mob_in_them_middle = b.addExecutable(.{
+    //     .name = "mob-in-the-middle",
+    //     .root_module = b.createModule(.{
+    //         // b.createModule defines a new module just like b.addModule but,
+    //         // unlike b.addModule, it does not expose the module to consumers of
+    //         // this package, which is why in this case we don't have to give it a name.
+    //         .root_source_file = b.path("src/5-mob-in-the-middle/main.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //         // List of modules available for import in source files part of the
+    //         // root module.
+    //     }),
+    // });
+    // b.installArtifact(mob_in_them_middle);
+    //
+    // // 4 Unusual Database Program
+    // // const mob_in_them_middle_tests = b.addTest(.{
+    // //     .name = "mob-in-the-middle-tests",
+    // //     .root_module = b.createModule(.{
+    // //         // b.createModule defines a new module just like b.addModule but,
+    // //         // unlike b.addModule, it does not expose the module to consumers of
+    // //         // this package, which is why in this case we don't have to give it a name.
+    // //         .root_source_file = b.path("src/5-mob-in-the-middle/main.zig"),
+    // //         .target = target,
+    // //         .optimize = optimize,
+    // //         // List of modules available for import in source files part of the
+    // //         // root module.
+    // //     }),
+    // // });
+    // // b.installArtifact(mob_in_them_middle_tests);
 
     // 6 Speed Daemon
     const speed_daemon = b.addExecutable(.{
