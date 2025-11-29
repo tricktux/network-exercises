@@ -24,8 +24,8 @@
     // internet connectivity.
     .dependencies = .{
         .ziglangSet = .{
-            .url = "https://github.com/tricktux/ziglang-set/archive/95fdeb7681bb3c401663f12de315937b73c9204e.tar.gz",
-            .hash = "122073247e0b7b525ddd18876eb0c9df125bd6e7814545802b05ba131e1d49d5bad5",
+            .url = "https://github.com/deckarep/ziglang-set/archive/d63232266deb61c334da8f198e32a3fb51012650.tar.gz",
+            .hash = "ziglangSet-0.0.1-VUjv0hoUAgAxi3Zu4l_6QRnST7KqzKJW9n0FV1WKfweT",
         },
     },
     .paths = .{
