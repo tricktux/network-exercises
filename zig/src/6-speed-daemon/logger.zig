@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 pub var log_file: ?std.fs.File = null;
 pub var mutex = std.Thread.Mutex{};
 pub var buf: [2046]u8 = undefined;
+pub var file_writer: std.fs.File.Writer = undefined;
 
 // TODO: pass log full path here
 pub fn init() !void {
@@ -13,7 +14,8 @@ pub fn init() !void {
     const filename = try std.fmt.bufPrint(&buf, "/tmp/speed-daemon-{d}.txt", .{timestamp});
 
     log_file = try std.fs.cwd().createFile(filename, .{});
-    try log_file.?.writer().print("=== Log started at timestamp {d} ===\n", .{timestamp});
+    file_writer = std.fs.File.Writer.init(log_file.?, &buf);
+    try file_writer.interface.print("=== Log started at timestamp {d} ===\n", .{timestamp});
 }
 
 pub fn deinit() void {
@@ -46,24 +48,20 @@ pub fn customLogFn(
     // const stderr = std.io.getStdErr().writer();
     // stderr.print(prefix ++ format ++ "\n", args) catch {};
 
+    if (log_file != null) return;
+
     // Write to log file if open
-    if (log_file) |file| {
-        mutex.lock();
-        defer mutex.unlock();
+    mutex.lock();
+    defer mutex.unlock();
 
-        // Get current timestamp with millisecond precision
-        const nano_timestamp = std.time.nanoTimestamp();
-        const seconds = @divFloor(nano_timestamp, std.time.ns_per_s);
-        const milliseconds = @divFloor(@mod(nano_timestamp, std.time.ns_per_s), std.time.ns_per_ms);
+    // Get current timestamp with millisecond precision
+    const nano_timestamp = std.time.nanoTimestamp();
+    const seconds = @divFloor(nano_timestamp, std.time.ns_per_s);
+    const milliseconds = @divFloor(@mod(nano_timestamp, std.time.ns_per_s), std.time.ns_per_ms);
 
-        // Format the log message
-        const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
-            // If formatting fails, still try to log something
-            file.writer().print("[{d}.{d:0>3}] ERROR formatting log message\n", .{ seconds, milliseconds }) catch {};
-            return;
-        };
+    // Format the log message
+    const formatted_msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch "bufPrint failed!!!";
 
-        // Write with timestamp including milliseconds
-        file.writer().print("[{d}.{d:0>3}] {s}\n", .{ seconds, milliseconds, formatted_msg }) catch {};
-    }
+    // Write with timestamp including milliseconds
+    file_writer.interface.print("[{d}.{d:0>3}] {s}\n", .{ seconds, milliseconds, formatted_msg }) catch { return; };
 }
